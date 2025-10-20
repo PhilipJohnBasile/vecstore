@@ -185,6 +185,7 @@ pub mod python;
     feature = "embeddings",
     feature = "cloud-embeddings",
     feature = "openai-embeddings",
+    feature = "candle-embeddings",
     feature = "ollama"
 ))]
 pub mod embeddings;
@@ -493,6 +494,9 @@ pub use embeddings::{
 
 #[cfg(feature = "ollama")]
 pub use embeddings::{OllamaEmbedding, OllamaModel};
+
+#[cfg(feature = "candle-embeddings")]
+pub use embeddings::{CandleEmbedder, CandleModel};
 
 #[cfg(feature = "wasm")]
 pub use wasm::{WasmSearchResult, WasmVecStore};

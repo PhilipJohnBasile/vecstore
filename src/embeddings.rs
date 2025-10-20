@@ -18,6 +18,9 @@ pub mod additional_providers;
 #[cfg(feature = "ollama")]
 pub mod ollama_backend;
 
+#[cfg(feature = "candle-embeddings")]
+pub mod candle_backend;
+
 #[cfg(feature = "embeddings")]
 pub use auto_models::{AutoEmbedder, PretrainedModel};
 
@@ -37,6 +40,9 @@ pub use additional_providers::{
 
 #[cfg(feature = "ollama")]
 pub use ollama_backend::{OllamaEmbedding, OllamaModel};
+
+#[cfg(feature = "candle-embeddings")]
+pub use candle_backend::{CandleEmbedder, CandleModel};
 
 use anyhow::Result;
 
