@@ -148,7 +148,7 @@ impl VecStore {
             // Use loaded config if available, otherwise use provided config (Major Issue #7 fix)
             let config = loaded_config.unwrap_or(config);
 
-            let mut backend = VectorBackend::new(dimension);
+            let mut backend = VectorBackend::new(dimension, config.distance)?;
             backend.set_mappings(id_to_idx, idx_to_id, next_idx);
 
             // Rebuild HNSW index from vectors
@@ -179,7 +179,7 @@ impl VecStore {
 
             Ok(Self {
                 root,
-                backend: VectorBackend::new(0), // Will be set on first insert
+                backend: VectorBackend::new(0, config.distance)?, // Will be set on first insert
                 records: HashMap::new(),
                 dimension: 0,
                 text_index: hybrid::TextIndex::new(),
@@ -215,7 +215,7 @@ impl VecStore {
         // Set dimension on first insert
         if self.dimension == 0 {
             self.dimension = vector.len();
-            self.backend = VectorBackend::new(self.dimension);
+            self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
         }
 
         if vector.len() != self.dimension {
@@ -288,7 +288,7 @@ impl VecStore {
                     ));
                 }
                 self.dimension = first.vector.len();
-                self.backend = VectorBackend::new(self.dimension);
+                self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
             }
         }
 
@@ -384,7 +384,7 @@ impl VecStore {
             // No filter, just fetch k (or all records if fewer than k)
             std::cmp::min(q.k, self.records.len())
         };
-        let candidates = self.backend.search(&q.vector, fetch_size)?;
+        let candidates = self.backend.search(&q.vector, fetch_size);
 
         let mut results = Vec::new();
         for (id, score) in candidates {
@@ -447,10 +447,10 @@ impl VecStore {
         };
 
         // Track stats for explanation
-        let candidates = self.backend.search(&q.vector, fetch_size)?;
+        let candidates = self.backend.search(&q.vector, fetch_size);
         let total_candidates = candidates.len();
 
-        let distance_metric = "Cosine".to_string(); // Backend currently uses Cosine
+        let distance_metric = self.config.distance.name().to_string();
         let has_filter = q.filter.is_some();
 
         let mut results = Vec::new();
@@ -777,15 +777,20 @@ impl VecStore {
         // Recreate backend
         #[cfg(not(target_arch = "wasm32"))]
         {
-            self.backend =
-                hnsw_backend::HnswBackend::restore(dimension, id_to_idx, idx_to_id, next_idx)?;
+            self.backend = hnsw_backend::HnswBackend::restore(
+                dimension,
+                self.config.distance,
+                id_to_idx,
+                idx_to_id,
+                next_idx,
+            )?;
         }
 
         #[cfg(target_arch = "wasm32")]
         {
             // WASM backend doesn't support restore (no persistence in browser)
             // Create a new backend and rebuild from records
-            let mut backend = VectorBackend::new(dimension);
+            let mut backend = VectorBackend::new(dimension, self.config.distance);
             backend.set_mappings(id_to_idx, idx_to_id, next_idx);
             self.backend = backend;
         }
@@ -887,8 +892,7 @@ impl VecStore {
 
         let vector_results = self
             .backend
-            .search(&query.vector, fetch_size)
-            .context("HNSW search failed")?;
+            .search(&query.vector, fetch_size);
 
         // Get BM25 scores if keywords provided
         let bm25_scores = if !query.keywords.is_empty() {
@@ -1446,7 +1450,7 @@ impl VecStore {
         // Set dimension on first insert
         if self.dimension == 0 {
             self.dimension = vector.len();
-            self.backend = VectorBackend::new(self.dimension);
+            self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
         }
 
         if vector.len() != self.dimension {
@@ -1732,7 +1736,7 @@ impl VecStore {
         let backend_results = self
             .backend
             .search_with_ef(&q.vector, fetch_size, params.ef_search)
-            .unwrap_or_else(|_| self.backend.search(&q.vector, fetch_size).unwrap());
+            .unwrap_or_else(|_| self.backend.search(&q.vector, fetch_size));
 
         // Convert (Id, f32) to Neighbor with metadata
         let mut results: Vec<Neighbor> = backend_results
@@ -2229,35 +2233,44 @@ mod builder_tests {
 
     #[test]
     fn test_builder_manhattan() {
+        // Manhattan is not yet supported by HNSW backend - test that it returns error
         let temp_dir = TempDir::new().unwrap();
-        let store = VecStore::builder(temp_dir.path().join("test.db"))
+        let result = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Manhattan)
-            .build()
-            .unwrap();
+            .build();
 
-        assert_eq!(store.distance_metric(), Distance::Manhattan);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not yet supported"));
+        }
     }
 
     #[test]
     fn test_builder_hamming() {
+        // Hamming is not yet supported by HNSW backend - test that it returns error
         let temp_dir = TempDir::new().unwrap();
-        let store = VecStore::builder(temp_dir.path().join("test.db"))
+        let result = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Hamming)
-            .build()
-            .unwrap();
+            .build();
 
-        assert_eq!(store.distance_metric(), Distance::Hamming);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not yet supported"));
+        }
     }
 
     #[test]
     fn test_builder_jaccard() {
+        // Jaccard is not yet supported by HNSW backend - test that it returns error
         let temp_dir = TempDir::new().unwrap();
-        let store = VecStore::builder(temp_dir.path().join("test.db"))
+        let result = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Jaccard)
-            .build()
-            .unwrap();
+            .build();
 
-        assert_eq!(store.distance_metric(), Distance::Jaccard);
+        assert!(result.is_err());
+        if let Err(e) = result {
+            assert!(e.to_string().contains("not yet supported"));
+        }
     }
 
     #[test]
@@ -2277,13 +2290,13 @@ mod builder_tests {
     fn test_builder_chained() {
         let temp_dir = TempDir::new().unwrap();
         let store = VecStore::builder(temp_dir.path().join("test.db"))
-            .distance(Distance::Manhattan)
+            .distance(Distance::Euclidean)
             .hnsw_m(64)
             .hnsw_ef_construction(500)
             .build()
             .unwrap();
 
-        assert_eq!(store.distance_metric(), Distance::Manhattan);
+        assert_eq!(store.distance_metric(), Distance::Euclidean);
         assert_eq!(store.config().hnsw_m, 64);
         assert_eq!(store.config().hnsw_ef_construction, 500);
     }
