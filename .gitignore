@@ -1,0 +1,22 @@
+/target
+**/*.rs.bk
+Cargo.lock
+*.swp
+.DS_Store
+/data
+
+# Python
+.venv/
+venv/
+*.pyc
+__pycache__/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Python demo databases
+*_demo_db/
+*_db/
+rag_demo_db/
+multi_collection_db/

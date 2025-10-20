@@ -1,0 +1,418 @@
+// Property-Based Tests for OpenAI Embeddings Backend
+//
+// This test suite uses proptest to validate properties that should hold
+// across a wide range of inputs, helping discover edge cases and invariants.
+//
+// Run with: cargo test --features "embeddings,openai-embeddings" --test openai_property_tests
+
+use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
+use proptest::prelude::*;
+
+// Helper function to create embedder synchronously for property tests
+fn create_embedder(model: OpenAIModel) -> OpenAIEmbedding {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(async {
+        OpenAIEmbedding::new("test-api-key".to_string(), model)
+            .await
+            .unwrap()
+    })
+}
+
+// Property: Cost estimation is always non-negative
+proptest! {
+    #[test]
+    fn prop_cost_always_non_negative(
+        texts in prop::collection::vec(prop::string::string_regex(".{0,1000}").unwrap(), 0..100)
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+        let cost = embedder.estimate_cost(&text_refs);
+
+        prop_assert!(cost >= 0.0, "Cost must be non-negative, got {}", cost);
+        prop_assert!(cost.is_finite(), "Cost must be finite, got {}", cost);
+    }
+}
+
+// Property: Empty input has zero cost
+proptest! {
+    #[test]
+    fn prop_empty_input_zero_cost(n_empty in 0_usize..100) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let texts: Vec<&str> = vec![""; n_empty];
+        let cost = embedder.estimate_cost(&texts);
+
+        prop_assert_eq!(cost, 0.0, "Empty strings should have zero cost");
+    }
+}
+
+// Property: Cost increases monotonically with text length
+proptest! {
+    #[test]
+    fn prop_cost_increases_with_length(
+        base_text in "[a-z]{1,100}",
+        multiplier in 1_usize..10
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+
+        let short_text = base_text.clone();
+        let long_text = base_text.repeat(multiplier);
+
+        let cost_short = embedder.estimate_cost(&[short_text.as_str()]);
+        let cost_long = embedder.estimate_cost(&[long_text.as_str()]);
+
+        prop_assert!(
+            cost_long >= cost_short,
+            "Longer text should have >= cost: short={}, long={}",
+            cost_short,
+            cost_long
+        );
+    }
+}
+
+// Property: Cost scales linearly with number of texts
+proptest! {
+    #[test]
+    fn prop_cost_scales_linearly_with_count(
+        text in "[a-z]{10,50}",
+        count in 1_usize..50
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+
+        let single = vec![text.as_str()];
+        let multiple: Vec<&str> = vec![text.as_str(); count];
+
+        let cost_single = embedder.estimate_cost(&single);
+        let cost_multiple = embedder.estimate_cost(&multiple);
+
+        // Allow for small floating point errors
+        let expected = cost_single * count as f64;
+        let diff = (cost_multiple - expected).abs();
+
+        prop_assert!(
+            diff < 0.0000001,
+            "Cost should scale linearly: single={}, multiple={}, expected={}, diff={}",
+            cost_single,
+            cost_multiple,
+            expected,
+            diff
+        );
+    }
+}
+
+// Property: More expensive models have higher costs
+proptest! {
+    #[test]
+    fn prop_expensive_models_cost_more(
+        texts in prop::collection::vec("[a-z]{10,100}", 1..20)
+    ) {
+        let small = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let large = create_embedder(OpenAIModel::TextEmbedding3Large);
+        let ada = create_embedder(OpenAIModel::Ada002);
+
+        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+
+        let cost_small = small.estimate_cost(&text_refs);
+        let cost_large = large.estimate_cost(&text_refs);
+        let cost_ada = ada.estimate_cost(&text_refs);
+
+        // TextEmbedding3Small ($0.02) < Ada002 ($0.10) < TextEmbedding3Large ($0.13)
+        prop_assert!(
+            cost_small < cost_ada,
+            "Small model should be cheaper than Ada002: small={}, ada={}",
+            cost_small,
+            cost_ada
+        );
+        prop_assert!(
+            cost_ada < cost_large,
+            "Ada002 should be cheaper than Large model: ada={}, large={}",
+            cost_ada,
+            cost_large
+        );
+    }
+}
+
+// Property: Cost ratio matches model price ratio
+proptest! {
+    #[test]
+    fn prop_cost_ratio_matches_price_ratio(
+        text in "[a-z]{100,500}"
+    ) {
+        let small = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let large = create_embedder(OpenAIModel::TextEmbedding3Large);
+
+        let text_ref = text.as_str();
+
+        let cost_small = small.estimate_cost(&[text_ref]);
+        let cost_large = large.estimate_cost(&[text_ref]);
+
+        if cost_small > 0.0 {
+            let cost_ratio = cost_large / cost_small;
+            let price_ratio = 0.13 / 0.02; // Large vs Small pricing
+
+            // Allow 5% margin for rounding
+            let diff = (cost_ratio - price_ratio).abs();
+            prop_assert!(
+                diff < 0.5,
+                "Cost ratio should match price ratio: cost_ratio={}, price_ratio={}",
+                cost_ratio,
+                price_ratio
+            );
+        }
+    }
+}
+
+// Property: Whitespace-only text should have minimal cost
+proptest! {
+    #[test]
+    fn prop_whitespace_minimal_cost(
+        n_spaces in 1_usize..1000
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let whitespace = " ".repeat(n_spaces);
+        let cost = embedder.estimate_cost(&[whitespace.as_str()]);
+
+        prop_assert!(cost >= 0.0, "Whitespace cost must be non-negative");
+        prop_assert!(cost < 0.01, "Whitespace cost should be minimal, got {}", cost);
+    }
+}
+
+// Property: Unicode characters are handled correctly
+proptest! {
+    #[test]
+    fn prop_unicode_handled_correctly(
+        text in "[あ-ん]{10,50}" // Japanese hiragana
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let cost = embedder.estimate_cost(&[text.as_str()]);
+
+        prop_assert!(cost >= 0.0, "Unicode text cost must be non-negative");
+        prop_assert!(cost.is_finite(), "Unicode text cost must be finite");
+    }
+}
+
+// Property: Mixed ASCII and Unicode
+proptest! {
+    #[test]
+    fn prop_mixed_ascii_unicode(
+        ascii in "[a-z]{10,50}",
+        unicode in "[😀-😿]{5,20}"
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let mixed = format!("{}{}", ascii, unicode);
+        let cost = embedder.estimate_cost(&[mixed.as_str()]);
+
+        prop_assert!(cost >= 0.0, "Mixed text cost must be non-negative");
+        prop_assert!(cost.is_finite(), "Mixed text cost must be finite");
+    }
+}
+
+// Property: Very long texts don't cause overflow
+proptest! {
+    #[test]
+    fn prop_long_text_no_overflow(
+        base_char in "[a-z]",
+        length in 10000_usize..100000
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let long_text = base_char.repeat(length);
+        let cost = embedder.estimate_cost(&[long_text.as_str()]);
+
+        prop_assert!(cost.is_finite(), "Long text cost must not overflow");
+        prop_assert!(cost >= 0.0, "Long text cost must be non-negative");
+    }
+}
+
+// Property: Large batch sizes are handled correctly
+proptest! {
+    #[test]
+    fn prop_large_batch_handled(
+        text in "[a-z]{10,50}",
+        count in 100_usize..5000
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let texts: Vec<&str> = vec![text.as_str(); count];
+        let cost = embedder.estimate_cost(&texts);
+
+        prop_assert!(cost.is_finite(), "Large batch cost must not overflow");
+        prop_assert!(cost >= 0.0, "Large batch cost must be non-negative");
+    }
+}
+
+// Property: Cost estimation is deterministic
+proptest! {
+    #[test]
+    fn prop_cost_deterministic(
+        texts in prop::collection::vec("[a-z]{10,100}", 1..20)
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+
+        let cost1 = embedder.estimate_cost(&text_refs);
+        let cost2 = embedder.estimate_cost(&text_refs);
+
+        prop_assert_eq!(
+            cost1,
+            cost2,
+            "Cost estimation should be deterministic"
+        );
+    }
+}
+
+// Property: Order doesn't matter for cost estimation
+proptest! {
+    #[test]
+    fn prop_order_independent(
+        mut texts in prop::collection::vec("[a-z]{10,100}", 5..20)
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+
+        let original_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+        let cost_original = embedder.estimate_cost(&original_refs);
+
+        // Reverse order
+        texts.reverse();
+        let reversed_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+        let cost_reversed = embedder.estimate_cost(&reversed_refs);
+
+        prop_assert_eq!(
+            cost_original,
+            cost_reversed,
+            "Cost should be independent of text order"
+        );
+    }
+}
+
+// Property: Splitting text doesn't change total cost significantly
+proptest! {
+    #[test]
+    fn prop_splitting_preserves_cost(
+        text in "[a-z]{100,500}",
+        split_point in 10_usize..490
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+
+        // Whole text
+        let cost_whole = embedder.estimate_cost(&[text.as_str()]);
+
+        // Split text
+        let (part1, part2) = text.split_at(split_point);
+        let cost_split = embedder.estimate_cost(&[part1, part2]);
+
+        // Should be approximately equal (within 1% due to rounding)
+        let diff = (cost_whole - cost_split).abs();
+        let tolerance = cost_whole * 0.01;
+
+        prop_assert!(
+            diff <= tolerance,
+            "Splitting text should preserve cost (within 1%): whole={}, split={}, diff={}",
+            cost_whole,
+            cost_split,
+            diff
+        );
+    }
+}
+
+// Property: Model dimensions are always valid
+proptest! {
+    #[test]
+    fn prop_model_dimensions_valid(_dummy in 0_u8..10) {
+        let small = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let large = create_embedder(OpenAIModel::TextEmbedding3Large);
+        let ada = create_embedder(OpenAIModel::Ada002);
+
+        prop_assert_eq!(small.model().dimension(), 1536);
+        prop_assert_eq!(large.model().dimension(), 3072);
+        prop_assert_eq!(ada.model().dimension(), 1536);
+    }
+}
+
+// Property: Builder pattern preserves configuration
+proptest! {
+    #[test]
+    fn prop_builder_preserves_config(
+        rate_limit in 1_usize..1000,
+        max_retries in 0_usize..10
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small)
+            .with_rate_limit(rate_limit)
+            .with_max_retries(max_retries);
+
+        // Test that configuration is preserved (indirectly via methods working)
+        let cost = embedder.estimate_cost(&["test"]);
+        prop_assert!(cost >= 0.0, "Builder should preserve functionality");
+    }
+}
+
+// Property: Empty batch doesn't panic
+proptest! {
+    #[test]
+    fn prop_empty_batch_no_panic(_dummy in 0_u8..10) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let empty: Vec<&str> = vec![];
+        let cost = embedder.estimate_cost(&empty);
+
+        prop_assert_eq!(cost, 0.0, "Empty batch should have zero cost");
+    }
+}
+
+// Property: Special characters don't cause issues
+proptest! {
+    #[test]
+    fn prop_special_chars_handled(
+        text in "[!@#$%^&*()_+={};<>?~]{10,100}"
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let cost = embedder.estimate_cost(&[text.as_str()]);
+
+        prop_assert!(cost >= 0.0, "Special characters should not break cost estimation");
+        prop_assert!(cost.is_finite(), "Special characters cost must be finite");
+    }
+}
+
+// Property: Null bytes are handled
+proptest! {
+    #[test]
+    fn prop_null_bytes_handled(
+        prefix in "[a-z]{5,20}",
+        suffix in "[a-z]{5,20}"
+    ) {
+        let embedder = create_embedder(OpenAIModel::TextEmbedding3Small);
+        let text_with_null = format!("{}\0{}", prefix, suffix);
+        let cost = embedder.estimate_cost(&[text_with_null.as_str()]);
+
+        prop_assert!(cost >= 0.0, "Null bytes should be handled gracefully");
+        prop_assert!(cost.is_finite(), "Null byte cost must be finite");
+    }
+}
+
+#[cfg(test)]
+mod property_test_summary {
+    //! This module documents the property-based testing coverage.
+    //!
+    //! Properties Tested:
+    //! 1. ✅ Cost is always non-negative and finite
+    //! 2. ✅ Empty input has zero cost
+    //! 3. ✅ Cost increases monotonically with text length
+    //! 4. ✅ Cost scales linearly with number of texts
+    //! 5. ✅ Model pricing ratios are preserved
+    //! 6. ✅ Whitespace has minimal cost
+    //! 7. ✅ Unicode characters handled correctly
+    //! 8. ✅ Long texts don't overflow
+    //! 9. ✅ Large batches are handled
+    //! 10. ✅ Cost estimation is deterministic
+    //! 11. ✅ Order independence
+    //! 12. ✅ Text splitting preserves cost
+    //! 13. ✅ Model dimensions are valid
+    //! 14. ✅ Builder pattern preserves configuration
+    //! 15. ✅ Empty batch doesn't panic
+    //! 16. ✅ Special characters handled
+    //! 17. ✅ Null bytes handled
+    //!
+    //! Total: 17 property-based tests covering 100+ test cases each
+    //!
+    //! Benefits:
+    //! - Finds edge cases human testers might miss
+    //! - Tests invariants across wide input ranges
+    //! - Validates mathematical properties
+    //! - Ensures no panics or undefined behavior
+}

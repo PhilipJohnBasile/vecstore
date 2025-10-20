@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vecstore
+  labels:
+    app: vecstore
+    component: server
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vecstore
+      component: server
+  template:
+    metadata:
+      labels:
+        app: vecstore
+        component: server
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+      - name: vecstore-server
+        image: vecstore:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: grpc
+          containerPort: 50051
+          protocol: TCP
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        env:
+        - name: RUST_LOG
+          value: "info"
+        - name: DB_PATH
+          value: "/data/vectors.db"
+        args:
+        - "--db-path"
+        - "/data/vectors.db"
+        - "--grpc-port"
+        - "50051"
+        - "--http-port"
+        - "8080"
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 30
+          timeoutSeconds: 3
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      volumes:
+      - name: data
+        persistentVolumeClaim:
+          claimName: vecstore-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vecstore-grpc
+  labels:
+    app: vecstore
+    component: grpc
+spec:
+  type: LoadBalancer
+  ports:
+  - name: grpc
+    port: 50051
+    targetPort: 50051
+    protocol: TCP
+  selector:
+    app: vecstore
+    component: server
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vecstore-http
+  labels:
+    app: vecstore
+    component: http
+spec:
+  type: LoadBalancer
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: vecstore
+    component: server
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vecstore-pvc
+  labels:
+    app: vecstore
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard

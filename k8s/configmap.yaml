@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vecstore-config
+  namespace: vecstore
+  labels:
+    app: vecstore
+data:
+  RUST_LOG: "info"
+  GRPC_PORT: "50051"
+  HTTP_PORT: "8080"
+  DB_PATH: "/data/vectors.db"

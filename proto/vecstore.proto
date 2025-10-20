@@ -1,0 +1,400 @@
+syntax = "proto3";
+
+package vecstore;
+
+// VecStore service - the main gRPC API
+service VecStoreService {
+  // Insert or update a vector with metadata
+  rpc Upsert(UpsertRequest) returns (UpsertResponse);
+
+  // Batch insert/update multiple vectors
+  rpc BatchUpsert(BatchUpsertRequest) returns (BatchUpsertResponse);
+
+  // Query for similar vectors
+  rpc Query(QueryRequest) returns (QueryResponse);
+
+  // Stream query results (for large result sets)
+  rpc QueryStream(QueryRequest) returns (stream QueryResult);
+
+  // Hard delete a vector (immediate removal)
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+
+  // Soft delete a vector (mark for deletion)
+  rpc SoftDelete(SoftDeleteRequest) returns (SoftDeleteResponse);
+
+  // Restore a soft-deleted vector
+  rpc Restore(RestoreRequest) returns (RestoreResponse);
+
+  // Compact database (remove soft-deleted vectors)
+  rpc Compact(CompactRequest) returns (CompactResponse);
+
+  // Get database statistics
+  rpc GetStats(StatsRequest) returns (StatsResponse);
+
+  // Create a snapshot
+  rpc CreateSnapshot(SnapshotRequest) returns (SnapshotResponse);
+
+  // List all snapshots
+  rpc ListSnapshots(ListSnapshotsRequest) returns (ListSnapshotsResponse);
+
+  // Restore from snapshot
+  rpc RestoreSnapshot(RestoreSnapshotRequest) returns (RestoreSnapshotResponse);
+
+  // Hybrid search (vector + keyword)
+  rpc HybridQuery(HybridQueryRequest) returns (QueryResponse);
+
+  // Health check
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// Admin service for namespace management
+service VecStoreAdminService {
+  // Create a new namespace
+  rpc CreateNamespace(CreateNamespaceRequest) returns (CreateNamespaceResponse);
+
+  // List all namespaces
+  rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
+
+  // Get namespace details
+  rpc GetNamespace(GetNamespaceRequest) returns (GetNamespaceResponse);
+
+  // Update namespace quotas
+  rpc UpdateNamespaceQuotas(UpdateNamespaceQuotasRequest) returns (UpdateNamespaceQuotasResponse);
+
+  // Update namespace status
+  rpc UpdateNamespaceStatus(UpdateNamespaceStatusRequest) returns (UpdateNamespaceStatusResponse);
+
+  // Delete a namespace
+  rpc DeleteNamespace(DeleteNamespaceRequest) returns (DeleteNamespaceResponse);
+
+  // Get namespace statistics
+  rpc GetNamespaceStats(GetNamespaceStatsRequest) returns (GetNamespaceStatsResponse);
+
+  // Get aggregate statistics
+  rpc GetAggregateStats(GetAggregateStatsRequest) returns (GetAggregateStatsResponse);
+}
+
+// ==================== Messages ====================
+
+// Upsert (insert or update)
+message UpsertRequest {
+  string id = 1;
+  repeated float vector = 2;
+  map<string, Value> metadata = 3;
+  optional string namespace = 4;  // For multi-tenancy (future)
+}
+
+message UpsertResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+// Batch upsert
+message BatchUpsertRequest {
+  repeated UpsertRequest records = 1;
+  optional string namespace = 2;
+}
+
+message BatchUpsertResponse {
+  int32 inserted = 1;
+  int32 updated = 2;
+  repeated string errors = 3;
+}
+
+// Query
+message QueryRequest {
+  repeated float vector = 1;
+  int32 limit = 2;
+  optional string filter = 3;  // SQL-like filter expression
+  optional string namespace = 4;
+}
+
+message QueryResponse {
+  repeated QueryResult results = 1;
+  optional QueryStats stats = 2;
+}
+
+message QueryResult {
+  string id = 1;
+  float score = 2;
+  map<string, Value> metadata = 3;
+}
+
+message QueryStats {
+  int32 total_candidates = 1;
+  int32 filtered_count = 2;
+  double duration_ms = 3;
+  bool cache_hit = 4;
+}
+
+// Delete
+message DeleteRequest {
+  string id = 1;
+  optional string namespace = 2;
+}
+
+message DeleteResponse {
+  bool found = 1;
+  bool deleted = 2;
+}
+
+// Soft delete
+message SoftDeleteRequest {
+  string id = 1;
+  optional string namespace = 2;
+}
+
+message SoftDeleteResponse {
+  bool found = 1;
+  bool marked_deleted = 2;
+}
+
+// Restore
+message RestoreRequest {
+  string id = 1;
+  optional string namespace = 2;
+}
+
+message RestoreResponse {
+  bool found = 1;
+  bool restored = 2;
+}
+
+// Compact
+message CompactRequest {
+  optional string namespace = 2;
+}
+
+message CompactResponse {
+  int32 removed_count = 1;
+  int64 freed_bytes = 2;
+}
+
+// Stats
+message StatsRequest {
+  optional string namespace = 1;
+}
+
+message StatsResponse {
+  int64 total_vectors = 1;
+  int64 active_vectors = 2;
+  int64 deleted_vectors = 3;
+  int32 dimension = 4;
+  int64 storage_bytes = 5;
+  optional CacheStats cache_stats = 6;
+}
+
+message CacheStats {
+  int64 hits = 1;
+  int64 misses = 2;
+  double hit_rate = 3;
+  int64 size = 4;
+}
+
+// Snapshot
+message SnapshotRequest {
+  string name = 1;
+}
+
+message SnapshotResponse {
+  bool success = 1;
+  string path = 2;
+}
+
+message ListSnapshotsRequest {}
+
+message ListSnapshotsResponse {
+  repeated SnapshotInfo snapshots = 1;
+}
+
+message SnapshotInfo {
+  string name = 1;
+  int64 created_at = 2;
+  int64 size_bytes = 3;
+}
+
+message RestoreSnapshotRequest {
+  string name = 1;
+}
+
+message RestoreSnapshotResponse {
+  bool success = 1;
+  int64 vectors_restored = 2;
+}
+
+// Hybrid query
+message HybridQueryRequest {
+  repeated float vector = 1;
+  string text_query = 2;
+  int32 limit = 3;
+  optional double alpha = 4;  // Weight for vector vs keyword (0.0 - 1.0)
+  optional string filter = 5;
+  optional string namespace = 6;
+}
+
+// Health check
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  enum ServingStatus {
+    UNKNOWN = 0;
+    SERVING = 1;
+    NOT_SERVING = 2;
+  }
+  ServingStatus status = 1;
+  optional string message = 2;
+}
+
+// ==================== Common Types ====================
+
+// Generic value type for metadata
+message Value {
+  oneof kind {
+    string string_value = 1;
+    double number_value = 2;
+    bool bool_value = 3;
+    ArrayValue array_value = 4;
+    ObjectValue object_value = 5;
+    NullValue null_value = 6;
+  }
+}
+
+message ArrayValue {
+  repeated Value values = 1;
+}
+
+message ObjectValue {
+  map<string, Value> fields = 1;
+}
+
+enum NullValue {
+  NULL_VALUE = 0;
+}
+
+// ==================== Admin API Messages ====================
+
+// Namespace quotas
+message NamespaceQuotas {
+  optional int64 max_vectors = 1;
+  optional int64 max_storage_bytes = 2;
+  optional double max_requests_per_second = 3;
+  optional int32 max_concurrent_queries = 4;
+  optional int32 max_dimension = 5;
+  optional int32 max_results_per_query = 6;
+  optional int32 max_batch_size = 7;
+}
+
+// Namespace status
+enum NamespaceStatus {
+  NAMESPACE_ACTIVE = 0;
+  NAMESPACE_SUSPENDED = 1;
+  NAMESPACE_READ_ONLY = 2;
+  NAMESPACE_PENDING_DELETION = 3;
+}
+
+// Namespace metadata
+message NamespaceInfo {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  NamespaceQuotas quotas = 4;
+  NamespaceStatus status = 5;
+  int64 created_at = 6;
+  int64 updated_at = 7;
+  map<string, string> metadata = 8;
+}
+
+// Create namespace
+message CreateNamespaceRequest {
+  string id = 1;
+  string name = 2;
+  optional string description = 3;
+  optional NamespaceQuotas quotas = 4;
+  map<string, string> metadata = 5;
+}
+
+message CreateNamespaceResponse {
+  bool success = 1;
+  optional string error = 2;
+  optional NamespaceInfo namespace = 3;
+}
+
+// List namespaces
+message ListNamespacesRequest {
+  optional NamespaceStatus status_filter = 1;
+}
+
+message ListNamespacesResponse {
+  repeated NamespaceInfo namespaces = 1;
+}
+
+// Get namespace
+message GetNamespaceRequest {
+  string namespace_id = 1;
+}
+
+message GetNamespaceResponse {
+  optional NamespaceInfo namespace = 1;
+  optional string error = 2;
+}
+
+// Update quotas
+message UpdateNamespaceQuotasRequest {
+  string namespace_id = 1;
+  NamespaceQuotas quotas = 2;
+}
+
+message UpdateNamespaceQuotasResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+// Update status
+message UpdateNamespaceStatusRequest {
+  string namespace_id = 1;
+  NamespaceStatus status = 2;
+}
+
+message UpdateNamespaceStatusResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+// Delete namespace
+message DeleteNamespaceRequest {
+  string namespace_id = 1;
+}
+
+message DeleteNamespaceResponse {
+  bool success = 1;
+  optional string error = 2;
+}
+
+// Namespace statistics
+message GetNamespaceStatsRequest {
+  string namespace_id = 1;
+}
+
+message GetNamespaceStatsResponse {
+  string namespace_id = 1;
+  int64 vector_count = 2;
+  int64 active_count = 3;
+  int64 deleted_count = 4;
+  int32 dimension = 5;
+  double quota_utilization = 6;
+  int64 total_requests = 7;
+  int64 total_queries = 8;
+  int64 total_upserts = 9;
+  int64 total_deletes = 10;
+  NamespaceStatus status = 11;
+}
+
+// Aggregate statistics
+message GetAggregateStatsRequest {}
+
+message GetAggregateStatsResponse {
+  int32 total_namespaces = 1;
+  int32 active_namespaces = 2;
+  int64 total_vectors = 3;
+  int64 total_requests = 4;
+}

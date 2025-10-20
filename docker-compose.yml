@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  vecstore:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: vecstore:latest
+    container_name: vecstore-server
+    ports:
+      - "50051:50051"  # gRPC
+      - "8080:8080"    # HTTP/REST
+    volumes:
+      - vecstore-data:/data
+    environment:
+      - RUST_LOG=info
+      - DB_PATH=/data/vectors.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  vecstore-data:
+    driver: local
