@@ -38,7 +38,7 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
 chrono = "0.4"
-directories = "5"
+directories = "6"
 tokio = { version = "1", features = ["rt", "sync"], optional = true }
 futures = { version = "0.3", optional = true }
 pyo3 = { version = "0.24.1", features = ["extension-module"], optional = true }
@@ -59,12 +59,12 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true, features = ["console", "Window", "Storage", "IdbFactory", "IdbDatabase", "IdbObjectStore", "IdbTransaction"] }
 console_error_panic_hook = { version = "0.1", optional = true }
-parquet = { version = "53", optional = true }
-arrow = { version = "53", optional = true }
+parquet = { version = "56", optional = true }
+arrow = { version = "56", optional = true }
 
 memmap2 = "0.9"
 tempfile = "3"
-ordered-float = { version = "4", features = ["serde"] }
+ordered-float = { version = "5", features = ["serde"] }
 
 # Enable getrandom for WASM (required by rand)
 getrandom = { version = "0.2", features = ["js"] }
@@ -74,18 +74,18 @@ getrandom = { version = "0.2", features = ["js"] }
 hnsw_rs = "0.3"
 
 # Server mode dependencies
-tonic = { version = "0.12", optional = true }
-prost = { version = "0.13", optional = true }
+tonic = { version = "0.14", optional = true }
+prost = { version = "0.14", optional = true }
 tokio-stream = { version = "0.1", optional = true }
-axum = { version = "0.7", optional = true, features = ["ws"] }
-tower = { version = "0.4", optional = true }
-tower-http = { version = "0.5", optional = true, features = ["cors", "trace"] }
+axum = { version = "0.8", optional = true, features = ["ws"] }
+tower = { version = "0.5", optional = true }
+tower-http = { version = "0.6", optional = true, features = ["cors", "trace"] }
 hyper = { version = "1", optional = true }
 prometheus = { version = "0.14", optional = true, features = ["process"] }
 lazy_static = { version = "1.4", optional = true }
 
 [build-dependencies]
-tonic-build = { version = "0.12", optional = true }
+tonic-build = { version = "0.14", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
