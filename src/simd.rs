@@ -128,7 +128,8 @@ unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
     }
 
     // Horizontal sum
-    let sum_shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(2, 3, 0, 1));
+    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
     let sums = _mm_add_ps(sum, sum_shuf);
     let sums_shuf = _mm_movehl_ps(sums, sums);
     let result_ss = _mm_add_ss(sums, sums_shuf);
@@ -273,7 +274,8 @@ unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 {
         i += 4;
     }
 
-    let sum_shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(2, 3, 0, 1));
+    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
     let sums = _mm_add_ps(sum, sum_shuf);
     let sums_shuf = _mm_movehl_ps(sums, sums);
     let result_ss = _mm_add_ss(sums, sums_shuf);
@@ -408,7 +410,8 @@ unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
     }
 
     // Horizontal sum
-    let sum_shuf = _mm_shuffle_ps(sum, sum, _MM_SHUFFLE(2, 3, 0, 1));
+    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
     let sums = _mm_add_ps(sum, sum_shuf);
     let sums_shuf = _mm_movehl_ps(sums, sums);
     let result_ss = _mm_add_ss(sums, sums_shuf);
