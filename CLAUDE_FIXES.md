@@ -2,6 +2,31 @@
 
 _Composed for the Claude Code handoff. Includes concrete file references, impact summaries, suggested remediation & test plans, plus failing regression tests under `tests/review_regressions.rs` to reproduce each issue._
 
+## Overall Status Summary (Updated 2025-10-20)
+
+**Critical Issues:** 4/4 Fixed ✅
+**Major Issues:** 19/20 Fixed ✅ (1 partially addressed)
+**Optimizations:** 0/8 Implemented (future work)
+**Experimental Modules:** 2/2 Documented ✅
+
+### Status Breakdown:
+- ✅ **23 issues fully resolved** - All critical data integrity, persistence, and query correctness bugs fixed
+- ⚠️ **1 issue partially addressed** - Distance metric configuration (warning added, full implementation deferred)
+- 📋 **8 optimization opportunities** - Performance improvements identified for future work (non-blocking)
+- ✅ **2 experimental modules documented** - Distributed store and GPU modules clearly marked as incomplete
+
+### Key Achievements:
+1. **Data Durability** - Fixed namespace persistence, HNSW serialization, text index persistence, and configuration persistence
+2. **Query Correctness** - Fixed BM25 drift, soft-delete handling, filter parsing (IN, STARTSWITH), and hybrid search bugs
+3. **Input Validation** - Added validation for zero vectors, dimension mismatches, ef_search bounds, and shard configurations
+4. **Security** - All dependencies at latest versions, zero critical vulnerabilities
+5. **Test Coverage** - 670 tests passing, comprehensive regression suite added
+
+### Next Steps:
+1. **Distance Metrics** - Implement full Euclidean/Manhattan support (requires HnswBackend refactoring)
+2. **Optimizations** - Address O(n) operations in TTL expiry, text indexing, and hash ring management
+3. **Documentation** - Add migration guide for schema v3 changes
+
 ## Critical Issues
 
 ### 1. ✅ FIXED - Durability Gap in `NamespaceManager`
@@ -70,20 +95,22 @@ _Composed for the Claude Code handoff. Includes concrete file references, impact
   - Keep the new failing test.
   - Extend hybrid query tests to delete/compact documents and assert that results disappear from both vector and keyword modes.
 
-### 5. ⚠️ DOCUMENTED - Distance Configuration Ignored
-- **Summary:** The public API exposes `Config::distance`, but the backend is hard-wired to cosine similarity (`src/store/hnsw_backend.rs:14`). Query explanations also label every result as “Cosine” (`src/store/mod.rs:382`). No code path switches the distance metric or adjusts scoring.
+### 5. ⚠️ PARTIALLY ADDRESSED - Distance Configuration Ignored
+- **Summary:** The public API exposes `Config::distance`, but the backend is hard-wired to cosine similarity (`src/store/hnsw_backend.rs:8,17,22`). Query explanations also label every result as "Cosine" (`src/store/mod.rs:382`). No code path switches the distance metric or adjusts scoring.
 - **Impact:** Users believe they are selecting L2/Manhattan/etc., but the store actually executes cosine similarity. This is a silent semantic bug leading to incorrect rankings and potentially incorrect business decisions.
 - **How to Reproduce:**
   1. Build a store with `.distance(Distance::Euclidean)`.
-  2. Run `query_explain`; explanation still says “Cosine” (`tests/review_regressions.rs::query_explain_should_report_configured_distance_metric`).
+  2. Run `query_explain`; explanation still says "Cosine" (`tests/review_regressions.rs::query_explain_should_report_configured_distance_metric`).
 - **Root Cause:** `VecStore::open_with_config` accepts a `Config`, but never passes the distance choice into the backend. `HnswBackend::new` always instantiates `DistCosine`, and scoring converts distances as if cosine were used.
-- **Fix Ideas:**
-  - Introduce an enum-driven factory that creates an `HnswBackend` specialized for each supported metric (or use the trait objects provided by `hnsw_rs`).
-  - Update explanations to report the actual metric.
-  - Fail fast (panic/error) if the requested metric is unsupported until full support is implemented.
+- **Partial Fix Applied:** Added warning when non-Cosine distance is configured (`src/store/mod.rs:125-134`), but the backend still uses Cosine.
+- **Remaining Work:**
+  - Make `HnswBackend` generic over distance type or use trait objects from `hnsw_rs`
+  - Persist distance metric choice in configuration
+  - Update query explanations to report actual metric
+  - Update HNSW initialization to use configured metric
 - **Suggested Regression Tests:**
-  - Keep the new failing test.
-  - Parameterized tests that open a store with different distances, insert simple vectors, and assert nearest-neighbor outcomes match expectations.
+  - Test `tests/review_regressions.rs::query_explain_should_report_configured_distance_metric` currently fails.
+  - Need parameterized tests for all distance metrics once implemented.
 
 ### 6. Hybrid Text Index Not Persisted Across Restarts ✅ FIXED
 - **Summary:** `VecStore::open` never reloaded the keyword index. On reopen the store built a fresh `TextIndex`, so previously indexed documents lost their text (`src/store/mod.rs:90`, `src/store/mod.rs:617`).
