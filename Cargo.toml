@@ -30,7 +30,7 @@ serde = { version = "1", features = ["derive"] }
 bincode = "1"
 serde_json = "1"
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 rayon = "1"
 rand = "0.8"  # Keep 0.8 for compatibility
 regex = "1"
@@ -43,14 +43,14 @@ tokio = { version = "1", features = ["rt", "sync"], optional = true }
 futures = { version = "0.3", optional = true }
 pyo3 = { version = "0.24.1", features = ["extension-module"], optional = true }
 ort = { version = "1.16", optional = true }
-tokenizers = { version = "0.15", optional = true, default-features = false, features = ["onig"] }
-ndarray = { version = "0.15", optional = true }
-ureq = { version = "2.9", optional = true, default-features = false, features = ["tls"] }
-candle-core = { version = "0.8", optional = true }
-candle-nn = { version = "0.8", optional = true }
-candle-transformers = { version = "0.8", optional = true }
-hf-hub = { version = "0.3", optional = true }
-safetensors = { version = "0.4", optional = true }
+tokenizers = { version = "0.22", optional = true, default-features = false, features = ["onig"] }
+ndarray = { version = "0.16", optional = true }
+ureq = { version = "3.1", optional = true, default-features = false, features = ["native-tls"] }
+candle-core = { version = "0.9", optional = true }
+candle-nn = { version = "0.9", optional = true }
+candle-transformers = { version = "0.9", optional = true }
+hf-hub = { version = "0.4", optional = true }
+safetensors = { version = "0.6", optional = true }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls", "blocking"] }
 async-trait = { version = "0.1", optional = true }
 wasm-bindgen = { version = "0.2", optional = true }
