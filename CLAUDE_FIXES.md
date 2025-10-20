@@ -5,25 +5,25 @@ _Composed for the Claude Code handoff. Includes concrete file references, impact
 ## Overall Status Summary (Updated 2025-10-20)
 
 **Critical Issues:** 4/4 Fixed ✅
-**Major Issues:** 19/20 Fixed ✅ (1 partially addressed)
+**Major Issues:** 20/20 Fixed ✅
 **Optimizations:** 0/8 Implemented (future work)
 **Experimental Modules:** 2/2 Documented ✅
 
 ### Status Breakdown:
-- ✅ **23 issues fully resolved** - All critical data integrity, persistence, and query correctness bugs fixed
-- ⚠️ **1 issue partially addressed** - Distance metric configuration (warning added, full implementation deferred)
+- ✅ **24 issues fully resolved** - All critical data integrity, persistence, query correctness, and distance metric bugs fixed
 - 📋 **8 optimization opportunities** - Performance improvements identified for future work (non-blocking)
 - ✅ **2 experimental modules documented** - Distributed store and GPU modules clearly marked as incomplete
 
 ### Key Achievements:
 1. **Data Durability** - Fixed namespace persistence, HNSW serialization, text index persistence, and configuration persistence
 2. **Query Correctness** - Fixed BM25 drift, soft-delete handling, filter parsing (IN, STARTSWITH), and hybrid search bugs
-3. **Input Validation** - Added validation for zero vectors, dimension mismatches, ef_search bounds, and shard configurations
-4. **Security** - All dependencies at latest versions, zero critical vulnerabilities
-5. **Test Coverage** - 670 tests passing, comprehensive regression suite added
+3. **Distance Metrics** - Implemented proper support for Cosine, Euclidean, and DotProduct; clear errors for unsupported metrics
+4. **Input Validation** - Added validation for zero vectors, dimension mismatches, ef_search bounds, and shard configurations
+5. **Security** - All dependencies at latest versions, zero critical vulnerabilities
+6. **Test Coverage** - 670 tests passing, comprehensive regression suite added
 
 ### Next Steps:
-1. **Distance Metrics** - Implement full Euclidean/Manhattan support (requires HnswBackend refactoring)
+1. **Distance Metrics** - Add support for remaining metrics (Manhattan, Hamming, Jaccard, etc.) when needed
 2. **Optimizations** - Address O(n) operations in TTL expiry, text indexing, and hash ring management
 3. **Documentation** - Add migration guide for schema v3 changes
 
@@ -95,22 +95,28 @@ _Composed for the Claude Code handoff. Includes concrete file references, impact
   - Keep the new failing test.
   - Extend hybrid query tests to delete/compact documents and assert that results disappear from both vector and keyword modes.
 
-### 5. ⚠️ PARTIALLY ADDRESSED - Distance Configuration Ignored
-- **Summary:** The public API exposes `Config::distance`, but the backend is hard-wired to cosine similarity (`src/store/hnsw_backend.rs:8,17,22`). Query explanations also label every result as "Cosine" (`src/store/mod.rs:382`). No code path switches the distance metric or adjusts scoring.
-- **Impact:** Users believe they are selecting L2/Manhattan/etc., but the store actually executes cosine similarity. This is a silent semantic bug leading to incorrect rankings and potentially incorrect business decisions.
-- **How to Reproduce:**
+### 5. ✅ FIXED - Distance Configuration Ignored
+- **Summary:** The public API exposes `Config::distance`, but the backend was hard-wired to cosine similarity (`src/store/hnsw_backend.rs:8,17,22`). Query explanations also labeled every result as "Cosine" (`src/store/mod.rs:382`). No code path switched the distance metric or adjusted scoring.
+- **Impact:** Users believed they were selecting L2/Manhattan/etc., but the store actually executed cosine similarity. This was a silent semantic bug leading to incorrect rankings and potentially incorrect business decisions.
+- **How to Reproduce (before fix):**
   1. Build a store with `.distance(Distance::Euclidean)`.
   2. Run `query_explain`; explanation still says "Cosine" (`tests/review_regressions.rs::query_explain_should_report_configured_distance_metric`).
-- **Root Cause:** `VecStore::open_with_config` accepts a `Config`, but never passes the distance choice into the backend. `HnswBackend::new` always instantiates `DistCosine`, and scoring converts distances as if cosine were used.
-- **Partial Fix Applied:** Added warning when non-Cosine distance is configured (`src/store/mod.rs:125-134`), but the backend still uses Cosine.
-- **Remaining Work:**
-  - Make `HnswBackend` generic over distance type or use trait objects from `hnsw_rs`
-  - Persist distance metric choice in configuration
-  - Update query explanations to report actual metric
-  - Update HNSW initialization to use configured metric
-- **Suggested Regression Tests:**
-  - Test `tests/review_regressions.rs::query_explain_should_report_configured_distance_metric` currently fails.
-  - Need parameterized tests for all distance metrics once implemented.
+- **Root Cause:** `VecStore::open_with_config` accepted a `Config`, but never passed the distance choice into the backend. `HnswBackend::new` always instantiated `DistCosine`, and scoring converted distances as if cosine were used.
+- **Fix Applied (2025-10-20):**
+  - Refactored `HnswBackend` to use enum-based polymorphism with `HnswInstance` enum (`src/store/hnsw_backend.rs:8-12`)
+  - Updated `HnswBackend::new()` to accept `Distance` parameter and instantiate correct HNSW type (`src/store/hnsw_backend.rs:24-57`)
+  - Updated `HnswBackend::restore()` to accept and use configured distance metric (`src/store/hnsw_backend.rs:151-186`)
+  - Pass configured distance from `VecStore` to backend at all call sites (`src/store/mod.rs:151,182,218,291,1454`)
+  - Fixed query explanations to report actual configured distance metric (`src/store/mod.rs:453`)
+  - Proper score inversion for Euclidean distance (`src/store/hnsw_backend.rs:117-120,251-253`)
+  - Clear error messages for unsupported distance metrics (`src/store/hnsw_backend.rs:39-46,168-175`)
+  - Updated tests to verify unsupported metrics return errors (`src/store/mod.rs:2235-2274`)
+- **Supported Distance Metrics:**
+  - ✅ Cosine (default)
+  - ✅ Euclidean (with proper score inversion)
+  - ✅ DotProduct
+  - ⚠️ Manhattan, Hamming, Jaccard, Chebyshev, Canberra, BrayCurtis (return clear error message)
+- **Testing:** All 670 tests passing. Unsupported distance metrics now return helpful error messages pointing to future support.
 
 ### 6. Hybrid Text Index Not Persisted Across Restarts ✅ FIXED
 - **Summary:** `VecStore::open` never reloaded the keyword index. On reopen the store built a fresh `TextIndex`, so previously indexed documents lost their text (`src/store/mod.rs:90`, `src/store/mod.rs:617`).
