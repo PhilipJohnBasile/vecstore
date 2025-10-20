@@ -421,11 +421,15 @@ impl DiskHNSW {
         #[cfg(feature = "async")]
         return None; // Would need async version
 
+        #[cfg(not(feature = "async"))]
         if offset + 9 <= mmap.len() {
             Some(mmap[offset + 8])
         } else {
             None
         }
+
+        #[cfg(feature = "async")]
+        None
     }
 
     /// Re-map the file after growth

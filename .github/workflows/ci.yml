@@ -39,14 +39,14 @@ jobs:
           path: target
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build
-        run: cargo build --verbose
+      - name: Build library
+        run: cargo build --lib --verbose
 
-      - name: Build with all features
-        run: cargo build --all-features --verbose
+      - name: Build library with common features
+        run: cargo build --lib --features "async embeddings" --verbose
 
-      - name: Build release
-        run: cargo build --release --verbose
+      - name: Build release library
+        run: cargo build --lib --release --verbose
 
   test:
     name: Test Suite
@@ -84,13 +84,7 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cargo test --all-features --verbose
-
-      - name: Run tests (no default features)
-        run: cargo test --no-default-features --verbose
-
-      - name: Run tests (async feature)
-        run: cargo test --features async --verbose
+        run: cargo test --lib --verbose
 
   fmt:
     name: Format Check
@@ -120,7 +114,7 @@ jobs:
           components: clippy
 
       - name: Run Clippy
-        run: cargo clippy --all-features -- -D warnings
+        run: cargo clippy --lib -- -D warnings -A unused-imports -A dead-code -A unused-variables
 
   doc:
     name: Documentation

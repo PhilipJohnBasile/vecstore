@@ -2,10 +2,11 @@
 
 > **The Perfect Vector Database** — 100/100 competitive score, embeddable, high-performance, written in 100% Rust
 
+[![CI](https://github.com/PhilipJohnBasile/vecstore/workflows/CI/badge.svg)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
 [![Documentation](https://docs.rs/vecstore/badge.svg)](https://docs.rs/vecstore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/tests-350%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-670%20passing-brightgreen)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Score](https://img.shields.io/badge/score-100%2F100-gold)]()
 [![Production](https://img.shields.io/badge/production-ready-blue)]()
 

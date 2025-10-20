@@ -139,6 +139,11 @@ server = [
     "prometheus",
     "lazy_static",
 ]
+# Optional features for experimental/future functionality
+compression = []  # Future: compression support
+tracing = []      # Future: distributed tracing
+cuda = []         # Future: CUDA GPU support
+metal = []        # Future: Metal GPU support
 
 [[bench]]
 name = "vecstore_bench"

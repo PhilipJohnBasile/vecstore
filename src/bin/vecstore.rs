@@ -626,7 +626,7 @@ fn main() -> Result<()> {
 
         Commands::Collection(cmd) => match cmd {
             CollectionCommands::List { dir } => {
-                let db = VecDatabase::new(&dir)?;
+                let db = VecDatabase::open(&dir)?;
                 let collections = db.list_collections()?;
 
                 println!("📁 Collections ({})", collections.len());
@@ -641,7 +641,7 @@ fn main() -> Result<()> {
                 name,
                 dimension,
             } => {
-                let mut db = VecDatabase::new(&dir)?;
+                let mut db = VecDatabase::open(&dir)?;
                 db.create_collection(&name, dimension)?;
 
                 println!("✓ Created collection '{}'", name);
@@ -649,14 +649,14 @@ fn main() -> Result<()> {
             }
 
             CollectionCommands::Drop { dir, name } => {
-                let mut db = VecDatabase::new(&dir)?;
+                let mut db = VecDatabase::open(&dir)?;
                 db.drop_collection(&name)?;
 
                 println!("✓ Dropped collection '{}'", name);
             }
 
             CollectionCommands::Info { dir, name } => {
-                let db = VecDatabase::new(&dir)?;
+                let db = VecDatabase::open(&dir)?;
                 let collection = db.get_collection(&name)?;
 
                 println!("📊 Collection: {}", name);

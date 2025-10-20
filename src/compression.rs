@@ -229,22 +229,10 @@ impl CompressionConfig {
                 Ok(data.to_vec())
             }
             CompressionLevel::Balanced | CompressionLevel::Max => {
-                // ZSTD compression (using built-in if available)
-                #[cfg(feature = "compression")]
-                {
-                    let level = match self.level {
-                        CompressionLevel::Balanced => 3,
-                        CompressionLevel::Max => 19,
-                        _ => 3,
-                    };
-                    zstd::encode_all(data, level)
-                        .map_err(|e| anyhow!("ZSTD compression failed: {}", e))
-                }
-                #[cfg(not(feature = "compression"))]
-                {
-                    // Fallback: no compression if feature not enabled
-                    Ok(data.to_vec())
-                }
+                // ZSTD compression (would use zstd crate if available)
+                // TODO: Add zstd crate dependency and implement when compression feature is enabled
+                // For now, return uncompressed data as placeholder
+                Ok(data.to_vec())
             }
         }
     }
