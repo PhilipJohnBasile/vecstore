@@ -185,7 +185,6 @@ pub mod python;
     feature = "embeddings",
     feature = "cloud-embeddings",
     feature = "openai-embeddings",
-    feature = "candle-embeddings",
     feature = "ollama"
 ))]
 pub mod embeddings;
@@ -484,9 +483,6 @@ pub use async_api::{AsyncCollection, AsyncVecDatabase, AsyncVecStore};
 
 #[cfg(feature = "embeddings")]
 pub use embeddings::{Embedder, EmbeddingCollection, EmbeddingStore, SimpleEmbedder, TextEmbedder};
-
-#[cfg(feature = "candle-embeddings")]
-pub use embeddings::{CandleEmbedder, CandleModel};
 
 #[cfg(feature = "cloud-embeddings")]
 pub use embeddings::{

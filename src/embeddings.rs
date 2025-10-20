@@ -9,9 +9,6 @@ pub mod auto_models;
 #[cfg(feature = "openai-embeddings")]
 pub mod openai_backend;
 
-#[cfg(feature = "candle-embeddings")]
-pub mod candle_backend;
-
 #[cfg(feature = "cloud-embeddings")]
 pub mod cloud_providers;
 
@@ -26,9 +23,6 @@ pub use auto_models::{AutoEmbedder, PretrainedModel};
 
 #[cfg(feature = "openai-embeddings")]
 pub use openai_backend::{OpenAIEmbedding, OpenAIModel};
-
-#[cfg(feature = "candle-embeddings")]
-pub use candle_backend::{CandleEmbedder, CandleModel};
 
 #[cfg(feature = "cloud-embeddings")]
 pub use cloud_providers::{
