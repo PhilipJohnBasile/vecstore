@@ -403,7 +403,7 @@ impl DistributedStore {
             status: NodeStatus::Joining,
             last_heartbeat: current_timestamp(),
             shards: Vec::new(),
-            capacity_bytes: 10 * 1024 * 1024 * 1024, // 10GB default
+            capacity_bytes: (10u64 * 1024 * 1024 * 1024) as usize, // 10GB default
             used_bytes: 0,
         };
 

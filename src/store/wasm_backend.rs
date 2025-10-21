@@ -139,6 +139,11 @@ impl WasmVectorBackend {
         &self.idx_to_id
     }
 
+    /// Get next index counter (for compatibility with native HNSW backend)
+    pub fn get_next_idx(&self) -> usize {
+        self.next_idx
+    }
+
     /// Set ID mappings (for compatibility with native HNSW backend)
     pub fn set_mappings(
         &mut self,

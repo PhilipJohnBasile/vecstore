@@ -686,13 +686,17 @@ impl WebGpuBackend {
 
 #[cfg(feature = "wasm")]
 impl GpuOps for WebGpuBackend {
-    fn device_info(&self) -> Result<GpuDeviceInfo> {
-        Ok(GpuDeviceInfo {
+    fn device_info(&self) -> GpuDeviceInfo {
+        GpuDeviceInfo {
+            backend: GpuBackend::WebGpu,
+            device_id: 0,
             name: "WebGPU Device".to_string(),
+            total_memory_bytes: 2 * 1024 * 1024 * 1024, // 2GB estimate
+            available_memory_bytes: 2 * 1024 * 1024 * 1024,
             compute_capability: (1, 0),
             max_threads_per_block: 256,
             num_streaming_multiprocessors: 1,
-        })
+        }
     }
 
     fn batch_euclidean_distance(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
