@@ -870,7 +870,11 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                         }
                                     };
 
-                                    if socket.send(Message::Text(result_json.into())).await.is_err() {
+                                    if socket
+                                        .send(Message::Text(result_json.into()))
+                                        .await
+                                        .is_err()
+                                    {
                                         break;
                                     }
                                 }

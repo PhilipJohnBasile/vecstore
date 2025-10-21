@@ -300,7 +300,10 @@ fn main() -> Result<()> {
             store.save()?;
             println!("✓ Initialized vector store at: {:?}", dir);
             if let Some(dim) = dimension {
-                println!("  Note: Dimension ({}) will be auto-detected from first insert", dim);
+                println!(
+                    "  Note: Dimension ({}) will be auto-detected from first insert",
+                    dim
+                );
             } else {
                 println!("  Dimension will be auto-detected from first insert");
             }
@@ -518,7 +521,10 @@ fn main() -> Result<()> {
             compress,
         } => {
             eprintln!("❌ Backup feature not yet implemented");
-            eprintln!("   Workaround: Copy the entire directory {:?} to create a backup", dir);
+            eprintln!(
+                "   Workaround: Copy the entire directory {:?} to create a backup",
+                dir
+            );
             eprintln!("   Requested output: {:?}", output);
             if compress {
                 eprintln!("   Compression requested: {}", compress);
