@@ -21,3 +21,6 @@ build/
 rag_demo_db/
 multi_collection_db/
 archive/
+CLAUDE_FIXES.md
+*.bak
+*_old.rs
