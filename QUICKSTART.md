@@ -4,6 +4,37 @@ Get running with VecStore in 5 minutes or less.
 
 ---
 
+## Installation
+
+### Rust
+
+Add VecStore to your `Cargo.toml`:
+
+```toml
+[dependencies]
+vecstore = "1.0"
+```
+
+Or use cargo:
+
+```bash
+cargo add vecstore
+```
+
+### Python
+
+```bash
+pip install vecstore-py
+```
+
+### JavaScript/WASM
+
+```bash
+npm install vecstore-wasm
+```
+
+---
+
 ## 30 Second Start - Basic Vector Search
 
 ```rust

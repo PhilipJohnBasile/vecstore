@@ -1,6 +1,8 @@
 # VecStore
 
-> **The Perfect Vector Database** — 100/100 competitive score, embeddable, high-performance, written in 100% Rust
+> **The Perfect Vector Database** — 100/100 competitive score, embeddable, high-performance, production-ready
+>
+> **🎉 Now available on crates.io!** — `cargo add vecstore`
 
 [![CI](https://github.com/PhilipJohnBasile/vecstore/workflows/CI/badge.svg)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
