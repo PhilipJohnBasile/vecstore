@@ -24,6 +24,7 @@ COPY build.rs ./
 # Copy source code
 COPY src ./src
 COPY proto ./proto
+COPY benches ./benches
 
 # Build for release with server feature
 RUN cargo build --release --features server --bin vecstore-server
