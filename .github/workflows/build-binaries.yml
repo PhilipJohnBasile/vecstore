@@ -68,6 +68,9 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
+      - name: Install Protobuf
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
