@@ -1,0 +1,39 @@
+# Maintainer: Your Name <your.email@example.com>
+pkgname=vecstore
+pkgver=1.0.0
+pkgrel=1
+pkgdesc="High-performance vector database with RAG toolkit"
+arch=('x86_64' 'aarch64')
+url="https://github.com/PhilipJohnBasile/vecstore"
+license=('MIT')
+depends=('gcc-libs')
+makedepends=('rust' 'cargo' 'protobuf')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('96bce955be4d16ccd29e6dbd8bbfe87c1da869b4c76607176ad7ca9c54895448')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$CARCH-unknown-linux-gnu"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  export CARGO_TARGET_DIR=target
+  # Build server binary (CLI has compilation issues in v1.0.0)
+  cargo build --frozen --release --features server --bin vecstore-server
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo test --frozen --lib --features server
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  install -Dm755 "target/release/vecstore-server" "$pkgdir/usr/bin/vecstore-server"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

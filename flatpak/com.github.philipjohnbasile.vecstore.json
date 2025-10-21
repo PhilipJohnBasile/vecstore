@@ -1,0 +1,50 @@
+{
+  "app-id": "com.github.philipjohnbasile.vecstore",
+  "runtime": "org.freedesktop.Platform",
+  "runtime-version": "23.08",
+  "sdk": "org.freedesktop.Sdk",
+  "sdk-extensions": [
+    "org.freedesktop.Sdk.Extension.rust-stable"
+  ],
+  "command": "vecstore-server",
+  "finish-args": [
+    "--share=network",
+    "--filesystem=home"
+  ],
+  "build-options": {
+    "append-path": "/usr/lib/sdk/rust-stable/bin",
+    "env": {
+      "CARGO_HOME": "/run/build/vecstore/cargo"
+    }
+  },
+  "modules": [
+    {
+      "name": "protobuf",
+      "buildsystem": "autotools",
+      "sources": [
+        {
+          "type": "archive",
+          "url": "https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-all-21.12.tar.gz",
+          "sha256": "930c2c3b5ecc6c9c12615cf5ad93f1cd6e909a35f52e83e39b7a3ec5b3d7dcd1"
+        }
+      ]
+    },
+    {
+      "name": "vecstore",
+      "buildsystem": "simple",
+      "build-commands": [
+        "cargo --offline fetch --manifest-path Cargo.toml --verbose",
+        "cargo --offline build --release --features server --bin vecstore-server",
+        "install -Dm755 ./target/release/vecstore-server /app/bin/vecstore-server"
+      ],
+      "sources": [
+        {
+          "type": "git",
+          "url": "https://github.com/PhilipJohnBasile/vecstore.git",
+          "tag": "v1.0.0"
+        },
+        "generated-sources.json"
+      ]
+    }
+  ]
+}

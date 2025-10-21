@@ -1,0 +1,48 @@
+name: vecstore
+version: '1.0.0'
+summary: High-performance vector database with RAG toolkit
+description: |
+  VecStore is a high-performance vector database built in Rust, optimized
+  for similarity search and Retrieval-Augmented Generation (RAG) applications.
+
+  Features:
+  - Fast vector similarity search using HNSW algorithm
+  - Support for multiple distance metrics (cosine, euclidean, dot product)
+  - Advanced metadata filtering
+  - Embedding generation with multiple providers
+  - Python and JavaScript bindings
+  - Production-ready with comprehensive testing
+
+  After installation, start the server with:
+    vecstore-server --db-path ./data/vectors.db
+
+  Documentation: https://docs.rs/vecstore
+
+grade: stable
+confinement: strict
+base: core22
+
+apps:
+  vecstore-server:
+    command: bin/vecstore-server
+    plugs:
+      - home
+      - network
+      - network-bind
+
+parts:
+  vecstore:
+    plugin: rust
+    source: https://github.com/PhilipJohnBasile/vecstore.git
+    source-tag: v1.0.0
+    build-packages:
+      - protobuf-compiler
+      - libprotobuf-dev
+      - pkg-config
+      - libssl-dev
+    stage-packages:
+      - libssl3
+    rust-features:
+      - server
+    rust-path:
+      - vecstore-server

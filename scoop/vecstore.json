@@ -1,0 +1,36 @@
+{
+    "version": "1.0.0",
+    "description": "High-performance vector database with RAG toolkit",
+    "homepage": "https://github.com/PhilipJohnBasile/vecstore",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/PhilipJohnBasile/vecstore/releases/download/v1.0.0/vecstore-windows-x86_64.zip",
+            "hash": "TBD - Will be updated once binaries are built"
+        }
+    },
+    "bin": "vecstore-server.exe",
+    "checkver": {
+        "github": "https://github.com/PhilipJohnBasile/vecstore"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/PhilipJohnBasile/vecstore/releases/download/v$version/vecstore-windows-x86_64.zip"
+            }
+        }
+    },
+    "notes": [
+        "VecStore server has been installed.",
+        "",
+        "To start the server:",
+        "  vecstore-server --db-path ./data/vectors.db",
+        "",
+        "For library usage:",
+        "  Rust: cargo add vecstore",
+        "  Python: pip install vecstore-rs",
+        "  JavaScript: npm install vecstore-wasm",
+        "",
+        "Documentation: https://docs.rs/vecstore"
+    ]
+}

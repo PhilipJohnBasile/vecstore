@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>vecstore</id>
+    <version>1.0.0</version>
+    <packageSourceUrl>https://github.com/PhilipJohnBasile/vecstore</packageSourceUrl>
+    <owners>PhilipJohnBasile</owners>
+    <title>VecStore</title>
+    <authors>Philip John Basile</authors>
+    <projectUrl>https://github.com/PhilipJohnBasile/vecstore</projectUrl>
+    <iconUrl>https://raw.githubusercontent.com/PhilipJohnBasile/vecstore/main/docs/logo.png</iconUrl>
+    <licenseUrl>https://github.com/PhilipJohnBasile/vecstore/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/PhilipJohnBasile/vecstore</projectSourceUrl>
+    <docsUrl>https://docs.rs/vecstore</docsUrl>
+    <bugTrackerUrl>https://github.com/PhilipJohnBasile/vecstore/issues</bugTrackerUrl>
+    <tags>vector-database embedding search rag rust</tags>
+    <summary>High-performance vector database with RAG toolkit</summary>
+    <description>
+VecStore is a high-performance vector database built in Rust, optimized for similarity search and Retrieval-Augmented Generation (RAG) applications.
+
+## Features
+- Fast vector similarity search using HNSW algorithm
+- Support for multiple distance metrics (cosine, euclidean, dot product)
+- Advanced metadata filtering
+- Embedding generation with multiple providers
+- Python and JavaScript bindings
+- Production-ready with comprehensive testing
+
+## Usage
+After installation, start the server:
+```
+vecstore-server --db-path ./data/vectors.db
+```
+
+For library usage:
+- Rust: `cargo add vecstore`
+- Python: `pip install vecstore-rs`
+- JavaScript: `npm install vecstore-wasm`
+
+Documentation: https://docs.rs/vecstore
+    </description>
+    <releaseNotes>https://github.com/PhilipJohnBasile/vecstore/releases/tag/v1.0.0</releaseNotes>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>
