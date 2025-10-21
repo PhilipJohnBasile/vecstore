@@ -1,0 +1,77 @@
+name: Publish to npm
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  publish-npm:
+    name: Build and Publish WASM to npm
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: wasm32-unknown-unknown
+          override: true
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build WASM package
+        run: |
+          wasm-pack build --target web --features wasm --out-dir pkg
+
+      - name: Create package.json
+        run: |
+          cat > pkg/package.json <<EOF
+          {
+            "name": "@vecstore/core",
+            "version": "$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')",
+            "description": "High-performance vector database for the browser and Node.js (WASM)",
+            "main": "vecstore.js",
+            "types": "vecstore.d.ts",
+            "files": [
+              "vecstore_bg.wasm",
+              "vecstore.js",
+              "vecstore.d.ts",
+              "vecstore_bg.js",
+              "vecstore_bg.wasm.d.ts"
+            ],
+            "repository": {
+              "type": "git",
+              "url": "https://github.com/PhilipJohnBasile/vecstore.git"
+            },
+            "keywords": [
+              "vector-database",
+              "wasm",
+              "webassembly",
+              "embeddings",
+              "similarity-search",
+              "hnsw",
+              "rag"
+            ],
+            "author": "VecStore Contributors",
+            "license": "MIT",
+            "bugs": {
+              "url": "https://github.com/PhilipJohnBasile/vecstore/issues"
+            },
+            "homepage": "https://github.com/PhilipJohnBasile/vecstore#readme"
+          }
+          EOF
+
+      - name: Publish to npm
+        working-directory: ./pkg
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
