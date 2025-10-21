@@ -827,7 +827,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                         "error": format!("Invalid filter: {}", e)
                                     });
                                     if socket
-                                        .send(Message::Text(error_msg.to_string()))
+                                        .send(Message::Text(error_msg.to_string().into()))
                                         .await
                                         .is_err()
                                     {
@@ -870,7 +870,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                         }
                                     };
 
-                                    if socket.send(Message::Text(result_json)).await.is_err() {
+                                    if socket.send(Message::Text(result_json.into())).await.is_err() {
                                         break;
                                     }
                                 }
@@ -885,7 +885,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                 });
 
                                 if socket
-                                    .send(Message::Text(completion.to_string()))
+                                    .send(Message::Text(completion.to_string().into()))
                                     .await
                                     .is_err()
                                 {
@@ -897,7 +897,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                     "error": format!("Query failed: {}", e)
                                 });
                                 if socket
-                                    .send(Message::Text(error_msg.to_string()))
+                                    .send(Message::Text(error_msg.to_string().into()))
                                     .await
                                     .is_err()
                                 {
@@ -911,7 +911,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                             "error": format!("Invalid query request: {}", e)
                         });
                         if socket
-                            .send(Message::Text(error_msg.to_string()))
+                            .send(Message::Text(error_msg.to_string().into()))
                             .await
                             .is_err()
                         {

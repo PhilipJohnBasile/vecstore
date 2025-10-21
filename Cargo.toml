@@ -76,6 +76,7 @@ hnsw_rs = "0.3"
 
 # Server mode dependencies
 tonic = { version = "0.14", optional = true }
+tonic-prost = { version = "0.14", optional = true }
 prost = { version = "0.14", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 axum = { version = "0.8", optional = true, features = ["ws"] }
@@ -86,7 +87,7 @@ prometheus = { version = "0.14", optional = true, features = ["process"] }
 lazy_static = { version = "1.4", optional = true }
 
 [build-dependencies]
-tonic-build = { version = "0.14", optional = true }
+tonic-prost-build = { version = "0.14", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -129,7 +130,8 @@ wasm = ["wasm-bindgen", "wasm-bindgen-futures", "serde-wasm-bindgen", "js-sys", 
 parquet-export = ["parquet", "arrow"]
 server = [
     "tonic",
-    "tonic-build",
+    "tonic-prost",
+    "tonic-prost-build",
     "prost",
     "tokio-stream",
     "axum",

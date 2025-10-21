@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 // Re-export generated protobuf types
 pub mod pb {
-    include!("../generated/vecstore.rs");
+    tonic::include_proto!("vecstore");
 }
 
 /// Convert protobuf Value to serde_json::Value
