@@ -20,3 +20,4 @@ build/
 *_db/
 rag_demo_db/
 multi_collection_db/
+archive/
