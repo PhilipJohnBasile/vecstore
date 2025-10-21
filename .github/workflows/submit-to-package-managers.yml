@@ -101,6 +101,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd nixpkgs
+
+          # Configure git to use PAT_TOKEN for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.actor }}/nixpkgs.git
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add pkgs/by-name/ve/vecstore/
@@ -189,6 +193,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd staged-recipes
+
+          # Configure git to use PAT_TOKEN for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.actor }}/staged-recipes.git
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add recipes/vecstore/
@@ -272,6 +280,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd macports-ports
+
+          # Configure git to use PAT_TOKEN for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.actor }}/macports-ports.git
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add databases/vecstore/
@@ -360,6 +372,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd winget-pkgs
+
+          # Configure git to use PAT_TOKEN for authentication
+          git remote set-url origin https://x-access-token:${{ secrets.PAT_TOKEN }}@github.com/${{ github.actor }}/winget-pkgs.git
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/
