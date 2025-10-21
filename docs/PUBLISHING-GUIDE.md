@@ -335,6 +335,13 @@ flatpak install flathub com.github.philipjohnbasile.vecstore
 - [x] GHCR
 - [x] Homebrew
 - [x] Scoop (placeholder)
+- [x] cargo-binstall (auto-supported via GitHub releases)
+
+### Ready to Submit (Manifests Created)
+- [ ] Winget - PR to microsoft/winget-pkgs (needs Windows binary)
+- [ ] Nix - PR to NixOS/nixpkgs
+- [ ] Conda-forge - PR to conda-forge/staged-recipes
+- [ ] MacPorts - PR to macports/macports-ports
 
 ### Need Accounts
 - [ ] AUR - Register at https://aur.archlinux.org/register
@@ -345,8 +352,14 @@ flatpak install flathub com.github.philipjohnbasile.vecstore
 ### Need Binaries First
 - [ ] Chocolatey (Windows x64 binary)
 - [ ] Scoop (Windows x64 binary)
+- [ ] Winget (Windows x64 binary)
 
 ### Estimated Time
+- **cargo-binstall**: ✅ Already works!
+- **Winget**: 1 hour (needs Windows binary + PR + review ~1 week)
+- **Nix**: 1 hour (PR + review ~1 week)
+- **Conda-forge**: 2 hours (PR + review ~1-2 weeks)
+- **MacPorts**: 1 hour (PR + review ~1 week)
 - **AUR**: 30 minutes (after account setup)
 - **Chocolatey**: 2 hours (needs Windows binary + review)
 - **Snap**: 1 hour (+ 1-2 weeks review)
@@ -361,18 +374,308 @@ flatpak install flathub com.github.philipjohnbasile.vecstore
 - Chocolatey: `https://community.chocolatey.org/packages/vecstore`
 - Snap: `https://snapcraft.io/vecstore`
 - Flatpak: `https://flathub.org/apps/com.github.philipjohnbasile.vecstore`
+- Winget: `https://winget.run/pkg/PhilipJohnBasile/vecstore`
+- Nix: `https://search.nixos.org/packages?query=vecstore`
+- Conda-forge: `https://anaconda.org/conda-forge/vecstore`
+- MacPorts: `https://ports.macports.org/port/vecstore/`
 
 **Install Commands:**
 ```bash
-# AUR
+# Rust / Cargo
+cargo install vecstore --features server
+cargo binstall vecstore  # Faster binary install
+
+# AUR (Arch Linux)
 yay -S vecstore
 
-# Chocolatey
+# Nix
+nix-env -iA nixpkgs.vecstore
+
+# Conda-forge
+conda install -c conda-forge vecstore
+
+# Homebrew (macOS)
+brew tap PhilipJohnBasile/vecstore && brew install vecstore
+
+# MacPorts (macOS)
+sudo port install vecstore
+
+# Winget (Windows)
+winget install PhilipJohnBasile.vecstore
+
+# Chocolatey (Windows)
 choco install vecstore
 
-# Snap
+# Scoop (Windows)
+scoop bucket add vecstore https://github.com/PhilipJohnBasile/scoop-vecstore
+scoop install vecstore
+
+# Snap (Linux)
 sudo snap install vecstore
 
-# Flatpak
+# Flatpak (Linux)
 flatpak install flathub com.github.philipjohnbasile.vecstore
 ```
+
+---
+
+### 5. Winget (Windows Package Manager)
+
+**Prerequisites:**
+- Windows 10/11
+- GitHub account (for PR submission)
+
+**Steps:**
+
+#### A. Prepare Manifest Files
+
+The Winget manifests are already in `winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/`:
+- `PhilipJohnBasile.vecstore.yaml` (version manifest)
+- `PhilipJohnBasile.vecstore.installer.yaml` (installer manifest)
+- `PhilipJohnBasile.vecstore.locale.en-US.yaml` (locale manifest)
+
+**Update the installer manifest with Windows binary SHA256:**
+```bash
+# After Windows binaries are available
+# Get SHA256 of the Windows zip file
+sha256sum vecstore-windows-x86_64.zip
+
+# Update in PhilipJohnBasile.vecstore.installer.yaml:
+# InstallerSha256: <actual_sha256>
+```
+
+#### B. Submit to Winget Repository
+
+```bash
+# Fork https://github.com/microsoft/winget-pkgs
+git clone https://github.com/YOUR_USERNAME/winget-pkgs.git
+cd winget-pkgs
+
+# Create branch
+git checkout -b vecstore-1.0.0
+
+# Copy manifests to correct location
+mkdir -p manifests/p/PhilipJohnBasile/vecstore/1.0.0
+cp /Users/pjb/Git/vecstore/winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/* \
+   manifests/p/PhilipJohnBasile/vecstore/1.0.0/
+
+# Commit and push
+git add .
+git commit -m "Add PhilipJohnBasile.vecstore version 1.0.0"
+git push origin vecstore-1.0.0
+
+# Create PR at https://github.com/microsoft/winget-pkgs/pulls
+```
+
+**Users can then install with:**
+```powershell
+winget install PhilipJohnBasile.vecstore
+```
+
+---
+
+### 6. Nix / nixpkgs
+
+**Prerequisites:**
+- Nix installed
+- GitHub account
+
+**Steps:**
+
+#### A. Generate Hash
+
+```bash
+# Get source tarball hash
+nix-prefetch-url --unpack https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz
+
+# Update hash in nix/default.nix
+```
+
+#### B. Test Build Locally
+
+```bash
+# Build with Nix
+nix-build nix/default.nix
+
+# Test the binary
+./result/bin/vecstore-server --help
+```
+
+#### C. Submit to nixpkgs
+
+```bash
+# Fork https://github.com/NixOS/nixpkgs
+git clone https://github.com/YOUR_USERNAME/nixpkgs.git
+cd nixpkgs
+
+# Create branch
+git checkout -b vecstore-1.0.0
+
+# Add package to pkgs/by-name/ve/vecstore/package.nix
+mkdir -p pkgs/by-name/ve/vecstore
+cp /Users/pjb/Git/vecstore/nix/default.nix pkgs/by-name/ve/vecstore/package.nix
+
+# Commit and push
+git add .
+git commit -m "vecstore: init at 1.0.0"
+git push origin vecstore-1.0.0
+
+# Create PR at https://github.com/NixOS/nixpkgs/pulls
+```
+
+**Users can then install with:**
+```bash
+nix-env -iA nixpkgs.vecstore
+# or with flakes
+nix profile install nixpkgs#vecstore
+```
+
+---
+
+### 7. Conda-forge
+
+**Prerequisites:**
+- conda or mamba installed
+- GitHub account
+
+**Steps:**
+
+#### A. Update SHA256 Hash
+
+```bash
+# Get source tarball hash
+curl -sL https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz | sha256sum
+
+# Update in conda/meta.yaml
+```
+
+#### B. Test Build Locally
+
+```bash
+# Install conda-build
+conda install conda-build
+
+# Build the package
+cd /Users/pjb/Git/vecstore
+conda build conda/
+
+# Test install
+conda install --use-local vecstore
+vecstore-server --help
+```
+
+#### C. Submit to Conda-forge
+
+```bash
+# Fork https://github.com/conda-forge/staged-recipes
+git clone https://github.com/YOUR_USERNAME/staged-recipes.git
+cd staged-recipes
+
+# Create branch
+git checkout -b vecstore
+
+# Copy recipe
+mkdir -p recipes/vecstore
+cp /Users/pjb/Git/vecstore/conda/meta.yaml recipes/vecstore/
+cp /Users/pjb/Git/vecstore/conda/build.sh recipes/vecstore/
+
+# Commit and push
+git add .
+git commit -m "Add vecstore recipe"
+git push origin vecstore
+
+# Create PR at https://github.com/conda-forge/staged-recipes/pulls
+```
+
+**After approval, users can install with:**
+```bash
+conda install -c conda-forge vecstore
+# or
+mamba install vecstore
+```
+
+---
+
+### 8. MacPorts
+
+**Prerequisites:**
+- macOS
+- MacPorts installed
+- GitHub account
+
+**Steps:**
+
+#### A. Update Checksums
+
+```bash
+# Get checksums
+curl -L https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz -o vecstore-1.0.0.tar.gz
+openssl rmd160 vecstore-1.0.0.tar.gz
+openssl sha256 vecstore-1.0.0.tar.gz
+wc -c vecstore-1.0.0.tar.gz
+
+# Update in macports/Portfile
+```
+
+#### B. Test Locally
+
+```bash
+# Copy Portfile to local repository
+sudo cp /Users/pjb/Git/vecstore/macports/Portfile /opt/local/var/macports/sources/rsync.macports.org/macports/release/tarballs/ports/databases/vecstore/
+
+# Test install
+sudo port install vecstore
+
+# Test binary
+vecstore-server --help
+```
+
+#### C. Submit to MacPorts
+
+```bash
+# Fork https://github.com/macports/macports-ports
+git clone https://github.com/YOUR_USERNAME/macports-ports.git
+cd macports-ports
+
+# Create branch
+git checkout -b vecstore
+
+# Add Portfile
+mkdir -p databases/vecstore
+cp /Users/pjb/Git/vecstore/macports/Portfile databases/vecstore/
+
+# Commit and push
+git add .
+git commit -m "vecstore: new port, version 1.0.0"
+git push origin vecstore
+
+# Create PR at https://github.com/macports/macports-ports/pulls
+```
+
+**Users can then install with:**
+```bash
+sudo port install vecstore
+```
+
+---
+
+### 9. cargo-binstall (Already Supported!)
+
+**Prerequisites:**
+- None! Just needs GitHub releases with binaries
+
+**Status:** ✅ Already works because we have GitHub release with binaries at:
+- https://github.com/PhilipJohnBasile/vecstore/releases/tag/v1.0.0
+
+**Users can install with:**
+```bash
+cargo install cargo-binstall
+cargo binstall vecstore
+```
+
+**How it works:**
+1. Checks GitHub releases for binary assets
+2. Downloads appropriate binary for user's platform
+3. Installs directly (much faster than `cargo install`)
+
+**No action needed** - this works automatically once binaries are in GitHub releases!
