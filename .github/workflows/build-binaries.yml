@@ -1,0 +1,122 @@
+name: Build Release Binaries
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+
+jobs:
+  build-macos:
+    name: Build macOS Binaries
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install Protobuf
+        run: brew install protobuf
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} --features server --bin vecstore-server
+
+      - name: Package
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf vecstore-${{ matrix.target }}.tar.gz vecstore-server
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.tar.gz
+          tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Build Linux Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build
+        run: cross build --release --target ${{ matrix.target }} --features server --bin vecstore-server
+
+      - name: Package
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf vecstore-${{ matrix.target }}.tar.gz vecstore-server
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.tar.gz
+          tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: Build Windows Binaries
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        target:
+          - x86_64-pc-windows-msvc
+          - aarch64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install Protobuf
+        run: choco install protoc
+
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} --features server --bin vecstore-server
+
+      - name: Package
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a vecstore-${{ matrix.target }}.zip vecstore-server.exe
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.zip
+          tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

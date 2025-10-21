@@ -1,0 +1,364 @@
+name: Submit to Package Managers
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., 1.0.1)'
+        required: true
+      tag:
+        description: 'Tag (e.g., v1.0.1)'
+        required: true
+      submit_nix:
+        description: 'Submit to Nix?'
+        type: boolean
+        default: true
+      submit_conda:
+        description: 'Submit to Conda-forge?'
+        type: boolean
+        default: true
+      submit_macports:
+        description: 'Submit to MacPorts?'
+        type: boolean
+        default: true
+      submit_winget:
+        description: 'Submit to Winget?'
+        type: boolean
+        default: true
+
+jobs:
+  submit-nix:
+    name: Submit to nixpkgs
+    runs-on: ubuntu-latest
+    if: github.event.inputs.submit_nix != 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get source hash
+        id: hash
+        run: |
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.TAG }}.tar.gz"
+          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Fork and clone nixpkgs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fork nixpkgs if not already forked
+          gh repo fork NixOS/nixpkgs --clone=false || true
+
+          # Clone our fork
+          git clone https://github.com/${{ github.actor }}/nixpkgs.git
+          cd nixpkgs
+          git remote add upstream https://github.com/NixOS/nixpkgs.git
+          git fetch upstream
+          git checkout upstream/master
+          git checkout -b vecstore-${{ steps.version.outputs.VERSION }}
+
+      - name: Add package
+        run: |
+          cd nixpkgs
+          mkdir -p pkgs/by-name/ve/vecstore
+          cp ../nix/default.nix pkgs/by-name/ve/vecstore/package.nix
+
+          # Update version and hash
+          sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.VERSION }}\"/" pkgs/by-name/ve/vecstore/package.nix
+          sed -i "s/rev = \".*\"/rev = \"${{ steps.version.outputs.TAG }}\"/" pkgs/by-name/ve/vecstore/package.nix
+          sed -i "s/hash = \"sha256-.*\"/hash = \"sha256-${{ steps.hash.outputs.SHA256 }}\"/" pkgs/by-name/ve/vecstore/package.nix
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd nixpkgs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pkgs/by-name/ve/vecstore/
+          git commit -m "vecstore: init at ${{ steps.version.outputs.VERSION }}"
+          git push origin vecstore-${{ steps.version.outputs.VERSION }}
+
+          # Create PR
+          gh pr create \
+            --repo NixOS/nixpkgs \
+            --title "vecstore: init at ${{ steps.version.outputs.VERSION }}" \
+            --body "**Description:**
+
+          High-performance embeddable vector database with HNSW indexing, hybrid search, and comprehensive RAG toolkit.
+
+          **Features:**
+          - HNSW vector indexing
+          - Dense and sparse vector search
+          - Hybrid search with BM25
+          - Multi-language bindings (Rust, Python, JavaScript)
+          - Production-ready server mode
+
+          **Links:**
+          - Homepage: https://github.com/PhilipJohnBasile/vecstore
+          - Release: https://github.com/PhilipJohnBasile/vecstore/releases/tag/${{ steps.version.outputs.TAG }}
+          - docs.rs: https://docs.rs/vecstore
+
+          **Testing:**
+          \`\`\`bash
+          nix-build -A vecstore
+          ./result/bin/vecstore-server --help
+          \`\`\`
+
+          ---
+          *Automated submission from GitHub Actions*"
+
+  submit-conda:
+    name: Submit to conda-forge
+    runs-on: ubuntu-latest
+    if: github.event.inputs.submit_conda != 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get source hash
+        id: hash
+        run: |
+          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.TAG }}.tar.gz"
+          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
+          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+
+      - name: Fork and clone staged-recipes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh repo fork conda-forge/staged-recipes --clone=false || true
+          git clone https://github.com/${{ github.actor }}/staged-recipes.git
+          cd staged-recipes
+          git remote add upstream https://github.com/conda-forge/staged-recipes.git
+          git fetch upstream
+          git checkout upstream/main
+          git checkout -b vecstore
+
+      - name: Add recipe
+        run: |
+          cd staged-recipes
+          mkdir -p recipes/vecstore
+          cp ../conda/meta.yaml recipes/vecstore/
+          cp ../conda/build.sh recipes/vecstore/
+
+          # Update version and hash
+          sed -i "s/{% set version = \".*\" %}/{% set version = \"${{ steps.version.outputs.VERSION }}\" %}/" recipes/vecstore/meta.yaml
+          sed -i "s/sha256: .*/sha256: ${{ steps.hash.outputs.SHA256 }}/" recipes/vecstore/meta.yaml
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd staged-recipes
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add recipes/vecstore/
+          git commit -m "Add vecstore recipe"
+          git push origin vecstore
+
+          gh pr create \
+            --repo conda-forge/staged-recipes \
+            --title "Add vecstore: High-performance vector database" \
+            --body "**Package:** vecstore
+          **Version:** ${{ steps.version.outputs.VERSION }}
+
+          **Description:**
+          VecStore is a high-performance embeddable vector database with HNSW indexing, hybrid search capabilities, and comprehensive RAG toolkit. Perfect for ML and data science workflows.
+
+          **Features:**
+          - HNSW vector indexing with configurable parameters
+          - Dense and sparse vector search (BM25, SPLADE)
+          - Hybrid search with multiple fusion strategies
+          - Advanced metadata filtering
+          - Multi-tenancy support
+          - Production-ready server mode
+          - Python and JavaScript bindings
+
+          **Links:**
+          - Homepage: https://github.com/PhilipJohnBasile/vecstore
+          - Documentation: https://docs.rs/vecstore
+          - Release: https://github.com/PhilipJohnBasile/vecstore/releases/tag/${{ steps.version.outputs.TAG }}
+
+          **Checklist:**
+          - [x] License file included (MIT)
+          - [x] Source URL points to archive
+          - [x] SHA256 hash verified
+          - [x] Test command included
+          - [x] Maintainer specified (@PhilipJohnBasile)
+
+          ---
+          *Automated submission from GitHub Actions*"
+
+  submit-macports:
+    name: Submit to MacPorts
+    runs-on: ubuntu-latest
+    if: github.event.inputs.submit_macports != 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fork and clone macports-ports
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh repo fork macports/macports-ports --clone=false || true
+          git clone https://github.com/${{ github.actor }}/macports-ports.git
+          cd macports-ports
+          git remote add upstream https://github.com/macports/macports-ports.git
+          git fetch upstream
+          git checkout upstream/master
+          git checkout -b vecstore
+
+      - name: Add Portfile
+        run: |
+          cd macports-ports
+          mkdir -p databases/vecstore
+          cp ../macports/Portfile databases/vecstore/
+
+          # Update version
+          sed -i "s/github.setup.*PhilipJohnBasile vecstore .* v/github.setup        PhilipJohnBasile vecstore ${{ steps.version.outputs.VERSION }} v/" databases/vecstore/Portfile
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd macports-ports
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add databases/vecstore/
+          git commit -m "vecstore: new port, version ${{ steps.version.outputs.VERSION }}"
+          git push origin vecstore
+
+          gh pr create \
+            --repo macports/macports-ports \
+            --title "vecstore: new port, version ${{ steps.version.outputs.VERSION }}" \
+            --body "**New Port:** vecstore ${{ steps.version.outputs.VERSION }}
+
+          **Description:**
+          High-performance embeddable vector database with HNSW indexing, hybrid search capabilities, multi-language bindings, and comprehensive RAG toolkit.
+
+          **Category:** databases, devel
+          **License:** MIT
+          **Maintainer:** @PhilipJohnBasile
+
+          **Links:**
+          - Homepage: https://github.com/PhilipJohnBasile/vecstore
+          - Release: https://github.com/PhilipJohnBasile/vecstore/releases/tag/${{ steps.version.outputs.TAG }}
+
+          **TODO:** Update checksums (rmd160, sha256, size) with actual values
+
+          ---
+          *Automated submission from GitHub Actions*"
+
+  submit-winget:
+    name: Submit to Winget
+    runs-on: ubuntu-latest
+    if: github.event.inputs.submit_winget != 'false'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "VERSION=$(echo ${{ github.event.release.tag_name }} | sed 's/^v//')" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Check for Windows binary
+        id: check_binary
+        run: |
+          BINARY_URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.TAG }}/vecstore-x86_64-pc-windows-msvc.zip"
+          if curl --output /dev/null --silent --head --fail "$BINARY_URL"; then
+            echo "EXISTS=true" >> $GITHUB_OUTPUT
+            SHA256=$(curl -sL "$BINARY_URL" | sha256sum | awk '{print $1}')
+            echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+          else
+            echo "EXISTS=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fork and clone winget-pkgs
+        if: steps.check_binary.outputs.EXISTS == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh repo fork microsoft/winget-pkgs --clone=false || true
+          git clone https://github.com/${{ github.actor }}/winget-pkgs.git
+          cd winget-pkgs
+          git remote add upstream https://github.com/microsoft/winget-pkgs.git
+          git fetch upstream
+          git checkout upstream/master
+          git checkout -b vecstore-${{ steps.version.outputs.VERSION }}
+
+      - name: Add manifests
+        if: steps.check_binary.outputs.EXISTS == 'true'
+        run: |
+          cd winget-pkgs
+          mkdir -p manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}
+          cp ../winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/* manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/
+
+          # Update versions and hash
+          sed -i "s/PackageVersion: .*/PackageVersion: ${{ steps.version.outputs.VERSION }}/" manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/*.yaml
+          sed -i "s|download/v[0-9.]\+/|download/${{ steps.version.outputs.TAG }}/|" manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/PhilipJohnBasile.vecstore.installer.yaml
+          sed -i "s/InstallerSha256: .*/InstallerSha256: ${{ steps.check_binary.outputs.SHA256 }}/" manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/PhilipJohnBasile.vecstore.installer.yaml
+
+      - name: Create PR
+        if: steps.check_binary.outputs.EXISTS == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd winget-pkgs
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add manifests/p/PhilipJohnBasile/vecstore/${{ steps.version.outputs.VERSION }}/
+          git commit -m "Add PhilipJohnBasile.vecstore version ${{ steps.version.outputs.VERSION }}"
+          git push origin vecstore-${{ steps.version.outputs.VERSION }}
+
+          gh pr create \
+            --repo microsoft/winget-pkgs \
+            --title "New package: PhilipJohnBasile.vecstore version ${{ steps.version.outputs.VERSION }}" \
+            --body "**Package:** PhilipJohnBasile.vecstore
+          **Version:** ${{ steps.version.outputs.VERSION }}
+
+          High-performance embeddable vector database with HNSW indexing, hybrid search, and comprehensive RAG toolkit.
+
+          **Release:** https://github.com/PhilipJohnBasile/vecstore/releases/tag/${{ steps.version.outputs.TAG }}
+
+          ---
+          *Automated submission from GitHub Actions*"
