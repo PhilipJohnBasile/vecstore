@@ -4,7 +4,7 @@
 # ============================================================================
 # Builder Stage - Compile the Rust application
 # ============================================================================
-FROM rust:1.83-slim as builder
+FROM rustlang/rust:nightly-slim as builder
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
