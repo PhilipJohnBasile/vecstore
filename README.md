@@ -2,7 +2,9 @@
 
 > **The Perfect Vector Database** — 100/100 competitive score, embeddable, high-performance, production-ready
 >
-> **🎉 Now available on crates.io!** — `cargo add vecstore`
+> **🎉 Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)!**
+>
+> Rust: `cargo add vecstore` | Python: `pip install vecstore-rs`
 
 [![CI](https://github.com/PhilipJohnBasile/vecstore/workflows/CI/badge.svg)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
@@ -52,13 +54,13 @@ let results = store.query(&vec![0.15, 0.25, 0.85], 10, None)?;
 ### Python
 
 ```bash
-pip install vecstore-py
+pip install vecstore-rs
 ```
 
 ```python
-import vecstore_py
+import vecstore
 
-store = vecstore_py.VecStore("vectors.db")
+store = vecstore.VecStore("vectors.db")
 store.upsert("doc1", [0.1, 0.2, 0.3], {"title": "Doc"})
 results = store.query([0.15, 0.25, 0.85], k=10)
 ```

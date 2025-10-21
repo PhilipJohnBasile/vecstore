@@ -5,8 +5,10 @@ High-performance vector database with RAG toolkit for Python, powered by Rust.
 ## Installation
 
 ```bash
-pip install vecstore
+pip install vecstore-rs
 ```
+
+**Note:** The package is published as `vecstore-rs` on PyPI, but imports as `vecstore` in Python.
 
 ## Quick Start
 

@@ -7,10 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2025-10-20
 
-**🎉 Now available on [crates.io](https://crates.io/crates/vecstore)!**
+**🎉 Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)!**
 
+**Rust:**
 ```bash
 cargo add vecstore
+```
+
+**Python:**
+```bash
+pip install vecstore-rs
 ```
 
 ### 🎯 Achievement: Perfect 100/100 Competitive Score

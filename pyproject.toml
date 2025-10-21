@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "vecstore"
+name = "vecstore-rs"
 version = "1.0.0"
 description = "The perfect vector database - 100/100 score, embeddable, high-performance, production-ready with RAG toolkit"
 readme = "python/README.md"

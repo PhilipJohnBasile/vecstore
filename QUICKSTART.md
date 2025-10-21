@@ -24,7 +24,7 @@ cargo add vecstore
 ### Python
 
 ```bash
-pip install vecstore-py
+pip install vecstore-rs
 ```
 
 ### JavaScript/WASM
