@@ -363,13 +363,37 @@ let score = reranker.compute_score(&query_tokens, &doc_tokens)?;
 
 ---
 
-## Features Deferred to v1.1.0
+## Features Deferred to v1.1.0+
 
 ### 1. WASM Native Support
 
 **Why Deferred:** `hnsw_rs` dependency on `mmap-rs` blocks WASM compilation
 
 **Details:** See WASM section above for full analysis
+
+### 2. CLI Binaries Distribution
+
+**Status:** CLI binaries (`vecstore` and `vecstore-server`) are available in the GitHub repository but excluded from the published crates.io package.
+
+**Why Excluded from v1.0.0:**
+- The CLI code (`src/bin/vecstore.rs`, `src/bin/vecstore-server.rs`) is excluded from the library crate to keep the published package focused on the core library API
+- Binary crates require separate distribution mechanisms (GitHub releases, cargo-binstall, etc.)
+
+**Roadmap for CLI Distribution:**
+- **v1.1.0:** Publish standalone CLI binaries via GitHub Releases
+- **v1.2.0:** Add cargo-binstall support for easy installation
+- **Future:** Homebrew, apt/yum packages for system-wide installation
+
+**Current Workaround:**
+Users who want the CLI tools can clone the repository and build from source:
+```bash
+git clone https://github.com/PhilipJohnBasile/vecstore
+cd vecstore
+cargo build --release --bin vecstore
+cargo build --release --bin vecstore-server --features server
+```
+
+The compiled binaries will be in `target/release/`.
 
 ---
 
