@@ -1010,31 +1010,466 @@ Commands module exists but needs minor API updates to match current VecStore int
 - ✅ **PyPI** - Python package with async API
 - ⏳ **NPM** - WASM package
 
-### Future Enhancements (v1.5.0+)
+### v1.5.0 - MATRYOSHKA & MULTI-VECTOR (Competitive Parity) 🎯
+
+**Goal:** Match and exceed Qdrant, Weaviate, and Pinecone's latest features
+**Timeline:** 7-10 days
+**Status:** Planned for immediate implementation post-v1.0 launch
+
+#### 1. Matryoshka Embeddings Support ⭐ CRITICAL
+
+**What it is:** Variable-length embeddings that nest smaller representations inside larger ones (like Russian dolls)
+
+**Why it matters:**
+- **83% cost reduction** vs standard embeddings (Voyage AI benchmark)
+- **Multi-stage querying** - Fast search with small dims, refine with large dims
+- **Industry momentum** - OpenAI, Voyage, Jina, Cohere all support this
+
+**Features:**
+- Multi-dimension support (2048, 1024, 512, 256 from same embedding)
+- Multi-stage querying API (prefetch with 512-dim, rerank with 2048-dim)
+- Provider integration (OpenAI text-embedding-3, Voyage AI, Jina v3/v4, Cohere)
+- Automatic dimension detection and optimization
+- Cost/quality tradeoff controls
+
+**HYBRID API:**
+```rust
+// Simple - Auto-optimize for cost
+let results = db.query(vector, 10)?;  // Uses smallest sufficient dimension
+
+// Advanced - Multi-stage querying (Qdrant-style)
+let results = db.query_matryoshka()
+    .prefetch(vector_512, 100)      // Fast initial search with 512-dim
+    .rerank(vector_2048, 10)        // Precise rerank with 2048-dim
+    .execute()?;
+
+// Expert - Full control
+let config = MatryoshkaConfig {
+    dimensions: vec![2048, 1024, 512, 256],
+    strategy: Strategy::MultiStage {
+        stages: vec![
+            Stage { dim: 512, k: 100 },
+            Stage { dim: 1024, k: 20 },
+            Stage { dim: 2048, k: 10 },
+        ],
+    },
+};
+```
+
+**Competitive Impact:** Matches Qdrant 1.10, exceeds with better API
+
+#### 2. Native Multi-Vector Storage ⭐ HIGH
+
+**What it is:** Store multiple vectors per document (ColBERT late-interaction style)
+
+**Why it matters:**
+- **State-of-the-art accuracy** for retrieval (15-20% better than single-vector)
+- **Token-level matching** - Better than sentence embeddings for precision
+- **Required for modern RAG** - ColBERT, SPLADE, multi-embedding models
+
+**Features:**
+- Multiple vectors per document (100+ vectors supported)
+- MaxSim aggregation (ColBERT-style late interaction)
+- Per-token HNSW indexing for efficiency
+- Automatic vector grouping and retrieval
+- Integration with existing ColBERT reranker
+
+**HYBRID API:**
+```rust
+// Simple - Store document with multiple chunks
+db.upsert_multi_vector("doc1", vec![
+    vec![0.1, 0.2, ...],  // Title embedding
+    vec![0.3, 0.4, ...],  // Paragraph 1
+    vec![0.5, 0.6, ...],  // Paragraph 2
+])?;
+
+// Advanced - Full ColBERT integration
+let config = MultiVectorConfig {
+    aggregation: Aggregation::MaxSim,      // ColBERT-style
+    token_limit: 128,
+    per_token_indexing: true,
+};
+db.upsert_multi_vector_advanced("doc1", vectors, config)?;
+
+// Query with late interaction
+let results = db.query_multi_vector(query_vectors, 10)?;
+```
+
+**Competitive Impact:** Matches Qdrant 1.10 ColBERT support, native integration
+
+#### 3. Provider-Optimized Quantization ⭐ MEDIUM
+
+**What it is:** Binary quantization optimized for specific embedding providers
+
+**Why it matters:**
+- **Better compression** than generic BQ (up to 32x vs 24x)
+- **Higher recall** with provider-specific optimizations
+- **Zero-config** - Auto-detect provider and apply best settings
+
+**Features:**
+- OpenAI-specific binary quantization (optimized for text-embedding-3)
+- Cohere-specific quantization (optimized for embed-english-v3.0)
+- Voyage-specific quantization (optimized for voyage-3)
+- Auto-detection from embedding metadata
+- Per-provider recall/compression tradeoffs
+
+**HYBRID API:**
+```rust
+// Simple - Auto-detect and optimize
+db.enable_quantization()?;  // Detects OpenAI, applies optimal BQ
+
+// Advanced - Provider-specific
+let config = QuantizationConfig::OpenAI {
+    model: "text-embedding-3-large",
+    target_recall: 0.99,  // vs 0.95 default
+};
+db.enable_quantization_advanced(config)?;
+```
+
+**Competitive Impact:** Matches Qdrant's optimized BQ for OpenAI
+
+**Total v1.5.0 Implementation:**
+- **3 major features** (all addressing competitive gaps)
+- **Timeline:** 7-10 days aggressive implementation
+- **Tests:** Target **650+ tests** (100% passing)
+- **Impact:** Achieve competitive parity with Qdrant/Weaviate/Pinecone
+- **100% Pure Rust** - Zero unsafe code
+
+**Updated Test Statistics:**
+- **v1.3.0 DEVELOPER EXPERIENCE:** 595 tests
+- **v1.4.0 ENTERPRISE SCALE:** 700+ tests (TARGET)
+- **v1.5.0 MATRYOSHKA & MULTI-VECTOR:** **650+ tests** 🎯
+
+---
+
+## v1.6.0 - VECTOR INTELLIGENCE (Unique Competitive Moat) 🚀🚀🚀
+
+**Goal:** Create features NO competitor has - become "The Vector Intelligence Platform"
+**Timeline:** 10-14 days
+**Status:** Planned post-v1.5.0
+
+**Philosophy:** Vector databases store embeddings. But what can you DO with those embeddings beyond search? VecStore becomes the first platform to integrate vector analytics, clustering, anomaly detection, and recommendations.
+
+### Category: Vector Analytics (NEW!)
+
+#### 4. Vector Clustering ⭐ HIGH
+
+**What it is:** Automatically discover natural groupings in your embeddings
+
+**Why it matters:**
+- **Understand your data** - "What topics are in my 100K documents?"
+- **Improve search** - Cluster-aware indexing for faster queries
+- **Data exploration** - Find hidden patterns
+- **NO competitor offers this integrated**
+
+**Features:**
+- K-means clustering (fast, simple, good for known K)
+- DBSCAN clustering (density-based, discovers K automatically)
+- Hierarchical clustering (exploratory, dendrograms)
+- Cluster quality metrics (silhouette score, Davies-Bouldin)
+- Cluster visualization export (JSON, D3.js, Cytoscape)
+- Integration with search (cluster-aware routing)
+
+**HYBRID API:**
+```rust
+// Simple - Auto-discover clusters
+let clusters = db.cluster(5)?;  // K-means with K=5
+println!("Cluster 0: {} vectors", clusters[0].size);
+
+// Advanced - Density-based (auto-K)
+let clusters = db.cluster_advanced(ClusterConfig {
+    algorithm: Algorithm::DBSCAN {
+        eps: 0.5,        // Distance threshold
+        min_pts: 5,      // Min points per cluster
+    },
+    distance: Distance::Cosine,
+})?;
+
+// Expert - Hierarchical with dendrogram
+let tree = db.cluster_hierarchical(HierarchicalConfig {
+    linkage: Linkage::Ward,
+    max_clusters: 20,
+})?;
+tree.export_dendrogram("clusters.json")?;
+```
+
+**Use Cases:**
+- Topic discovery: "What are the main themes in my documents?"
+- Data QA: "Are there unexpected clusters (data quality issues)?"
+- Search optimization: "Route queries to relevant clusters"
+- Personalization: "User X belongs to cluster 3"
+
+**Competitive Impact:** UNIQUE - No vector DB offers integrated clustering
+
+#### 5. Anomaly Detection ⭐ HIGH
+
+**What it is:** Automatically identify unusual/outlier embeddings
+
+**Why it matters:**
+- **Fraud detection** - Find unusual transactions
+- **Data quality** - Detect corrupted embeddings
+- **Drift detection** - Monitor embedding distribution over time
+- **Security** - Identify anomalous queries
+- **NO competitor offers this**
+
+**Features:**
+- Distance-based anomaly detection (simple, fast, interpretable)
+- Isolation Forest (ML-based, handles high dimensions)
+- One-class SVM (learns normal distribution)
+- Temporal drift detection (compare distributions over time)
+- Anomaly scoring (0.0-1.0, interpretable)
+- Real-time monitoring mode
+
+**HYBRID API:**
+```rust
+// Simple - Distance-based outliers
+let anomalies = db.find_anomalies(0.95)?;  // 95th percentile
+println!("Found {} anomalies", anomalies.len());
+
+// Advanced - Isolation Forest
+let detector = AnomalyDetector::new(Method::IsolationForest {
+    trees: 100,
+    sample_size: 256,
+})?;
+let anomalies = detector.detect(&db)?;
+
+// Expert - Drift detection
+let monitor = DriftMonitor::new(&db)?;
+// ... time passes, new vectors added ...
+let drift_score = monitor.compute_drift()?;
+if drift_score > 0.3 {
+    println!("Warning: Embedding distribution has drifted!");
+}
+```
+
+**Use Cases:**
+- Fraud: "This transaction embedding is unlike any we've seen"
+- QA: "These 50 embeddings are corrupted (all near zero)"
+- Monitoring: "Embedding model drift detected (retrain needed)"
+- Security: "Unusual query pattern detected"
+
+**Competitive Impact:** UNIQUE - No vector DB offers anomaly detection
+
+#### 6. Recommendation Engine ⭐ MEDIUM
+
+**What it is:** Recommend similar items based on vectors + user behavior
+
+**Why it matters:**
+- **Natural extension** of similarity search
+- **E-commerce** - "Customers who liked X also liked Y"
+- **Content** - "Similar articles you might enjoy"
+- **Better than pure vector search** - Incorporates user preferences
+- **NO competitor offers this integrated**
+
+**Features:**
+- Item-to-item recommendations (pure vector similarity)
+- Collaborative filtering (user-item matrix factorization)
+- Content-based filtering (metadata + vectors)
+- Hybrid fusion (combine all strategies)
+- Diversity controls (MMR-style)
+- Cold-start handling (new items/users)
+
+**HYBRID API:**
+```rust
+// Simple - Item-to-item similarity
+let recs = db.recommend("item123", 10)?;
+
+// Advanced - Collaborative filtering
+let recs = db.recommend_for_user("user456", RecommendConfig {
+    strategy: Strategy::Collaborative {
+        factors: 50,
+        regularization: 0.01,
+    },
+    diversity: 0.3,  // MMR-style diversity
+})?;
+
+// Expert - Hybrid fusion
+let recs = db.recommend_hybrid(HybridRecommendConfig {
+    user_id: "user456",
+    item_id: Some("item123"),
+    weights: Weights {
+        item_to_item: 0.4,
+        collaborative: 0.3,
+        content_based: 0.3,
+    },
+    filters: vec![Filter::new("category", "electronics")],
+    diversity: 0.5,
+})?;
+```
+
+**Use Cases:**
+- E-commerce: "Recommend products based on purchase history"
+- Content: "Suggest articles based on reading patterns"
+- Music/Video: "Playlist recommendations"
+- Social: "Suggest connections based on interests"
+
+**Competitive Impact:** UNIQUE - No vector DB offers recommendations
+
+#### 7. Dimensionality Reduction ⭐ MEDIUM
+
+**What it is:** Reduce high-dim embeddings to 2D/3D for visualization
+
+**Why it matters:**
+- **Understand embeddings** - "How are my vectors distributed?"
+- **Debug models** - "Are embeddings well-separated?"
+- **Presentations** - Beautiful 2D/3D visualizations
+- **Exploration** - Interactive data exploration
+- **NO competitor offers this built-in**
+
+**Features:**
+- PCA (Principal Component Analysis) - Fast, linear, interpretable
+- t-SNE (t-Distributed Stochastic Neighbor Embedding) - High quality, slow
+- UMAP (Uniform Manifold Approximation) - High quality, faster than t-SNE
+- Export formats (JSON, CSV, D3.js, Three.js)
+- Cluster coloring support
+- Interactive HTML export
+
+**HYBRID API:**
+```rust
+// Simple - Auto PCA to 2D
+let points_2d = db.visualize()?;  // Returns Vec<(f32, f32)>
+points_2d.export_html("viz.html")?;  // Interactive D3.js
+
+// Advanced - UMAP with custom params
+let reducer = DimReducer::new(Method::UMAP {
+    neighbors: 15,
+    min_dist: 0.1,
+})?;
+let points_3d = reducer.reduce(&db, 3)?;  // 3D for WebGL
+
+// Expert - With cluster coloring
+let viz = Visualizer::new()
+    .method(Method::TSNE { perplexity: 30 })
+    .dimensions(2)
+    .color_by_clusters(clusters)
+    .build()?;
+let html = viz.render_interactive(&db)?;
+```
+
+**Use Cases:**
+- Exploration: "Show me my embeddings in 2D"
+- Debugging: "Are my document embeddings well-separated?"
+- Presentations: "Beautiful visualizations for stakeholders"
+- QA: "Spot check embedding quality visually"
+
+**Competitive Impact:** UNIQUE - No vector DB offers built-in visualization
+
+**Total v1.6.0 VECTOR INTELLIGENCE Implementation:**
+- **4 major features** (clustering, anomaly detection, recommendations, visualization)
+- **NEW CATEGORY:** Vector Analytics (no competitor has this)
+- **Timeline:** 10-14 days aggressive implementation
+- **Tests:** Target **750+ tests** (100% passing)
+- **Impact:** Create unique competitive moat - "The Vector Intelligence Platform"
+- **100% Pure Rust** - Zero unsafe code
+
+**Updated Test Statistics:**
+- **v1.4.0 ENTERPRISE SCALE:** 700+ tests (TARGET)
+- **v1.5.0 MATRYOSHKA & MULTI-VECTOR:** 650+ tests
+- **v1.6.0 VECTOR INTELLIGENCE:** **750+ tests** 🎯
+
+---
+
+## Post-v1.6.0: Future Enhancements
 
 #### More Advanced Features
-- **Learning-to-Rank** - Neural reranking
-- **Vector Compression** - More quantization methods
+- **Learning-to-Rank** - Neural reranking models
 - **VSCode Extension** - Vector search in editor
 - **Observability Dashboard** - Web UI for monitoring
+- **AutoML for embeddings** - Automatic model selection
 
 ---
 
 ## Competitive Position
 
-### vs Python Frameworks
-- ✅ 10-100x faster (Rust performance)
-- ✅ Type-safe, no runtime errors
-- ✅ Small binary (~20MB vs 500MB+)
-- ✅ Embeddable (no server required)
-- ✅ Multi-language support
+### VecStore: The Vector Intelligence Platform
 
-### Unique Advantages
-- **HYBRID philosophy** - Simple by default, powerful when needed
-- **Embeddable** - No server required for simple use cases
-- **Complete RAG toolkit** - Not just a vector database
-- **Evaluation built-in** - Measure and improve quality
-- **Pure Rust** - Native performance, easy deployment
+**Positioning:** VecStore is not just a vector database. It's the complete platform for vector intelligence.
+
+**What Competitors Offer:**
+- **Pinecone, Qdrant, Weaviate, Milvus:** Vector search + filtering
+- **ChromaDB, LanceDB:** Embeddable vector search
+- **FAISS:** Low-level vector indexing library
+
+**What VecStore Offers (v1.6.0+):**
+- ✅ **Vector Search** - Best-in-class HNSW with SIMD, quantization, hybrid search
+- ✅ **Vector Storage** - Multi-vector docs, matryoshka embeddings, 22 loaders
+- ✅ **Vector Analytics** - Clustering, anomaly detection (UNIQUE)
+- ✅ **Vector Recommendations** - Item-to-item, collaborative filtering (UNIQUE)
+- ✅ **Vector Visualization** - PCA, t-SNE, UMAP with interactive exports (UNIQUE)
+- ✅ **RAG Toolkit** - Complete pipeline from documents to answers
+- ✅ **Production Ready** - RBAC, audit logs, rate limiting, monitoring
+
+### Competitive Advantages
+
+#### 1. Performance (vs Python)
+- ✅ **10-100x faster** - Pure Rust performance
+- ✅ **Type-safe** - No runtime errors
+- ✅ **Small binary** - ~20MB vs 500MB+ (Python frameworks)
+- ✅ **SIMD acceleration** - 4-8x faster distance calculations
+- ✅ **Zero-copy** - Python bindings with PyO3
+
+#### 2. Deployment Flexibility (vs Cloud-first)
+- ✅ **Embeddable** - No server required (<1ms latency)
+- ✅ **Server mode** - gRPC + HTTP/REST when needed
+- ✅ **Distributed** - Raft consensus for scale (v1.4.0)
+- ✅ **WASM** - Runs in browsers with full HNSW
+- ✅ **Multi-language** - Rust, Python, JavaScript/WASM
+
+#### 3. UNIQUE Features (No Competitor Has)
+- ✅ **Query Planning** - EXPLAIN queries to understand execution
+- ✅ **Multi-stage Prefetch** - Qdrant-style advanced queries
+- ✅ **Protocol Adapters** - Drop-in replacement for 5 major DBs
+- ✅ **Vector Clustering** - K-means, DBSCAN, Hierarchical (v1.6.0)
+- ✅ **Anomaly Detection** - Find outliers, detect drift (v1.6.0)
+- ✅ **Recommendation Engine** - Collaborative filtering (v1.6.0)
+- ✅ **Dimensionality Reduction** - PCA, t-SNE, UMAP (v1.6.0)
+
+#### 4. Developer Experience
+- ✅ **HYBRID philosophy** - Simple by default, powerful when needed
+- ✅ **Complete RAG toolkit** - Not just a database
+- ✅ **CLI tool** - Full command-line utility
+- ✅ **Evaluation built-in** - Measure and improve quality
+- ✅ **47 Rust examples** - Production-ready code
+- ✅ **7 Python examples** - Native bindings
+
+#### 5. Production Features
+- ✅ **RBAC/ABAC** - Fine-grained access control
+- ✅ **Audit logging** - Compliance-ready
+- ✅ **Rate limiting** - Protection against abuse
+- ✅ **Health monitoring** - Alerts and diagnostics
+- ✅ **Prometheus metrics** - Observability
+- ✅ **Grafana dashboards** - Pre-built monitoring
+
+### Market Positioning After v1.6.0
+
+```
+┌─────────────────────────────────────────────────┐
+│         Vector Intelligence Platform             │
+│                                                 │
+│  ┌─────────────┐  ┌──────────────┐            │
+│  │   Search    │  │   Storage    │            │
+│  │ (competitive│  │ (competitive │            │
+│  │   parity)   │  │   parity)    │            │
+│  └─────────────┘  └──────────────┘            │
+│                                                 │
+│  ┌─────────────┐  ┌──────────────┐            │
+│  │  Analytics  │  │Recommenda-   │            │
+│  │  (UNIQUE)   │  │tions (UNIQUE)│            │
+│  └─────────────┘  └──────────────┘            │
+│                                                 │
+│         VecStore = Only Complete Platform       │
+└─────────────────────────────────────────────────┘
+```
+
+**Competitors:**
+- ❌ **Qdrant** - Search only (no analytics, no recommendations)
+- ❌ **Pinecone** - Search only (cloud-only, expensive)
+- ❌ **Weaviate** - Search only (no analytics, no recommendations)
+- ❌ **Milvus** - Search only (complex setup)
+- ❌ **ChromaDB** - Basic search (no production features)
+
+**VecStore (v1.6.0):**
+- ✅ **Everything** - Search + Analytics + Recommendations + RAG + Production
 
 ---
 
@@ -1047,4 +1482,8 @@ Interested in helping? Check out:
 
 ---
 
-**Built with Rust | Designed for Production | Made for Scale**
+**VecStore: The Vector Intelligence Platform**
+
+*Built with Rust | Designed for Production | Made for Intelligence*
+
+Not just vector search. Complete vector intelligence: Search + Analytics + Recommendations + RAG.
