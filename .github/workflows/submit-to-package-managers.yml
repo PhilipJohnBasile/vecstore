@@ -1,5 +1,19 @@
 name: Submit to Package Managers
 
+# IMPORTANT: This workflow requires a Personal Access Token (PAT) to work
+#
+# The default GITHUB_TOKEN doesn't have permission to fork external repositories
+# or create PRs to them. To enable automated package submissions:
+#
+# 1. Create a Personal Access Token at https://github.com/settings/tokens
+#    - Select scopes: `public_repo`, `workflow`
+# 2. Add it as a repository secret named `PAT_TOKEN`:
+#    - Go to Settings > Secrets and variables > Actions
+#    - Create new secret: Name: PAT_TOKEN, Value: your_token
+# 3. Update GH_TOKEN usage below from secrets.GITHUB_TOKEN to secrets.PAT_TOKEN
+#
+# Until then, use the manual script: ./scripts/submit-packages.sh <version> <tag>
+
 on:
   release:
     types: [published]
