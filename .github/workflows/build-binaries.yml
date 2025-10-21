@@ -45,7 +45,7 @@ jobs:
           files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.tar.gz
           tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
   build-linux:
     name: Build Linux Binaries
@@ -82,7 +82,7 @@ jobs:
           files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.tar.gz
           tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
 
   build-windows:
     name: Build Windows Binaries
@@ -119,4 +119,4 @@ jobs:
           files: target/${{ matrix.target }}/release/vecstore-${{ matrix.target }}.zip
           tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PAT_TOKEN }}
