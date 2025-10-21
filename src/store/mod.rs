@@ -890,9 +890,7 @@ impl VecStore {
             std::cmp::min(query.k.saturating_mul(2), self.records.len()) // Fetch more for ranking
         };
 
-        let vector_results = self
-            .backend
-            .search(&query.vector, fetch_size);
+        let vector_results = self.backend.search(&query.vector, fetch_size);
 
         // Get BM25 scores if keywords provided
         let bm25_scores = if !query.keywords.is_empty() {

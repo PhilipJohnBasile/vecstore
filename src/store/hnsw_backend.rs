@@ -30,12 +30,12 @@ impl HnswBackend {
                 200,     // ef_construction
                 DistCosine,
             )),
-            Distance::Euclidean => HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(
-                16, 100_000, 16, 200, DistL2,
-            )),
-            Distance::DotProduct => HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(
-                16, 100_000, 16, 200, DistDot,
-            )),
+            Distance::Euclidean => {
+                HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(16, 100_000, 16, 200, DistL2))
+            }
+            Distance::DotProduct => {
+                HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(16, 100_000, 16, 200, DistDot))
+            }
             _ => {
                 return Err(anyhow!(
                     "Distance metric {:?} is not yet supported by the HNSW backend. \
@@ -278,7 +278,9 @@ impl HnswBackend {
     #[cfg(target_arch = "wasm32")]
     pub fn to_visualizer(&self) -> Result<crate::graph_viz::HnswVisualizer> {
         // WASM implementation would go here
-        Err(anyhow!("Graph visualization not yet implemented for distance-aware backend"))
+        Err(anyhow!(
+            "Graph visualization not yet implemented for distance-aware backend"
+        ))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
