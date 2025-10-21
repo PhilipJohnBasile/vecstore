@@ -3,16 +3,18 @@ name: Submit to Package Managers
 # IMPORTANT: This workflow requires a Personal Access Token (PAT) to work
 #
 # The default GITHUB_TOKEN doesn't have permission to fork external repositories
-# or create PRs to them. To enable automated package submissions:
+# or create PRs to them. This workflow is configured to use secrets.PAT_TOKEN.
+#
+# To enable automated package submissions, add the PAT as a repository secret:
 #
 # 1. Create a Personal Access Token at https://github.com/settings/tokens
 #    - Select scopes: `public_repo`, `workflow`
+#    - Set expiration: 90 days (then rotate)
 # 2. Add it as a repository secret named `PAT_TOKEN`:
 #    - Go to Settings > Secrets and variables > Actions
 #    - Create new secret: Name: PAT_TOKEN, Value: your_token
-# 3. Update GH_TOKEN usage below from secrets.GITHUB_TOKEN to secrets.PAT_TOKEN
 #
-# Until then, use the manual script: ./scripts/submit-packages.sh <version> <tag>
+# Once added, this workflow will automatically submit to package managers on release!
 
 on:
   release:
@@ -70,7 +72,7 @@ jobs:
 
       - name: Fork and clone nixpkgs
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           # Fork nixpkgs if not already forked
           gh repo fork NixOS/nixpkgs --clone=false || true
@@ -96,7 +98,7 @@ jobs:
 
       - name: Create PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd nixpkgs
           git config user.name "github-actions[bot]"
@@ -161,7 +163,7 @@ jobs:
 
       - name: Fork and clone staged-recipes
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           gh repo fork conda-forge/staged-recipes --clone=false || true
           git clone https://github.com/${{ github.actor }}/staged-recipes.git
@@ -184,7 +186,7 @@ jobs:
 
       - name: Create PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd staged-recipes
           git config user.name "github-actions[bot]"
@@ -246,7 +248,7 @@ jobs:
 
       - name: Fork and clone macports-ports
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           gh repo fork macports/macports-ports --clone=false || true
           git clone https://github.com/${{ github.actor }}/macports-ports.git
@@ -267,7 +269,7 @@ jobs:
 
       - name: Create PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd macports-ports
           git config user.name "github-actions[bot]"
@@ -330,7 +332,7 @@ jobs:
       - name: Fork and clone winget-pkgs
         if: steps.check_binary.outputs.EXISTS == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           gh repo fork microsoft/winget-pkgs --clone=false || true
           git clone https://github.com/${{ github.actor }}/winget-pkgs.git
@@ -355,7 +357,7 @@ jobs:
       - name: Create PR
         if: steps.check_binary.outputs.EXISTS == 'true'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           cd winget-pkgs
           git config user.name "github-actions[bot]"
