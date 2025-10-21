@@ -36,10 +36,10 @@ rustPlatform.buildRustPackage rec {
   cargoBuildFlags = [ "--bin" "vecstore-server" ];
 
   meta = with lib; {
-    description = "High-performance embeddable vector database (100/100 feature matrix vs competitors) - HNSW, hybrid search, multi-language, production-ready";
+    description = "High-performance embeddable vector database - HNSW, hybrid search, multi-language, production-ready";
     homepage = "https://github.com/PhilipJohnBasile/vecstore";
     license = licenses.mit;
-    maintainers = with maintainers; [ ];
+    maintainers = with maintainers; [ philipjohnbasile ];
     mainProgram = "vecstore-server";
     platforms = platforms.unix;
   };

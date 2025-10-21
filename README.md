@@ -1,6 +1,6 @@
 # VecStore
 
-> **The Perfect Vector Database** — 100/100 competitive score, embeddable, high-performance, production-ready
+> **The Perfect Vector Database** — Embeddable, high-performance, production-ready
 >
 > **🎉 Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)!**
 >
@@ -11,7 +11,6 @@
 [![Documentation](https://docs.rs/vecstore/badge.svg)](https://docs.rs/vecstore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://img.shields.io/badge/tests-670%20passing-brightgreen)](https://github.com/PhilipJohnBasile/vecstore/actions)
-[![Score](https://img.shields.io/badge/score-100%2F100-gold)]()
 [![Production](https://img.shields.io/badge/production-ready-blue)]()
 
 VecStore is a **simple-to-use, production-ready vector database** with integrated RAG capabilities. No servers, no complex setup—just add it to your Cargo.toml and start building.
@@ -22,7 +21,6 @@ VecStore is a **simple-to-use, production-ready vector database** with integrate
 
 ## Why VecStore?
 
-- **🎯 Perfect 100/100 Score** - First and only vector database with perfect competitive score
 - **🚀 Query Planning (UNIQUE)** - Built-in EXPLAIN queries for optimization (no competitor has this)
 - **🔍 Distributed Tracing (UNIQUE)** - Automatic instrumentation for all operations (production observability)
 - **⚡ Embeddable** - File-based storage, no server required, <1ms latency
@@ -128,7 +126,7 @@ const results = store.query([0.15, 0.25, ...], 10);
 📖 **[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
 📚 **[Complete Features](docs/FEATURES.md)** - Comprehensive feature reference
 🚀 **[Deployment Guide](DEPLOYMENT.md)** - Production deployment (Docker, K8s)
-🏆 **[Achievements](ACHIEVEMENTS.md)** - Perfect 100/100 score details
+🏆 **[Achievements](ACHIEVEMENTS.md)** - Feature completeness and capabilities
 
 **For Contributors:**
 - [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
@@ -175,12 +173,10 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-**Built with Rust** | **Perfect 100/100 Score** | **Production Ready** | **Zero Cost**
+**Built with Rust** | **Production Ready** | **Zero Cost**
 
 ---
 
 ## Star History
 
 ⭐ **Star us on GitHub** if you find VecStore useful!
-
-First and only vector database with a perfect 100/100 competitive score.

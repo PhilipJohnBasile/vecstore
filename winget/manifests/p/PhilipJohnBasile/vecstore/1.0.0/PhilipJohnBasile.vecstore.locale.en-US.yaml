@@ -15,7 +15,6 @@ ShortDescription: High-performance embeddable vector database
 Description: |-
   VecStore is a high-performance embeddable vector database with HNSW indexing,
   hybrid search capabilities, multi-language bindings, and comprehensive RAG toolkit.
-  Features 100/100 feature matrix compared to competitors like Pinecone, Weaviate, and Qdrant.
 Moniker: vecstore
 Tags:
 - database

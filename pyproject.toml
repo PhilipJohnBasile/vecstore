@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "vecstore-rs"
 version = "1.0.0"
-description = "The perfect vector database - 100/100 score, embeddable, high-performance, production-ready with RAG toolkit"
+description = "The perfect vector database - embeddable, high-performance, production-ready with RAG toolkit"
 readme = "python/README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
