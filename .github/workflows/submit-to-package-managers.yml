@@ -113,6 +113,7 @@ jobs:
 
           # Create PR
           gh pr create \
+            --head ${{ github.actor }}:vecstore-${{ steps.version.outputs.VERSION }} \
             --repo NixOS/nixpkgs \
             --title "vecstore: init at ${{ steps.version.outputs.VERSION }}" \
             --body "**Description:**
@@ -204,6 +205,7 @@ jobs:
           git push origin vecstore
 
           gh pr create \
+            --head ${{ github.actor }}:vecstore \
             --repo conda-forge/staged-recipes \
             --title "Add vecstore: High-performance vector database" \
             --body "**Package:** vecstore
@@ -291,6 +293,7 @@ jobs:
           git push origin vecstore
 
           gh pr create \
+            --head ${{ github.actor }}:vecstore \
             --repo macports/macports-ports \
             --title "vecstore: new port, version ${{ steps.version.outputs.VERSION }}" \
             --body "**New Port:** vecstore ${{ steps.version.outputs.VERSION }}
@@ -383,6 +386,7 @@ jobs:
           git push origin vecstore-${{ steps.version.outputs.VERSION }}
 
           gh pr create \
+            --head ${{ github.actor }}:vecstore-${{ steps.version.outputs.VERSION }} \
             --repo microsoft/winget-pkgs \
             --title "New package: PhilipJohnBasile.vecstore version ${{ steps.version.outputs.VERSION }}" \
             --body "**Package:** PhilipJohnBasile.vecstore
