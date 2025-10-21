@@ -1,8 +1,8 @@
 # VecStore
 
-> **The Perfect Vector Database** — Embeddable, high-performance, production-ready
+> **High-performance embeddable vector database** with HNSW indexing, hybrid search, and production features
 >
-> **🎉 Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)!**
+> Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)
 >
 > Rust: `cargo add vecstore` | Python: `pip install vecstore-rs`
 
@@ -13,22 +13,22 @@
 [![Tests](https://img.shields.io/badge/tests-670%20passing-brightgreen)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Production](https://img.shields.io/badge/production-ready-blue)]()
 
-VecStore is a **simple-to-use, production-ready vector database** with integrated RAG capabilities. No servers, no complex setup—just add it to your Cargo.toml and start building.
+VecStore is a production-ready vector database with integrated RAG capabilities. Embeddable library with file-based storage—no servers or complex setup required.
 
-**Perfect for:** RAG applications, semantic search, recommendation systems, document Q&A, code search
+**Use cases:** RAG applications, semantic search, recommendation systems, document Q&A, code search
 
 ---
 
-## Why VecStore?
+## Key Features
 
-- **🚀 Query Planning (UNIQUE)** - Built-in EXPLAIN queries for optimization (no competitor has this)
-- **🔍 Distributed Tracing (UNIQUE)** - Automatic instrumentation for all operations (production observability)
-- **⚡ Embeddable** - File-based storage, no server required, <1ms latency
-- **🔧 Production-Ready** - WAL recovery, soft deletes, TTL, multi-tenancy, K8s deployment
-- **🎨 Complete RAG Stack** - Vector DB + text splitters + reranking + evaluation
-- **🌍 Multi-Language** - Rust (native), Python (PyO3), JavaScript/WASM
-- **📊 Advanced Features** - Prefetch queries, HNSW tuning, MMR diversity, hybrid search
-- **💰 Zero Cost** - $0/month vs $28-70/month competitors ($4,200-7,200 savings over 5 years)
+- **Query Planning** - Built-in EXPLAIN queries for query cost estimation and optimization
+- **OpenTelemetry Instrumentation** - Automatic tracing and metrics for production observability
+- **Embeddable** - File-based storage, no server required, sub-millisecond query latency
+- **Production-Ready** - WAL recovery, soft deletes, TTL, multi-tenancy, Kubernetes-ready
+- **Complete RAG Stack** - Vector DB + text splitters + reranking + evaluation metrics
+- **Multi-Language** - Rust (native), Python (PyO3), JavaScript/WASM bindings
+- **Advanced Indexing** - HNSW with tunable presets, prefetch queries, MMR diversity, hybrid search
+- **Cost-Effective** - No SaaS fees, run on your infrastructure
 
 ---
 
@@ -95,10 +95,9 @@ const results = store.query([0.15, 0.25, ...], 10);
 ## Features
 
 ### Core Vector Database
-- **Query Planning** - 🌟 **UNIQUE** - EXPLAIN queries for cost estimation & optimization
+- **Query Planning** - EXPLAIN queries for cost estimation and optimization
 - **Prefetch Queries** - Multi-stage retrieval (vector → rerank → MMR → final)
-- **HNSW Tuning** - 4 presets (fast/balanced/high_recall/max_recall)
-- **HNSW Indexing** - Sub-millisecond queries
+- **HNSW Indexing** - Sub-millisecond queries with configurable presets (fast/balanced/high_recall/max_recall)
 - **SIMD Acceleration** - 4-8x faster distance calculations (AVX2/NEON)
 - **Product Quantization** - 8-32x memory compression
 - **Metadata Filtering** - SQL-like queries: `"category = 'tech' AND score > 0.5"`
@@ -123,10 +122,10 @@ const results = store.query([0.15, 0.25, ...], 10);
 
 ## Documentation
 
-📖 **[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
-📚 **[Complete Features](docs/FEATURES.md)** - Comprehensive feature reference
-🚀 **[Deployment Guide](DEPLOYMENT.md)** - Production deployment (Docker, K8s)
-🏆 **[Achievements](ACHIEVEMENTS.md)** - Feature completeness and capabilities
+**[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
+**[Complete Features](docs/FEATURES.md)** - Comprehensive feature reference
+**[Deployment Guide](DEPLOYMENT.md)** - Production deployment (Docker, K8s)
+**[Achievements](ACHIEVEMENTS.md)** - Feature completeness and capabilities
 
 **For Contributors:**
 - [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
@@ -179,4 +178,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## Star History
 
-⭐ **Star us on GitHub** if you find VecStore useful!
+Star us on GitHub if you find VecStore useful!
