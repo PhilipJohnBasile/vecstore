@@ -20,7 +20,10 @@ build/
 *_db/
 rag_demo_db/
 multi_collection_db/
-archive/
-CLAUDE_FIXES.md
+
+# Development notes (internal only)
+dev_notes/
+
+# Backup files
 *.bak
 *_old.rs
