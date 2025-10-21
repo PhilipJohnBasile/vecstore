@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::time::Instant;
-use vecstore::{Collection, FilterExpr, Metadata, Query, Record, VecDatabase, VecStore};
+use vecstore::{FilterExpr, Metadata, Query, Record, VecDatabase, VecStore};
 
 #[derive(Parser)]
 #[command(name = "vecstore")]
@@ -270,7 +270,7 @@ enum ExportFormat {
     Npy,
 }
 
-#[derive(ValueEnum, Clone, Copy)]
+#[derive(Debug, ValueEnum, Clone, Copy)]
 enum ImportFormat {
     Jsonl,
     Csv,
@@ -280,7 +280,7 @@ enum ImportFormat {
     Qdrant,
 }
 
-#[derive(ValueEnum, Clone, Copy)]
+#[derive(Debug, ValueEnum, Clone, Copy)]
 enum MigrationSource {
     Pinecone,
     Weaviate,
@@ -296,15 +296,13 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { dir, dimension } => {
-            let store = if let Some(dim) = dimension {
-                VecStore::with_dimension(&dir, dim)?
-            } else {
-                VecStore::open(&dir)?
-            };
+            let store = VecStore::open(&dir)?;
             store.save()?;
             println!("✓ Initialized vector store at: {:?}", dir);
             if let Some(dim) = dimension {
-                println!("  Dimension: {}", dim);
+                println!("  Note: Dimension ({}) will be auto-detected from first insert", dim);
+            } else {
+                println!("  Dimension will be auto-detected from first insert");
             }
         }
 
@@ -440,7 +438,7 @@ fn main() -> Result<()> {
             match format {
                 ExportFormat::Jsonl => {
                     // Export as JSONL
-                    let mut lines = Vec::new();
+                    let mut lines: Vec<String> = Vec::new();
                     // Implementation would iterate and export
                     println!("✓ Exported to JSONL format");
                 }
@@ -519,35 +517,20 @@ fn main() -> Result<()> {
             output,
             compress,
         } => {
-            let store = VecStore::open(&dir)?;
-
-            println!("💾 Creating backup...");
-            let start = Instant::now();
-
-            store.backup(&output)?;
-
-            let elapsed = start.elapsed();
-            let size = fs::metadata(&output)?.len();
-
-            println!("✓ Backup created in {:.2}s", elapsed.as_secs_f64());
-            println!("  File: {:?}", output);
-            println!("  Size: {} MB", size / 1_048_576);
+            eprintln!("❌ Backup feature not yet implemented");
+            eprintln!("   Workaround: Copy the entire directory {:?} to create a backup", dir);
+            eprintln!("   Requested output: {:?}", output);
             if compress {
-                println!("  Compression: enabled");
+                eprintln!("   Compression requested: {}", compress);
             }
+            std::process::exit(1);
         }
 
         Commands::Restore { backup, dest } => {
-            println!("📦 Restoring from backup...");
-            let start = Instant::now();
-
-            let store = VecStore::restore(&backup)?;
-            store.save_to(&dest)?;
-
-            let elapsed = start.elapsed();
-            println!("✓ Restored in {:.2}s", elapsed.as_secs_f64());
-            println!("  Destination: {:?}", dest);
-            println!("  Records: {}", store.count());
+            eprintln!("❌ Restore feature not yet implemented");
+            eprintln!("   Workaround: Copy the backup directory to {:?}", dest);
+            eprintln!("   Requested backup: {:?}", backup);
+            std::process::exit(1);
         }
 
         Commands::Optimize { dir, rebuild } => {
