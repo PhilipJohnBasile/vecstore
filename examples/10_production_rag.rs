@@ -1,6 +1,6 @@
 //! Production RAG System
 //!
-//! Demonstrates a production-ready RAG setup with:
+//! Demonstrates an end-to-end RAG setup with:
 //! - Error handling
 //! - Logging
 //! - Performance monitoring

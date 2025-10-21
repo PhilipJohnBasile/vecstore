@@ -2,14 +2,14 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.5.0.schema.json
 
 PackageIdentifier: PhilipJohnBasile.vecstore
-PackageVersion: 1.0.0
+PackageVersion: 0.0.1
 Platform:
 - Windows.Desktop
 MinimumOSVersion: 10.0.0.0
 InstallerType: zip
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/PhilipJohnBasile/vecstore/releases/download/v1.0.0/vecstore-windows-x86_64.zip
+  InstallerUrl: https://github.com/PhilipJohnBasile/vecstore/releases/download/v0.0.1/vecstore-windows-x86_64.zip
   InstallerSha256: REPLACE_WITH_ACTUAL_SHA256
   NestedInstallerFiles:
   - RelativeFilePath: vecstore-server.exe

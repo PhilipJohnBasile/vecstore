@@ -106,7 +106,7 @@ impl VecStore {
     println!("   • CodeTextSplitter respects function/class boundaries");
     println!("   • Language-specific parsing (Rust, Python, JS, etc.)");
     println!("   • Maintains code context and syntax");
-    println!("   • Perfect for code documentation and search");
+    println!("   • Useful for code documentation and search workflows");
 
     Ok(())
 }

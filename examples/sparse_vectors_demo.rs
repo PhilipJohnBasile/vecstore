@@ -387,7 +387,7 @@ fn main() -> anyhow::Result<()> {
     println!("  → Dense: Semantic meaning, synonyms, context");
     println!("  → Sparse: Exact keywords, terminology, rare terms");
     println!();
-    println!("Perfect for: RAG, document search, e-commerce, code search");
+    println!("Useful for: RAG, document search, e-commerce, code search");
     println!();
     println!("Memory savings example:");
     println!("  - Dense 10K-dim vector: 40KB (10,000 × 4 bytes)");

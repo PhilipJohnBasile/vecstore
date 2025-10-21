@@ -6,7 +6,7 @@ This guide shows how to use VecStore in the browser once the dependency issue is
 
 ---
 
-## Status: v1.0.0
+## Status: v0.0.1
 
 - ✅ Complete WASM API implementation (`src/wasm.rs`)
 - ✅ In-memory storage optimized for browsers
@@ -15,7 +15,7 @@ This guide shows how to use VecStore in the browser once the dependency issue is
 - ❌ wasm-pack build (blocked by getrandom dependency)
 - ❌ NPM package (blocked by build issue)
 
-**Workaround for v1.0:** Use the Rust API directly via wasm-bindgen or wait for v1.1.0.
+**Current workaround:** Use the Rust API directly via wasm-bindgen until the packaged build ships.
 
 ---
 
@@ -521,7 +521,7 @@ cp -r pkg node_modules/vecstore
 
 ## Known Issues
 
-### v1.0.0
+### v0.0.1
 
 1. **Dependency Conflict:** `hnsw_rs` → `rand` 0.9 → `rand_core` 0.9 → `getrandom` 0.3
    - getrandom 0.3 has compatibility issues with wasm32-unknown-unknown target
@@ -579,8 +579,8 @@ Until WASM build is fixed, you can:
    const results = await response.json();
    ```
 
-2. **Wait for v1.1.0:** Full WASM support with NPM package
+2. **Watch upcoming releases:** Full WASM support with NPM package is planned once dependency blockers clear.
 
 ---
 
-**Status as of v1.0.0:** WASM implementation is complete and ready, waiting on dependency resolution for packaging.
+**Status as of v0.0.1:** WASM implementation is complete and ready, waiting on dependency resolution for packaging.

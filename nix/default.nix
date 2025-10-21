@@ -9,7 +9,7 @@
 
 rustPlatform.buildRustPackage rec {
   pname = "vecstore";
-  version = "1.0.0";
+  version = "0.0.1";
 
   src = fetchFromGitHub {
     owner = "PhilipJohnBasile";
@@ -36,7 +36,7 @@ rustPlatform.buildRustPackage rec {
   cargoBuildFlags = [ "--bin" "vecstore-server" ];
 
   meta = with lib; {
-    description = "High-performance embeddable vector database - HNSW, hybrid search, multi-language, production-ready";
+    description = "Embeddable vector database (alpha) with HNSW search and RAG tooling";
     homepage = "https://github.com/PhilipJohnBasile/vecstore";
     license = licenses.mit;
     maintainers = with maintainers; [ philipjohnbasile ];

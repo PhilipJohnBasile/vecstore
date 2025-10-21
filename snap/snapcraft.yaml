@@ -1,5 +1,5 @@
 name: vecstore
-version: '1.0.0'
+version: '0.0.1'
 summary: High-performance vector database with RAG toolkit
 description: |
   VecStore is a high-performance vector database built in Rust, optimized
@@ -11,7 +11,7 @@ description: |
   - Advanced metadata filtering
   - Embedding generation with multiple providers
   - Python and JavaScript bindings
-  - Production-ready with comprehensive testing
+  - Extensive automated test coverage
 
   After installation, start the server with:
     vecstore-server --db-path ./data/vectors.db
@@ -34,7 +34,7 @@ parts:
   vecstore:
     plugin: rust
     source: https://github.com/PhilipJohnBasile/vecstore.git
-    source-tag: v1.0.0
+    source-tag: v0.0.1
     build-packages:
       - protobuf-compiler
       - libprotobuf-dev

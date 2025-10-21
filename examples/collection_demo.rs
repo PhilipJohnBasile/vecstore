@@ -205,7 +205,7 @@ fn main() -> anyhow::Result<()> {
     println!("  - Simple: VecStore::open() for single-purpose use");
     println!("  - Powerful: VecDatabase for multi-collection apps");
     println!();
-    println!("Perfect for: RAG apps, multi-tenant systems, organized data");
+    println!("Useful for: RAG apps, multi-tenant systems, organized data");
 
     // Cleanup
     std::fs::remove_dir_all("./demo_collections").ok();

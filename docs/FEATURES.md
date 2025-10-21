@@ -1,15 +1,21 @@
 # VecStore Complete Feature Reference
 
-Comprehensive documentation of all VecStore features.
+> ⚠️ This document is being updated to match the current implementation. For the canonical overview of what ships today, see [ARCHITECTURE.md](./ARCHITECTURE.md) and [STATUS.md](./STATUS.md). Sections marked with notes are accurate; the rest describe planned or partially implemented functionality and will be reviewed as the codebase evolves. VecStore 0.0.1 is an alpha release—APIs and file formats may change.
 
-**Version:** 1.0.0 | **Score:** 100/100 | **Tests:** 349 passing
+### TL;DR
+
+- ✅ Shipping in 0.0.1: embedded store API, snapshots, metadata filters, batch ingestion, Python bindings.
+- ⚠️ Optional / experimental: server mode, hybrid search helpers, query planner.
+- 🚧 Prototypes only: distributed mode, realtime indexing, GPU backends, packaging manifests.
+
+**Version:** 0.0.1 | **Tests:** 349 passing
 
 ---
 
 ## Table of Contents
 
 1. [Core Vector Search](#core-vector-search)
-2. [Query Planning (UNIQUE)](#query-planning-unique)
+2. [Query Planning](#query-planning)
 3. [Advanced Query Features](#advanced-query-features)
 4. [Hybrid Search](#hybrid-search)
 5. [Metadata Filtering](#metadata-filtering)
@@ -44,7 +50,7 @@ let store = VecStore::builder("vectors.db")
 ```
 
 **Configuration Options:**
-- `distance` - Distance metric (Cosine, Euclidean, Dot Product, Manhattan, Hamming, Jaccard)
+- `distance` - Distance metric (Cosine, Euclidean, or DotProduct in the default backend)
 - `hnsw_m` - Number of connections per layer (default: 16)
 - `hnsw_ef_construction` - Construction quality (default: 200)
 
@@ -65,7 +71,7 @@ meta.fields.insert("score".into(), serde_json::json!(0.95));
 // Insert vector
 store.upsert("doc1".into(), vec![0.1, 0.2, 0.3], meta)?;
 
-// Batch insert (10-100x faster)
+// Batch insert to avoid per-call overhead
 let batch = vec![
     ("doc1".into(), vec![0.1, 0.2, 0.3], meta1),
     ("doc2".into(), vec![0.2, 0.3, 0.4], meta2),
@@ -73,6 +79,8 @@ let batch = vec![
 ];
 store.batch_upsert(batch)?;
 ```
+
+Only cosine, Euclidean, and dot product are backed by dedicated HNSW structures right now. Picking another distance variant logs a warning and reuses cosine until additional kernels are implemented.
 
 ---
 
@@ -106,7 +114,7 @@ for result in results {
 
 ### Distance Metrics
 
-VecStore supports 6 distance metrics:
+VecStore’s default backend has native support for three metrics. Selecting the others falls back to cosine and logs a warning.
 
 ```rust
 use vecstore::Distance;
@@ -120,20 +128,10 @@ let store = VecStore::builder("db").distance(Distance::Cosine).build()?;
 let store = VecStore::builder("db").distance(Distance::Euclidean).build()?;
 
 // Dot product - alignment and magnitude
-// Best for: Recommendation systems, magnitude matters
+// Best for: Recommendation systems where magnitude matters
 let store = VecStore::builder("db").distance(Distance::DotProduct).build()?;
 
-// Manhattan distance (L1) - city-block distance
-// Best for: Robust to outliers, grid-based distances
-let store = VecStore::builder("db").distance(Distance::Manhattan).build()?;
-
-// Hamming distance - count differing elements
-// Best for: Binary vectors, categorical data
-let store = VecStore::builder("db").distance(Distance::Hamming).build()?;
-
-// Jaccard distance - set dissimilarity
-// Best for: Sparse vectors, tag vectors, sets
-let store = VecStore::builder("db").distance(Distance::Jaccard).build()?;
+// Hamming, Jaccard, Manhattan etc. currently fall back to cosine.
 ```
 
 ---
@@ -176,9 +174,9 @@ let pq_store = PQVectorStore::new(store, pq)?;
 
 ---
 
-## Query Planning (UNIQUE)
+## Query Planning
 
-**🌟 VecStore is the ONLY vector database with built-in query planning.**
+VecStore includes helper methods that estimate query cost and suggest potential optimizations before you run them.
 
 ### EXPLAIN Queries
 
@@ -214,10 +212,12 @@ for step in plan.steps {
 if !plan.is_optimal {
     println!("\nOptimizations:");
     for rec in plan.recommendations {
-        println!("💡 {}", rec);
+        println!("Hint: {}", rec);
     }
 }
 ```
+
+_The planner uses simple heuristics; treat these numbers as guidance rather than hard guarantees._
 
 **Example Output:**
 ```
@@ -236,8 +236,8 @@ Step 3: Select top-10 results (cost: 0.05)
   Input: 10 candidates → Output: 10 results
 
 Optimizations:
-💡 Fetching 10x more candidates than needed. Consider using filtered HNSW traversal.
-💡 Run EXPLAIN again after optimizations to see improvement.
+Hint: Fetching 10x more candidates than needed. Consider using filtered HNSW traversal.
+Hint: Run EXPLAIN again after optimizations to see improvement.
 ```
 
 **Use Cases:**
@@ -615,10 +615,12 @@ let results = store.query_with_params(query, custom)?;
 **Performance Impact:**
 | ef_search | Speed | Recall | Use Case |
 |-----------|-------|--------|----------|
-| 20 | ⚡⚡⚡ Fast | ~85% | Real-time search |
-| 50 | ⚡⚡ Medium | ~92% | Most applications |
-| 100 | ⚡ Slower | ~96% | High accuracy needed |
-| 200 | 🐌 Slow | ~98% | Maximum accuracy |
+| 20 | Very fast | ≈85% (heuristic) | Real-time search |
+| 50 | Fast | ≈92% (heuristic) | Most applications |
+| 100 | Moderate | ≈96% (heuristic) | High accuracy needed |
+| 200 | Slow | ≈98% (heuristic) | Maximum accuracy |
+
+The recall percentages are ballpark numbers drawn from local testing; confirm on your own dataset before relying on them in production charts.
 
 ---
 
@@ -641,9 +643,9 @@ let dot = dot_product_simd(&vec1, &vec2);
 ```
 
 **Performance:**
-- Cosine: 4-6x faster with SIMD
-- Euclidean: 6-8x faster with SIMD
-- Dot product: 8-10x faster with SIMD
+- Cosine: SIMD significantly reduces instruction count (exact gain depends on CPU)
+- Euclidean: Benefits from vectorized subtraction + multiply loops
+- Dot product: Leverages fused multiply-add where available
 
 ---
 
@@ -651,27 +653,7 @@ let dot = dot_product_simd(&vec1, &vec2);
 
 ### Write-Ahead Logging (WAL)
 
-Crash-safe persistence:
-
-```rust
-// WAL is automatic - no configuration needed
-let mut store = VecStore::open("vectors.db")?;
-
-store.upsert("doc1", vec, meta)?;  // Written to WAL
-store.upsert("doc2", vec, meta)?;  // Written to WAL
-
-// Crash happens here...
-
-// On restart, WAL is automatically replayed
-let store = VecStore::open("vectors.db")?;
-// ← All operations recovered
-```
-
-**Features:**
-- Automatic crash recovery
-- Point-in-time recovery
-- Configurable checkpointing
-- Minimal performance overhead
+`wal.rs` implements an append-only write-ahead log with checkpointing and thorough tests. The default `VecStore` does not invoke it yet, so persisting via `VecStore::save`/snapshots remains the recommended path today. Integrating the WAL into the write path is on the roadmap; consult the module docs if you plan to wire it up manually.
 
 ---
 
@@ -740,7 +722,7 @@ find /data/snapshots -mtime +7 -delete
 
 ### Batch Operations
 
-10-100x faster than individual operations:
+Batching reduces per-call overhead compared to issuing individual writes:
 
 ```rust
 // Batch upsert
@@ -1104,7 +1086,7 @@ plan = store.explain_query(
 )
 print(f"Estimated cost: {plan.estimated_cost}")
 for rec in plan.recommendations:
-    print(f"💡 {rec}")
+    print(f"Hint: {rec}")
 ```
 
 ---
@@ -1136,24 +1118,7 @@ for (const result of results) {
 
 ## Performance Benchmarks
 
-| Operation | Latency | Throughput |
-|-----------|---------|------------|
-| **Query (embedded)** | <1ms | 10,000+ qps |
-| **Query (server local)** | 2-5ms | 5,000+ qps |
-| **Query (server network)** | 5-50ms | 1,000-5,000 qps |
-| **Insert (single)** | ~1ms | 1,000 ops/s |
-| **Insert (batch)** | ~100μs each | 10,000-100,000 ops/s |
-| **Index build** | - | 1,000 vectors/s |
-
-**Memory Usage:**
-- Overhead: ~100MB base
-- Per vector (128-dim): ~512 bytes
-- With PQ (16x): ~32 bytes per vector
-
-**Storage:**
-- 128-dim: ~500 bytes/vector
-- 384-dim: ~1.5KB/vector
-- 768-dim: ~3KB/vector
+Official latency and throughput numbers are being rebuilt with a reproducible benchmarking harness. Until those results are published, please treat any historic figures you encounter as anecdotal. To measure performance locally, see `benches/` for Criterion-based suites and run them on your hardware.
 
 ---
 
@@ -1191,4 +1156,4 @@ See the `examples/` directory for complete working examples:
 
 ---
 
-**Perfect 100/100 Score** | **349 Tests Passing** | **Production Ready**
+**Core features shipped** | **349 tests passing** | **Actively maintained**

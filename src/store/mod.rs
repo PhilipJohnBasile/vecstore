@@ -1838,9 +1838,9 @@ impl VecStore {
     ///     println!("  Step {}: {} (cost: {:.2})", step.step, step.description, step.cost);
     /// }
     ///
-    /// for rec in plan.recommendations {
-    ///     println!("💡 {}", rec);
-    /// }
+/// for rec in plan.recommendations {
+///     println!("Hint: {}", rec);
+/// }
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn explain_query(&self, q: Query) -> Result<QueryPlan> {

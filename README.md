@@ -1,44 +1,53 @@
-# VecStore
+# VecStore (0.0.1 alpha)
 
-> **High-performance embeddable vector database** with HNSW indexing, hybrid search, and production features
->
-> Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)
->
-> Rust: `cargo add vecstore` | Python: `pip install vecstore-rs`
+> Rust library for embedding a small HNSW index into your application. This is an **alpha** release; APIs, file formats, and packaging will change without notice.
 
-[![CI](https://github.com/PhilipJohnBasile/vecstore/workflows/CI/badge.svg)](https://github.com/PhilipJohnBasile/vecstore/actions)
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
 [![Documentation](https://docs.rs/vecstore/badge.svg)](https://docs.rs/vecstore)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Tests](https://img.shields.io/badge/tests-670%20passing-brightgreen)](https://github.com/PhilipJohnBasile/vecstore/actions)
-[![Production](https://img.shields.io/badge/production-ready-blue)]()
 
-VecStore is a production-ready vector database with integrated RAG capabilities. Embeddable library with file-based storage—no servers or complex setup required.
+VecStore keeps data local: open a file, upsert vectors, query via HNSW, and take snapshots. Optional bindings (Python) and feature-flagged server code exist for experimentation, but the priority for 0.0.1 is the embedded store.
 
-**Use cases:** RAG applications, semantic search, recommendation systems, document Q&A, code search
-
----
-
-## Key Features
-
-- **Query Planning** - Built-in EXPLAIN queries for query cost estimation and optimization
-- **OpenTelemetry Instrumentation** - Automatic tracing and metrics for production observability
-- **Embeddable** - File-based storage, no server required, sub-millisecond query latency
-- **Production-Ready** - WAL recovery, soft deletes, TTL, multi-tenancy, Kubernetes-ready
-- **Complete RAG Stack** - Vector DB + text splitters + reranking + evaluation metrics
-- **Multi-Language** - Rust (native), Python (PyO3), JavaScript/WASM bindings
-- **Advanced Indexing** - HNSW with tunable presets, prefetch queries, MMR diversity, hybrid search
-- **Cost-Effective** - No SaaS fees, run on your infrastructure
+For an overview of shipped vs. experimental modules, see [`docs/STATUS.md`](docs/STATUS.md).
 
 ---
 
-## Quick Start
+## What Works Today
+
+- **Embedded store API** (`VecStore::open`, `upsert`, `query`, `remove`, `optimize`, `create_snapshot`, `restore_snapshot`).
+- **HNSW index** with cosine, Euclidean, and dot-product distance metrics.
+- **Metadata filtering** using the built-in expression language.
+- **Batch ingestion** via `batch_upsert` (parallel rebuild of the index).
+- **Snapshots** on disk for backups/migration.
+- **Python bindings** (`pip install vecstore-rs`) that wrap the same embedded API.
+- **Optional single-node HTTP/gRPC server** behind the `server` feature flag. Intended for controlled environments only.
+
+These paths are covered by the existing test suite (670+ Rust tests plus Python smoke tests).
+
+---
+
+## Not Ready Yet
+
+You will find ambitious modules in the repo. Treat them as prototypes for now:
+
+- Distributed clustering (`src/distributed/`)
+- Realtime indexer (`src/realtime.rs`)
+- GPU backends (`src/gpu/`)
+- WASM packaging (see [`docs/WASM.md`](docs/WASM.md) for current blockers)
+- Packaging directories (Homebrew, MacPorts, AUR, Nix, Scoop, Snap, Winget). Manifests contain placeholder hashes/URLs—see [PACKAGING.md](PACKAGING.md) before using them.
+
+Please open an issue if one of these directions is critical to you; it helps us prioritise the roadmap.
+
+---
+
+## Install
 
 ### Rust
 
 ```toml
 [dependencies]
-vecstore = "1.0"
+vecstore = "0.0.1"
 ```
 
 ```rust
@@ -63,119 +72,35 @@ store.upsert("doc1", [0.1, 0.2, 0.3], {"title": "Doc"})
 results = store.query([0.15, 0.25, 0.85], k=10)
 ```
 
-### JavaScript/WASM
+### JavaScript / WASM
 
-```bash
-npm install vecstore-wasm
-# or
-wasm-pack build --target web --features wasm
-```
-
-```javascript
-import init, { WasmVecStore } from 'vecstore-wasm';
-
-await init();
-const store = WasmVecStore.new(384); // 384-dimensional vectors
-
-// Insert vectors
-store.upsert('doc1', [0.1, 0.2, ...], { title: 'Document 1' });
-
-// Search with HNSW (sub-millisecond on 100k+ vectors!)
-const results = store.query([0.15, 0.25, ...], 10);
-```
-
-> **Performance:** WASM build uses full HNSW index (O(log N) search)
-> - 290µs @ 1K vectors | 725µs @ 10K vectors | 171µs @ 100K vectors
-> - Suitable for millions of vectors directly in the browser!
-
-**See [docs/WASM.md](docs/WASM.md) for TypeScript definitions and complete guide**
-
----
-
-## Features
-
-### Core Vector Database
-- **Query Planning** - EXPLAIN queries for cost estimation and optimization
-- **Prefetch Queries** - Multi-stage retrieval (vector → rerank → MMR → final)
-- **HNSW Indexing** - Sub-millisecond queries with configurable presets (fast/balanced/high_recall/max_recall)
-- **SIMD Acceleration** - 4-8x faster distance calculations (AVX2/NEON)
-- **Product Quantization** - 8-32x memory compression
-- **Metadata Filtering** - SQL-like queries: `"category = 'tech' AND score > 0.5"`
-- **Multiple Distance Metrics** - Cosine, Euclidean, Dot Product, Manhattan, Hamming, Jaccard
-
-### Production Features
-- **WAL Recovery** - Crash-safe with write-ahead logging
-- **Soft Deletes & TTL** - Time-based expiration, defer cleanup
-- **Multi-Tenancy** - Isolated namespaces with quotas
-- **Batch Operations** - 10-100x faster bulk operations
-- **Prometheus Metrics** - Production observability
-- **Server Mode** - gRPC + HTTP/REST APIs
-
-### Complete RAG Stack
-- **Document Loaders** - PDF, Markdown, HTML, JSON, CSV, Parquet, Text
-- **Text Splitters** - Character, Recursive, Semantic, Token, Markdown-aware
-- **Reranking** - MMR, custom scoring, query expansion
-- **RAG Utilities** - HyDE, multi-query fusion, conversation memory
-- **Evaluation** - Context relevance, answer faithfulness metrics
+The core library compiles to WASM, but the npm package is not published yet. Follow the instructions in [`docs/WASM.md`](docs/WASM.md) if you want to experiment locally.
 
 ---
 
 ## Documentation
 
-**[Quick Start](QUICKSTART.md)** - Get running in 5 minutes
-**[Complete Features](docs/FEATURES.md)** - Comprehensive feature reference
-**[Deployment Guide](DEPLOYMENT.md)** - Production deployment (Docker, K8s)
-**[Achievements](ACHIEVEMENTS.md)** - Feature completeness and capabilities
-
-**For Contributors:**
-- [CONTRIBUTING.md](CONTRIBUTING.md) - How to contribute
-- [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - Detailed contributor guide
-- [CHANGELOG.md](CHANGELOG.md) - Version history
-
-**Market Position:**
-- [docs/COMPETITIVE-ANALYSIS.md](docs/COMPETITIVE-ANALYSIS.md) - vs Qdrant, Weaviate, Pinecone
-- [ROADMAP.md](ROADMAP.md) - Future enhancements
-
----
-
-## Use Cases
-
-- **RAG Applications** - Document Q&A, semantic search, code search
-- **Recommendation Systems** - Content-based filtering
-- **Multi-Tenant SaaS** - Isolated vector stores per customer
-- **Edge/Mobile** - Embedded systems, IoT devices
-- **Local AI** - No external dependencies
+- [`docs/STATUS.md`](docs/STATUS.md) – Shipped vs. experimental modules
+- [`QUICKSTART.md`](QUICKSTART.md) – Embedding VecStore in a Rust project
+- [`docs/FEATURES.md`](docs/FEATURES.md) – Feature-by-feature status notes
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) – High-level design
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) – Near-term priorities
+- [`docs/COMPETITIVE_ANALYSIS.md`](docs/COMPETITIVE_ANALYSIS.md) – Positioning vs. other vector stores
 
 ---
 
 ## Contributing
 
-Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for quick start or [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for detailed guide.
+We welcome pull requests that improve the core store, expand tests, or add documentation about real-world use. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting patches.
 
-1. Fork the repo
-2. Create a feature branch (`git checkout -b feat/amazing-feature`)
-3. Add tests (`cargo test`)
-4. Format code (`cargo fmt`)
-5. Submit a PR
+High-impact areas right now:
 
-**Areas we'd love help with:**
-- Additional language bindings (Go, Java, C#)
-- More document loaders (Notion, Confluence, etc.)
-- Performance benchmarks
-- Real-world use case examples
+1. Test coverage for edge cases (large datasets, snapshot workflows)
+2. Performance benchmarks that are easy to reproduce
+3. Feedback on the Python bindings and server feature flag
 
 ---
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
----
-
-**Built with Rust** | **Production Ready** | **Zero Cost**
-
----
-
-## Star History
-
-Star us on GitHub if you find VecStore useful!
+MIT – see [LICENSE](LICENSE).

@@ -182,7 +182,7 @@ fn main() -> Result<()> {
     println!("   • Range queries: O(log N) instead of O(N)");
     println!("   • Equality queries: O(1) instead of O(N)");
     println!("   • Compound queries: Fast intersection of index results");
-    println!("   • Typical speedup: 10-1000x for large datasets");
+    println!("   • Potential speedup: orders of magnitude for large datasets (measure on your workload)");
 
     println!("\n📝 Use Cases:");
     println!("   • E-commerce: Filter by price, category, rating");

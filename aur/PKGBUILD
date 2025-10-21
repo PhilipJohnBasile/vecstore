@@ -1,6 +1,6 @@
 # Maintainer: Your Name <your.email@example.com>
 pkgname=vecstore
-pkgver=1.0.0
+pkgver=0.0.1
 pkgrel=1
 pkgdesc="High-performance vector database with RAG toolkit"
 arch=('x86_64' 'aarch64')
@@ -9,7 +9,7 @@ license=('MIT')
 depends=('gcc-libs')
 makedepends=('rust' 'cargo' 'protobuf')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('96bce955be4d16ccd29e6dbd8bbfe87c1da869b4c76607176ad7ca9c54895448')
+sha256sums=('REPLACE_WITH_ACTUAL_SHA256')
 
 prepare() {
   cd "$pkgname-$pkgver"
@@ -21,7 +21,7 @@ build() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
-  # Build server binary (CLI has compilation issues in v1.0.0)
+  # Build server binary (CLI has compilation issues in current release)
   cargo build --frozen --release --features server --bin vecstore-server
 }
 

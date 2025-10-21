@@ -2,17 +2,13 @@
 
 Complete instructions for publishing VecStore to all package managers.
 
-## Already Published ✅
+> Warning: VecStore 0.0.1 is an alpha release. Only push to channels that accept pre-release builds, and update checksums once artifacts are finalised.
+
+## Existing publishing targets
 
 - **crates.io**: https://crates.io/crates/vecstore
-- **PyPI**: https://pypi.org/project/vecstore-rs/
-- **npm**: https://www.npmjs.com/package/vecstore-wasm
-- **Docker Hub**: https://hub.docker.com/r/philipjohnbasile/vecstore
-- **GHCR**: https://github.com/PhilipJohnBasile/vecstore/pkgs/container/vecstore
 - **docs.rs**: https://docs.rs/vecstore
-- **lib.rs**: https://lib.rs/crates/vecstore
-- **Homebrew**: https://github.com/PhilipJohnBasile/homebrew-vecstore
-- **Scoop**: https://github.com/PhilipJohnBasile/scoop-vecstore
+- Other channels listed here (PyPI, npm, Docker Hub, GHCR, Homebrew, Scoop, etc.) are works in progress for post-alpha releases.
 
 ## Manual Publishing Needed
 
@@ -54,7 +50,7 @@ cp ../.SRCINFO .
 
 # Commit and push
 git add PKGBUILD .SRCINFO
-git commit -m "Initial import: vecstore 1.0.0"
+git commit -m "Initial import: vecstore 0.0.1"
 git push origin master
 ```
 
@@ -155,7 +151,7 @@ Create `chocolatey/tools/chocolateyInstall.ps1`:
 $ErrorActionPreference = 'Stop'
 
 $packageName = 'vecstore'
-$url64 = 'https://github.com/PhilipJohnBasile/vecstore/releases/download/v1.0.0/vecstore-windows-x86_64.zip'
+$url64 = 'https://github.com/PhilipJohnBasile/vecstore/releases/download/v0.0.1/vecstore-windows-x86_64.zip'
 $checksum64 = 'PASTE_SHA256_HERE'
 
 $packageArgs = @{
@@ -183,7 +179,7 @@ choco install vecstore -source .
 
 # Push to Chocolatey
 choco apikey --key YOUR_API_KEY --source https://push.chocolatey.org/
-choco push vecstore.1.0.0.nupkg --source https://push.chocolatey.org/
+choco push vecstore.0.0.1.nupkg --source https://push.chocolatey.org/
 ```
 
 **Users can then install with:**
@@ -229,7 +225,7 @@ vecstore-server --help
 snapcraft login
 
 # Upload
-snapcraft upload vecstore_1.0.0_amd64.snap --release=stable
+snapcraft upload vecstore_0.0.1_amd64.snap --release=stable
 
 # Check status
 snapcraft status vecstore
@@ -429,7 +425,7 @@ flatpak install flathub com.github.philipjohnbasile.vecstore
 
 #### A. Prepare Manifest Files
 
-The Winget manifests are already in `winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/`:
+The Winget manifests are already in `winget/manifests/p/PhilipJohnBasile/vecstore/0.0.1/`:
 - `PhilipJohnBasile.vecstore.yaml` (version manifest)
 - `PhilipJohnBasile.vecstore.installer.yaml` (installer manifest)
 - `PhilipJohnBasile.vecstore.locale.en-US.yaml` (locale manifest)
@@ -452,17 +448,17 @@ git clone https://github.com/YOUR_USERNAME/winget-pkgs.git
 cd winget-pkgs
 
 # Create branch
-git checkout -b vecstore-1.0.0
+git checkout -b vecstore-0.0.1
 
 # Copy manifests to correct location
-mkdir -p manifests/p/PhilipJohnBasile/vecstore/1.0.0
-cp /Users/pjb/Git/vecstore/winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/* \
-   manifests/p/PhilipJohnBasile/vecstore/1.0.0/
+mkdir -p manifests/p/PhilipJohnBasile/vecstore/0.0.1
+cp /Users/pjb/Git/vecstore/winget/manifests/p/PhilipJohnBasile/vecstore/0.0.1/* \
+   manifests/p/PhilipJohnBasile/vecstore/0.0.1/
 
 # Commit and push
 git add .
-git commit -m "Add PhilipJohnBasile.vecstore version 1.0.0"
-git push origin vecstore-1.0.0
+git commit -m "Add PhilipJohnBasile.vecstore version 0.0.1"
+git push origin vecstore-0.0.1
 
 # Create PR at https://github.com/microsoft/winget-pkgs/pulls
 ```
@@ -486,7 +482,7 @@ winget install PhilipJohnBasile.vecstore
 
 ```bash
 # Get source tarball hash
-nix-prefetch-url --unpack https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz
+nix-prefetch-url --unpack https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v0.0.1.tar.gz
 
 # Update hash in nix/default.nix
 ```
@@ -509,7 +505,7 @@ git clone https://github.com/YOUR_USERNAME/nixpkgs.git
 cd nixpkgs
 
 # Create branch
-git checkout -b vecstore-1.0.0
+git checkout -b vecstore-0.0.1
 
 # Add package to pkgs/by-name/ve/vecstore/package.nix
 mkdir -p pkgs/by-name/ve/vecstore
@@ -517,8 +513,8 @@ cp /Users/pjb/Git/vecstore/nix/default.nix pkgs/by-name/ve/vecstore/package.nix
 
 # Commit and push
 git add .
-git commit -m "vecstore: init at 1.0.0"
-git push origin vecstore-1.0.0
+git commit -m "vecstore: init at 0.0.1"
+git push origin vecstore-0.0.1
 
 # Create PR at https://github.com/NixOS/nixpkgs/pulls
 ```
@@ -544,7 +540,7 @@ nix profile install nixpkgs#vecstore
 
 ```bash
 # Get source tarball hash
-curl -sL https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz | sha256sum
+curl -sL https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v0.0.1.tar.gz | sha256sum
 
 # Update in conda/meta.yaml
 ```
@@ -609,10 +605,10 @@ mamba install vecstore
 
 ```bash
 # Get checksums
-curl -L https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz -o vecstore-1.0.0.tar.gz
-openssl rmd160 vecstore-1.0.0.tar.gz
-openssl sha256 vecstore-1.0.0.tar.gz
-wc -c vecstore-1.0.0.tar.gz
+curl -L https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v0.0.1.tar.gz -o vecstore-0.0.1.tar.gz
+openssl rmd160 vecstore-0.0.1.tar.gz
+openssl sha256 vecstore-0.0.1.tar.gz
+wc -c vecstore-0.0.1.tar.gz
 
 # Update in macports/Portfile
 ```
@@ -646,7 +642,7 @@ cp /Users/pjb/Git/vecstore/macports/Portfile databases/vecstore/
 
 # Commit and push
 git add .
-git commit -m "vecstore: new port, version 1.0.0"
+git commit -m "vecstore: new port, version 0.0.1"
 git push origin vecstore
 
 # Create PR at https://github.com/macports/macports-ports/pulls
@@ -665,7 +661,7 @@ sudo port install vecstore
 - None! Just needs GitHub releases with binaries
 
 **Status:** ✅ Already works because we have GitHub release with binaries at:
-- https://github.com/PhilipJohnBasile/vecstore/releases/tag/v1.0.0
+- https://github.com/PhilipJohnBasile/vecstore/releases/tag/v0.0.1
 
 **Users can install with:**
 ```bash

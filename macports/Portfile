@@ -4,11 +4,11 @@ PortSystem          1.0
 PortGroup           github 1.0
 PortGroup           cargo 1.0
 
-github.setup        PhilipJohnBasile vecstore 1.0.0 v
+github.setup        PhilipJohnBasile vecstore 0.0.1 v
 github.tarball_from archive
 revision            0
 
-description         High-performance embeddable vector database
+description         Embeddable vector database (alpha) with HNSW search
 
 long_description    VecStore is a high-performance embeddable vector database \
                     with HNSW indexing, hybrid search capabilities, \

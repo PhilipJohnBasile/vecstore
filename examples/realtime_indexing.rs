@@ -282,7 +282,7 @@ fn main() {
     println!("     • Flush interval: 100ms");
     println!("     • Strategy: AlwaysBuffer");
     println!("     • Compaction: Every 5 minutes");
-    println!("   - Expected: <1ms insert latency, <5ms query latency\n");
+    println!("   - Target: single-digit millisecond insert/query latency (hardware dependent)\n");
 
     // Scenario 2: Document search
     println!("2. Document Search Engine:");
@@ -292,7 +292,7 @@ fn main() {
     println!("     • Flush interval: 1s");
     println!("     • Strategy: TryLock");
     println!("     • Compaction: Every 10 minutes");
-    println!("   - Expected: <2ms insert latency, <3ms query latency\n");
+    println!("   - Target: low-single-digit millisecond insert/query latency\n");
 
     // Scenario 3: Log analytics
     println!("3. Log Analytics:");

@@ -2,7 +2,7 @@
 VecStore - High-performance vector database with RAG toolkit
 
 A lightweight, fast vector database built in Rust with Python bindings.
-Perfect for RAG (Retrieval-Augmented Generation) applications.
+Well-suited for RAG (Retrieval-Augmented Generation) applications.
 
 Basic usage:
     >>> from vecstore import VecStore
@@ -33,7 +33,7 @@ from .vecstore import (
     RecursiveCharacterTextSplitter,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.0.1"
 
 __all__ = [
     "VecStore",

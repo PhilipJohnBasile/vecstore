@@ -15,7 +15,7 @@
 //! 2. Implement Metal compute shader pipeline in `metal_executor.rs`
 //! 3. Add proper memory management, async transfers, and error handling
 //!
-//! The CPU backend is production-ready and provides SIMD-optimized operations.
+//! The CPU backend is the only path considered stable today and provides SIMD-optimized operations.
 //! GPU backends serve as architectural templates for future implementation.
 //!
 //! ## Overview

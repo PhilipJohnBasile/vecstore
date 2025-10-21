@@ -1,6 +1,6 @@
 [package]
 name = "vecstore-loaders"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2021"
 authors = ["VecStore Contributors"]
 description = "Document loaders for VecStore - PDF, web, markdown, and more"

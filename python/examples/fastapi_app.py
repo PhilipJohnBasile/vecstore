@@ -53,7 +53,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="VecStore API",
     description="REST API for vector similarity search",
-    version="0.1.0",
+    version="0.0.1",
     lifespan=lifespan,
 )
 
@@ -89,7 +89,7 @@ async def root():
     return {
         "status": "ok",
         "message": "VecStore API is running",
-        "version": "0.1.0",
+        "version": "0.0.1",
     }
 
 

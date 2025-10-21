@@ -1,6 +1,6 @@
 // Cross-Encoder Reranker using ONNX models
 //
-// This module provides production-ready cross-encoder reranking using ONNX Runtime.
+// This module sketches a cross-encoder reranker using ONNX Runtime. Treat it as experimental.
 // Cross-encoders process query-document pairs together, providing more accurate
 // relevance scores than bi-encoder (embedding) models.
 

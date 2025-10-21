@@ -4,14 +4,14 @@
 
 ### 1.1. Inferred Purpose & Goals
 
-**VecStore** is a production-ready, embedded vector database written in Rust, designed to be the "SQLite of vector search." Its core purpose is to provide **fast, in-process vector similarity search** with HNSW (Hierarchical Navigable Small World) indexing, while offering the simplicity of an embedded database and the scalability of a network-accessible server.
+**VecStore** is currently an alpha-stage embedded vector database written in Rust, aiming to become the "SQLite of vector search." Its core purpose is to provide **fast, in-process vector similarity search** with HNSW (Hierarchical Navigable Small World) indexing, while offering the simplicity of an embedded database and the scalability of a network-accessible server.
 
 **Primary Goals:**
 - **Embeddable by default** - Zero-dependency vector search for Rust applications
 - **Production-grade performance** - Sub-millisecond query latency with HNSW indexing
 - **Polyglot accessibility** - gRPC and HTTP/REST APIs for any programming language
 - **Rich feature set** - Metadata filtering, hybrid search (vector + keyword), soft deletes, snapshots
-- **Observable & monitored** - Prometheus metrics, Grafana dashboards, production-ready observability
+- **Observable & monitored** - Prometheus metrics, Grafana dashboards, evolving observability story
 - **Multiple deployment modes** - Embedded library, standalone server, Docker containers, Kubernetes
 
 **Problem Solved:**
@@ -539,4 +539,4 @@ See full section in complete document...
 
 **Document Version:** 1.0
 **Last Updated:** 2025-01-19
-**Based on Codebase Analysis:** VecStore v0.1.0 (125 tests passing)
+**Based on Codebase Analysis:** VecStore v0.0.1 (125 tests passing)

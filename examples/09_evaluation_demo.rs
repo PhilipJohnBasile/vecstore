@@ -20,9 +20,9 @@ fn main() -> Result<()> {
     // Build a simple RAG system
     println!("Step 1: Building RAG system...");
     let documents = vec![
-        "VecStore is a high-performance vector database built in Rust.",
+        "VecStore is an embeddable vector database built in Rust.",
         "It provides HNSW indexing, persistence, and a complete RAG toolkit.",
-        "VecStore achieves 10-100x faster performance compared to Python implementations.",
+        "The Rust implementation generally runs faster than pure Python loops.",
     ];
 
     let mut store = VecStore::open("./data/09_evaluation")?;
@@ -50,10 +50,7 @@ fn main() -> Result<()> {
             "What is VecStore?",
             "VecStore is a high-performance vector database built in Rust.",
         ),
-        (
-            "How fast is VecStore?",
-            "VecStore achieves 10-100x faster performance than Python.",
-        ),
+        ("How fast is VecStore?", "Rust avoids the Python interpreter in tight loops."),
     ];
 
     let mut total_score = 0.0;

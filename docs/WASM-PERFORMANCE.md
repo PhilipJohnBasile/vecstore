@@ -2,6 +2,8 @@
 
 VecStore's WASM build includes a full HNSW (Hierarchical Navigable Small World) graph implementation that delivers production-grade performance directly in web browsers.
 
+> **Alpha note:** The npm package is not published yet; the numbers below come from local experiments and should be reproduced on your workload.
+
 ## Architecture
 
 ### WASM-Compatible HNSW
@@ -366,7 +368,7 @@ VecStore's WASM HNSW implementation brings production-grade vector search to web
 - 🔒 **Privacy-preserving** - data stays local
 - 🎯 **API compatible** - same code for WASM and native
 
-Perfect for building modern AI-powered web applications with local, private, and instant semantic search.
+Well-suited for building modern AI-powered web applications with local, privacy-preserving semantic search.
 
 ---
 

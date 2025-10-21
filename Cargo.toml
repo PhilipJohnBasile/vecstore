@@ -1,9 +1,9 @@
 [package]
 name = "vecstore"
-version = "1.0.0"
+version = "0.0.1"
 edition = "2021"
 license = "MIT"
-description = "High-performance embeddable vector database - HNSW, hybrid search, multi-language, production-ready"
+description = "Embeddable vector database (alpha) with HNSW search and RAG tooling"
 repository = "https://github.com/PhilipJohnBasile/vecstore"
 homepage = "https://github.com/PhilipJohnBasile/vecstore"
 documentation = "https://docs.rs/vecstore"
@@ -168,5 +168,3 @@ required-features = ["embeddings", "openai-embeddings"]
 [[bench]]
 name = "wasm_hnsw_bench"
 harness = false
-
-

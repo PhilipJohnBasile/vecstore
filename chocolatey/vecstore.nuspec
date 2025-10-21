@@ -2,7 +2,7 @@
 <package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
   <metadata>
     <id>vecstore</id>
-    <version>1.0.0</version>
+    <version>0.0.1</version>
     <packageSourceUrl>https://github.com/PhilipJohnBasile/vecstore</packageSourceUrl>
     <owners>PhilipJohnBasile</owners>
     <title>VecStore</title>
@@ -25,7 +25,7 @@ VecStore is a high-performance vector database built in Rust, optimized for simi
 - Advanced metadata filtering
 - Embedding generation with multiple providers
 - Python and JavaScript bindings
-- Production-ready with comprehensive testing
+- Extensive test coverage
 
 ## Usage
 After installation, start the server:
@@ -40,7 +40,7 @@ For library usage:
 
 Documentation: https://docs.rs/vecstore
     </description>
-    <releaseNotes>https://github.com/PhilipJohnBasile/vecstore/releases/tag/v1.0.0</releaseNotes>
+    <releaseNotes>https://github.com/PhilipJohnBasile/vecstore/releases/tag/v0.0.1</releaseNotes>
   </metadata>
   <files>
     <file src="tools\**" target="tools" />

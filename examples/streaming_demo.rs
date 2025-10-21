@@ -192,7 +192,7 @@ fn main() -> anyhow::Result<()> {
     println!("✅ All documents indexed incrementally");
     println!("   • No downtime for index rebuilds");
     println!("   • Each document is searchable immediately");
-    println!("   • Perfect for real-time RAG systems");
+    println!("   • Well-suited for real-time RAG systems");
     println!();
 
     // Summary

@@ -37,7 +37,7 @@ impl WebLoader {
     pub fn new() -> Self {
         Self {
             timeout: Duration::from_secs(30),
-            user_agent: "vecstore-loaders/0.1.0".to_string(),
+            user_agent: "vecstore-loaders/0.0.1".to_string(),
             main_content_only: true,
             remove_selectors: vec![
                 "nav".to_string(),

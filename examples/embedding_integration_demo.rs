@@ -257,7 +257,7 @@ fn main() -> anyhow::Result<()> {
     println!("  ✓ Batch processing - Efficient bulk operations");
     println!("  ✓ Custom embedders - Implement your own embedding logic");
     println!();
-    println!("Perfect for:");
+    println!("Well-suited for:");
     println!("  • RAG applications with automatic embedding");
     println!("  • Testing without external dependencies");
     println!("  • Custom embedding model integration");

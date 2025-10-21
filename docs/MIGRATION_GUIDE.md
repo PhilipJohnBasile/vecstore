@@ -24,13 +24,17 @@ VecStore provides automated migration tools and code equivalents for popular vec
 3. **Update application code** to use VecStore API
 4. **Optimize performance** for your use case
 
+> **Note:** VecStore 0.0.1 is an alpha release. Migration tooling and APIs are still evolving.
+
 ### Why Migrate to VecStore?
 
-- ✅ **Embedded**: No external server required, runs in-process
-- ✅ **Zero Cost**: No API fees, completely self-hosted
-- ✅ **SQLite-like**: Simple file-based storage, easy backup/restore
-- ✅ **Production Ready**: HNSW indexing, metadata filtering, persistence
-- ✅ **Full-Featured**: Hybrid search, quantization, clustering, versioning
+- **Embedded workflow**: Runs in-process without managing a separate service.
+- **Self-hosted economics**: No per-request API fees.
+- **File-based storage**: Back up or replicate directories with standard tooling.
+- **Mature feature set**: HNSW indexing, metadata filters, snapshots, batch ingestion.
+- **RAG support**: Hybrid search, quantization helpers, reranking utilities.
+
+> **Caution:** The 0.0.1 alpha is best suited for prototypes and evaluation migrations. Keep your source system online until you are confident VecStore covers your workload.
 
 ---
 

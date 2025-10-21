@@ -1,5 +1,5 @@
 {% set name = "vecstore" %}
-{% set version = "1.0.0" %}
+{% set version = "0.0.1" %}
 
 package:
   name: {{ name|lower }}
@@ -34,7 +34,7 @@ about:
   license: MIT
   license_family: MIT
   license_file: LICENSE
-  summary: High-performance embeddable vector database
+  summary: Embeddable vector database (alpha) with HNSW search
   description: |
     VecStore is a high-performance embeddable vector database with HNSW indexing,
     hybrid search capabilities, multi-language bindings, and comprehensive RAG toolkit.
@@ -48,7 +48,7 @@ about:
     - gRPC and HTTP servers
     - Python and JavaScript bindings
 
-    Perfect for RAG (Retrieval-Augmented Generation) applications, semantic search,
+    Well-suited for RAG (Retrieval-Augmented Generation) applications, semantic search,
     and machine learning workloads.
   doc_url: https://docs.rs/vecstore
   dev_url: https://github.com/PhilipJohnBasile/vecstore

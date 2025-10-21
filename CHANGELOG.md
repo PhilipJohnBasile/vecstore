@@ -5,9 +5,13 @@ All notable changes to VecStore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.0.0] - 2025-10-20
+## [0.0.1] - 2025-10-20
 
-**🎉 Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/)!**
+### Notes
+
+- Initial public alpha. APIs, file formats, and package structure are subject to change.
+
+Now available on [crates.io](https://crates.io/crates/vecstore) and [PyPI](https://pypi.org/project/vecstore-rs/).
 
 **Rust:**
 ```bash
@@ -19,19 +23,12 @@ cargo add vecstore
 pip install vecstore-rs
 ```
 
-### 🎯 Achievement: Perfect 100/100 Competitive Score
+### Release Highlights
 
-VecStore is the **first and only vector database** to achieve a perfect 100/100 competitive score across all categories.
-
-#### Perfect Scores (6/6 Categories)
-- ✅ Core Search: 25/25 (PERFECT)
-- ✅ Hybrid Search: 15/15 (PERFECT)
-- ✅ Deployment: 15/15 (PERFECT)
-- ✅ Ecosystem: 15/15 (PERFECT)
-- ✅ Performance: 15/15 (PERFECT)
-- ✅ Developer Experience: 15/15 (PERFECT)
-
----
+- Embeddable HNSW index with query planning utilities.
+- Expanded hybrid search helpers (reranking, filters, multi-stage pipelines).
+- Optional server mode for teams that want gRPC/HTTP access.
+- Growing ecosystem integrations (Python bindings, LangChain adapters, document loaders).
 
 ### Added
 
@@ -56,7 +53,7 @@ let doc_tokens = reranker.encode_document("Rust is a systems programming languag
 let score = reranker.compute_score(&query_tokens, &doc_tokens)?;
 ```
 
-#### 🌟 Query Planning (UNIQUE - No Competitor Has This)
+#### Query Planning helpers
 - `explain_query()` - EXPLAIN-style query analysis
 - Cost estimation for query execution
 - Optimization recommendations
@@ -68,7 +65,7 @@ let score = reranker.compute_score(&query_tokens, &doc_tokens)?;
 let plan = store.explain_query(query)?;
 println!("Estimated cost: {:.2}", plan.estimated_cost);
 for rec in plan.recommendations {
-    println!("💡 {}", rec);
+    println!("Hint: {}", rec);
 }
 ```
 
@@ -112,7 +109,7 @@ let results = store.query_with_params(
 - `Query::new(vector).with_limit(k).with_filter(expr)`
 - Cleaner, more expressive query construction
 
-#### 🔍 Distributed Tracing (UNIQUE - No Competitor Has This)
+#### Distributed tracing integration points
 - Automatic `#[tracing::instrument]` on all major operations
 - Zero-code instrumentation for query(), upsert(), hybrid_query()
 - OpenTelemetry-compatible (Jaeger, Zipkin, Honeycomb)
@@ -161,7 +158,7 @@ let embedding = embedder.embed("Hello, world!")?;  // 384-dim
 ### Core Features
 
 #### Vector Search
-- HNSW indexing for sub-millisecond queries
+- HNSW indexing tuned for low-latency queries
 - SIMD acceleration (AVX2/NEON) - 4-8x faster distance calculations
 - Product Quantization - 8-32x memory compression
 - 6 distance metrics: Cosine, Euclidean, Dot Product, Manhattan, Hamming, Jaccard
@@ -234,7 +231,7 @@ results = store.query([0.1, 0.2, 0.3], k=10)
 
 ### Performance
 
-- **Query Latency:** <1ms (embedded mode), 2-5ms (server mode)
+- **Query Latency:** Low-latency in embedded mode (no network); add network budget for server deployments
 - **Throughput:** 10,000+ queries/sec (embedded), 5,000+ (server)
 - **Index Build:** ~1,000 vectors/sec
 - **Memory:** 512MB-2GB typical workload
@@ -262,45 +259,33 @@ results = store.query([0.1, 0.2, 0.3], k=10)
 
 ---
 
-### Competitive Position
+### Competitive Notes
 
-| Metric | VecStore | Qdrant | Weaviate | Pinecone |
-|--------|----------|--------|----------|----------|
-| **Score** | **100/100** 🏆 | 92/100 | 92/100 | 85/100 |
-| **Query Planning** | ✅ **UNIQUE** | ❌ | ❌ | ❌ |
-| **Prefetch API** | ✅ | ✅ | ❌ | ❌ |
-| **HNSW Tuning** | ✅ 4 presets | ⚠️ Manual | ⚠️ Manual | ❌ |
-| **Python Native** | ✅ PyO3 | ❌ gRPC | ❌ gRPC | ❌ gRPC |
-| **Embedded Mode** | ✅ | ❌ | ❌ | ❌ |
-| **Latency** | **<1ms** | 15-50ms | 20-100ms | 30-130ms |
-| **Cost** | **$0** | $0.40/GB | $25+/mo | $70+/mo |
-
-**VecStore wins in 12+ categories.**
+- Embeddable usage remains VecStore’s primary differentiator compared to server-first products such as Pinecone and Weaviate.
+- Query-planning helpers and reranking utilities are uncommon in this space and provide extra transparency for operators.
+- Hosted competitors currently offer managed clusters, stronger distributed guarantees, and GPU offload—areas where VecStore still relies on on-premise work.
 
 ---
 
-### Unique Selling Points
+### Highlights
 
-1. **🏆 Perfect 100/100 Score** - First and only vector database
-2. **🌟 Query Planning** - UNIQUE feature, no competitor has this
-3. **🔍 Distributed Tracing** - UNIQUE feature, automatic instrumentation
-4. **⚡ Dual-Mode Architecture** - Embedded + server in same codebase
-5. **🚀 Native Python** - PyO3 bindings, not gRPC (10-100x faster)
-6. **🎨 Pure Rust Embeddings** - Candle backend, no Python dependencies
-7. **💰 Zero Cost** - $0/month vs $28-70/month competitors
-8. **📊 Advanced Query Features** - Prefetch, HNSW tuning, MMR, query planning
+1. Query planning and EXPLAIN helpers give visibility into vector search costs.
+2. Optional server mode lets teams expose VecStore over gRPC/HTTP without rewriting the core engine.
+3. PyO3 bindings mirror the Rust API, enabling local-first Python workflows.
+4. RAG tooling (loaders, splitters, rerankers) reduces the amount of surrounding infrastructure required for prototypes.
+5. Experimental modules (distributed, GPU, realtime) exist as previews and are not yet hardened for production.
 
 ---
 
 ### Breaking Changes
 
-None - this is the initial 1.0.0 release.
+None - this is the initial 0.0.1 release.
 
 ---
 
 ### Migration Guide
 
-Not applicable for 1.0.0 release.
+Not applicable for 0.0.1 release.
 
 ---
 
@@ -327,9 +312,8 @@ See [ROADMAP.md](ROADMAP.md) for planned features.
 ---
 
 **Achievement Date:** 2025-10-19
-**Final Score:** 100/100 🎯
 **Tests Passing:** 350/350 (100%)
 **Examples:** 36 Rust + 7 Python
-**Production Ready:** ✅ YES
+**Status:** Core library stable; advanced modules under active development
 
-**Built with Rust** | **Perfect Score** | **Production Ready** | **Zero Cost**
+**Built with Rust** | **Embeddable-first** | **Local-friendly**

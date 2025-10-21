@@ -18,7 +18,7 @@
 //! ## Performance Characteristics
 //!
 //! - **Memory**: 8-32x reduction vs raw vectors
-//! - **Speed**: 10-100x faster than brute force
+//! - **Speed**: Large speedups compared to brute force scanning
 //! - **Recall**: 90-99% at k=100 (tunable)
 //! - **Scale**: Tested on 1B+ vectors
 //!

@@ -1,45 +1,17 @@
-# VecStore Documentation
+# VecStore Documentation Index
 
-**All documentation has been consolidated into a single master document.**
+Quick pointers to the files that matter in the 0.0.1 alpha release.
 
-## 📖 Main Documentation
+| Topic | File |
+|-------|------|
+| Release status (what works vs. experimental) | [STATUS.md](STATUS.md) |
+| Quick start guide | [../QUICKSTART.md](../QUICKSTART.md) |
+| Feature reference with status notes | [FEATURES.md](FEATURES.md) |
+| Architecture overview | [ARCHITECTURE.md](ARCHITECTURE.md) |
+| Roadmap & priorities | [ROADMAP.md](ROADMAP.md) |
+| Deployment notes for the alpha server | [DEPLOYMENT.md](DEPLOYMENT.md) |
+| Competitive positioning (narrative) | [COMPETITIVE_ANALYSIS.md](COMPETITIVE_ANALYSIS.md) |
 
-👉 **[MASTER-DOCUMENTATION.md](../MASTER-DOCUMENTATION.md)** - Complete comprehensive reference
+Historical or deprecated docs live in `dev_notes/` and `archive/` if you need background material.
 
----
-
-## Quick Navigation
-
-**Getting Started:**
-- [Quick Start](../MASTER-DOCUMENTATION.md#quick-start) - Get running in 5 minutes
-- [Installation](../MASTER-DOCUMENTATION.md#installation) - All platforms
-- [Core Concepts](../MASTER-DOCUMENTATION.md#core-concepts) - Understanding VecStore
-
-**Production:**
-- [Deployment Guide](DEPLOYMENT.md) - Docker, Kubernetes, production
-- [Competitive Analysis](COMPETITIVE-ANALYSIS.md) - vs ChromaDB, Qdrant, LangChain
-
-**Development:**
-- [Developer Guide](../DEVELOPER_GUIDE.md) - Contributing and architecture
-- [Roadmap](../ROADMAP.md) - Future features
-
----
-
-## Documentation Files
-
-```
-vecstore/
-├── README.md                    # Project overview
-├── QUICKSTART.md                # Quick redirect to master docs
-├── MASTER-DOCUMENTATION.md      # ⭐ SINGLE COMPREHENSIVE DOCUMENT ⭐
-├── DEVELOPER_GUIDE.md           # For contributors
-├── ROADMAP.md                   # Future plans
-│
-├── docs/
-│   ├── DEPLOYMENT.md            # Production deployment
-│   └── COMPETITIVE-ANALYSIS.md  # Market analysis
-│
-└── archive/history/             # 60+ archived docs
-```
-
-**For 99% of users:** Everything you need is in **[MASTER-DOCUMENTATION.md](../MASTER-DOCUMENTATION.md)**
+Contributions welcome—please update the relevant file(s) when you make functional changes.

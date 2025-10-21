@@ -34,7 +34,7 @@ struct ServiceMetrics {
 }
 
 impl VectorSearchService {
-    /// Create a new production-ready service
+    /// Create a demo service struct for the alpha server
     fn new(db_path: &str) -> Result<Self> {
         println!("🚀 Initializing production vector search service...");
 

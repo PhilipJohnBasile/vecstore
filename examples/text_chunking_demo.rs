@@ -233,7 +233,7 @@ fn main() -> anyhow::Result<()> {
     println!("  4. Query with question embedding");
     println!("  5. Retrieve relevant chunks for LLM context");
     println!();
-    println!("Perfect for: Documentation search, Q&A, content retrieval");
+    println!("Useful for: Documentation search, Q&A, content retrieval");
 
     // Cleanup
     std::fs::remove_dir_all("./demo_rag").ok();

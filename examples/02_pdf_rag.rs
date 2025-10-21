@@ -40,8 +40,8 @@ fn main() -> Result<()> {
     and full-text search capabilities.
 
     3. Performance
-    Built in Rust, VecStore achieves 10-100x faster query performance compared
-    to Python implementations.
+    The Rust implementation avoids the overhead associated with pure Python loops,
+    delivering faster query performance in most scenarios.
     "#;
 
     println!("Step 1: Loading PDF content...");

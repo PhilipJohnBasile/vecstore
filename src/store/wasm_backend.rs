@@ -6,7 +6,7 @@
 //!
 //! ## Performance
 //!
-//! - **Search**: O(log N) complexity, sub-millisecond queries on 100k+ vectors
+//! - **Search**: O(log N) complexity, designed for low-latency queries on large vector sets
 //! - **Memory**: ~4-8 bytes per edge + vector storage
 //! - **Suitable for**: Browser applications with up to millions of vectors
 //!

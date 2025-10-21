@@ -7,7 +7,7 @@
 //!
 //! - **Learned sparsity**: Neural model learns which terms are important
 //! - **Expansion**: Adds related terms beyond exact matches
-//! - **Efficient storage**: 10-100x compression vs dense vectors
+//! - **Efficient storage**: Significant compression compared to dense vectors
 //! - **Better than BM25**: Outperforms traditional sparse retrieval on BEIR
 //!
 //! ## Architecture

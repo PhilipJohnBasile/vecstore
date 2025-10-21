@@ -1,21 +1,24 @@
 //! # vecstore
 //!
-//! A lightweight, high-performance vector database for Rust applications.
+//! Embeddable vector database with HNSW indexing, metadata-aware filtering, and optional
+//! tooling for retrieval-augmented generation (RAG) workflows.
 //!
-//! vecstore is designed to be the "SQLite of vector search" - an embeddable,
-//! easy-to-use vector store with HNSW indexing, metadata filtering, and persistence.
+//! VecStore aims to be the "SQLite of vector search": run it in-process, keep data on disk
+//! next to your application, and opt into extra features only when you need them.
 //!
-//! ## Features
+//! ## Highlights
 //!
-//! - **Fast approximate nearest neighbor search** using HNSW (Hierarchical Navigable Small World) graphs
-//! - **Metadata filtering** with SQL-like syntax (`"category = 'tech' AND score > 0.5"`)
-//! - **Hybrid search** combining vector similarity + BM25 keyword matching
-//! - **Product Quantization** for 8-32x memory compression
-//! - **Persistence** with snapshot/backup support
-//! - **Async API** for Tokio applications
-//! - **Python bindings** via PyO3
-//! - **WebAssembly support** for browser usage
-//! - **Built-in embeddings** via ONNX Runtime
+//! - **HNSW index** with cosine/Euclidean/dot-product support.
+//! - **Metadata filtering** via a SQL-inspired expression language.
+//! - **Hybrid search** (vector + BM25 keyword scoring) using a pluggable tokenizer.
+//! - **Snapshots** and namespace-aware collections built on the same file layout.
+//! - **Async wrappers, Python bindings, and optional HTTP/gRPC servers** for integration.
+//! - **RAG utilities** (text splitters, rerankers, evaluation helpers) available as
+//!   standalone modules.
+//!
+//! See `docs/ARCHITECTURE.md` for an up-to-date map of implemented modules and current
+//! limitations. Experimental subsystems such as the distributed prototype, realtime
+//! indexer, GPU backends, and WAL live in the repository but are not activated by default.
 //!
 //! ## Quick Start
 //!
@@ -117,22 +120,13 @@
 //!
 //! ## Feature Flags
 //!
-//! - `async` - Enable async API with Tokio support
-//! - `python` - Enable Python bindings via PyO3
-//! - `embeddings` - Enable built-in text embeddings via ONNX Runtime
-//! - `wasm` - Enable WebAssembly support for browsers
+//! - `async` – Enable the Tokio-based async façade (`AsyncVecStore`).
+//! - `python` – Build PyO3 bindings.
+//! - `embeddings` – Include optional embedding adapters (ONNX/Candle/Ollama, etc.).
+//! - `wasm` – Compile the pure-Rust HNSW backend for WebAssembly.
 //!
-//! ## Performance
-//!
-//! vecstore is designed for high performance:
-//!
-//! - **Search**: < 1ms for 100K vectors (on modern hardware)
-//! - **Insertion**: ~1000 vectors/sec with HNSW indexing
-//! - **Memory**: 8-32x reduction with Product Quantization
-//! - **Throughput**: Parallel operations via Rayon
-//!
-//! See [BENCHMARKS.md](https://github.com/yourusername/vecstore/blob/main/BENCHMARKS.md)
-//! for detailed performance analysis.
+//! Benchmark numbers vary with hardware and configuration; run the Criterion benches in
+//! `benches/` if you need reproducible performance data for your workload.
 //!
 //! ## Architecture
 //!
@@ -140,8 +134,8 @@
 //! - **HNSW** for approximate nearest neighbor search
 //! - **Product Quantization** for memory-efficient vector compression
 //! - **BM25** for keyword-based text search
-//! - **Bincode** for efficient binary serialization
-//! - **Rayon** for parallel processing
+//! - **JSON + bincode** for on-disk persistence
+//! - **Rayon** for parallel processing during batch builds
 //!
 //! ## Use Cases
 //!

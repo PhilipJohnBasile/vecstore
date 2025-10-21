@@ -51,7 +51,7 @@ First, install VecStore:
 
 ```toml
 [dependencies]
-vecstore = "0.1.0"
+vecstore = "0.0.1"
 ```
 
 Then create a collection:

@@ -1,8 +1,8 @@
 class Vecstore < Formula
   desc "High-performance vector database with RAG toolkit"
   homepage "https://github.com/PhilipJohnBasile/vecstore"
-  url "https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v1.0.0.tar.gz"
-  sha256 "96bce955be4d16ccd29e6dbd8bbfe87c1da869b4c76607176ad7ca9c54895448"
+  url "https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/v0.0.1.tar.gz"
+  sha256 "REPLACE_WITH_ACTUAL_SHA256"
   license "MIT"
 
   depends_on "rust" => :build

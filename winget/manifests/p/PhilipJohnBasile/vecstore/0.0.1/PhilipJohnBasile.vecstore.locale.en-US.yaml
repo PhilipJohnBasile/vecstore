@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.5.0.schema.json
 
 PackageIdentifier: PhilipJohnBasile.vecstore
-PackageVersion: 1.0.0
+PackageVersion: 0.0.1
 PackageLocale: en-US
 Publisher: Philip John Basile
 PublisherUrl: https://github.com/PhilipJohnBasile
@@ -11,7 +11,7 @@ PackageName: vecstore
 PackageUrl: https://github.com/PhilipJohnBasile/vecstore
 License: MIT
 LicenseUrl: https://github.com/PhilipJohnBasile/vecstore/blob/main/LICENSE
-ShortDescription: High-performance embeddable vector database
+ShortDescription: Embeddable vector database (alpha) with HNSW search
 Description: |-
   VecStore is a high-performance embeddable vector database with HNSW indexing,
   hybrid search capabilities, multi-language bindings, and comprehensive RAG toolkit.
@@ -27,12 +27,12 @@ Tags:
 - vector-database
 - vector-search
 ReleaseNotes: |-
-  Initial release of VecStore v1.0.0
+  Initial release of VecStore v0.0.1
   - HNSW vector indexing
   - Hybrid search with BM25
   - Multi-language support (Rust, Python, JavaScript)
   - gRPC and HTTP servers
   - Production-ready RAG toolkit
-ReleaseNotesUrl: https://github.com/PhilipJohnBasile/vecstore/releases/tag/v1.0.0
+ReleaseNotesUrl: https://github.com/PhilipJohnBasile/vecstore/releases/tag/v0.0.1
 ManifestType: defaultLocale
 ManifestVersion: 1.5.0

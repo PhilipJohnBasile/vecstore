@@ -2,7 +2,7 @@
 #
 # Helper script to submit VecStore to package repositories
 # Usage: ./scripts/submit-packages.sh <version> <tag>
-# Example: ./scripts/submit-packages.sh 1.0.0 v1.0.0
+# Example: ./scripts/submit-packages.sh 0.0.1 v0.0.1
 #
 
 set -e
@@ -12,7 +12,7 @@ TAG="${2:-}"
 
 if [ -z "$VERSION" ] || [ -z "$TAG" ]; then
     echo "Usage: $0 <version> <tag>"
-    echo "Example: $0 1.0.0 v1.0.0"
+    echo "Example: $0 0.0.1 v0.0.1"
     exit 1
 fi
 
@@ -68,15 +68,14 @@ update_manifests() {
 
     # Update Winget (if Windows binary ready)
     if [ "$WINDOWS_READY" == "yes" ] && [ -f "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.installer.yaml" ]; then
-        mkdir -p "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION"
-        # Copy from 1.0.0 template and update
-        cp -r winget/manifests/p/PhilipJohnBasile/vecstore/1.0.0/* "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/"
         sed -i.bak "s/PackageVersion: .*/PackageVersion: $VERSION/" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.yaml"
         sed -i.bak "s/PackageVersion: .*/PackageVersion: $VERSION/" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.installer.yaml"
         sed -i.bak "s|InstallerUrl: .*|InstallerUrl: $WINDOWS_BINARY_URL|" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.installer.yaml"
         sed -i.bak "s/InstallerSha256: .*/InstallerSha256: $WINDOWS_SHA256/" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.installer.yaml"
         sed -i.bak "s/PackageVersion: .*/PackageVersion: $VERSION/" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.locale.en-US.yaml"
         echo "   ✅ Updated winget manifests"
+    else
+        echo "   ⚠️ Winget manifest template for $VERSION not found; copy a previous release before running this script."
     fi
 
     # Clean up backup files

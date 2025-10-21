@@ -2,6 +2,8 @@
 
 Get running with VecStore in 5 minutes or less.
 
+> **Status:** Instructions target the 0.0.1 alpha release. Expect breaking changes.
+
 ---
 
 ## Installation
@@ -12,7 +14,7 @@ Add VecStore to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecstore = "1.0"
+vecstore = "0.0.1"
 ```
 
 Or use cargo:
@@ -180,7 +182,7 @@ fn main() -> anyhow::Result<()> {
 
 ---
 
-## Bonus: Query Planning (UNIQUE Feature)
+## Bonus: Query Planning
 
 VecStore is the ONLY vector database with built-in query planning:
 
@@ -209,7 +211,7 @@ fn main() -> anyhow::Result<()> {
 
     println!("\nOptimization recommendations:");
     for rec in plan.recommendations {
-        println!("  💡 {}", rec);
+        println!("  Hint: {}", rec);
     }
 
     Ok(())
@@ -228,7 +230,7 @@ Execution steps:
   Step 3: Select top-10 results (cost: 0.05)
 
 Optimization recommendations:
-  💡 Fetching 10x more candidates than needed. Consider using filtered HNSW traversal.
+  Hint: Fetching 10x more candidates than needed. Consider using filtered HNSW traversal.
 ```
 
 ---
@@ -295,10 +297,10 @@ for result in results:
 
 ## Next Steps
 
-- **📚 [Complete Features](docs/FEATURES.md)** - All vector DB, RAG, and production features
-- **🚀 [Deployment Guide](DEPLOYMENT.md)** - Docker, Kubernetes, multi-cloud
-- **🏆 [Achievements](ACHIEVEMENTS.md)** - Why VecStore achieved 100/100
-- **💻 [Developer Guide](DEVELOPER_GUIDE.md)** - Contributing to VecStore
+- [Complete Features](docs/FEATURES.md) - Detailed vector DB, RAG, and operational notes
+- [Deployment Guide](DEPLOYMENT.md) - Docker, Kubernetes, and packaging tips
+- [Project Status](ACHIEVEMENTS.md) - What ships today vs. experimental modules
+- [Developer Guide](DEVELOPER_GUIDE.md) - Contributing to VecStore
 
 ---
 
@@ -306,7 +308,7 @@ for result in results:
 
 | Feature | Description | Example |
 |---------|-------------|---------|
-| **Query Planning** | EXPLAIN queries (UNIQUE) | `store.explain_query(...)` |
+| **Query Planning** | EXPLAIN-style insights | `store.explain_query(...)` |
 | **Prefetch** | Multi-stage retrieval | `PrefetchQuery` with stages |
 | **HNSW Tuning** | 4 presets | `HNSWSearchParams::fast()` |
 | **Hybrid Search** | Vector + keywords | `store.hybrid_query(...)` |
@@ -317,4 +319,4 @@ for result in results:
 
 **Ready to build?** Start with the 30-second example above, then explore advanced features as you need them.
 
-**Perfect 100/100 Score** | **349 Tests Passing** | **Production Ready**
+**Core features shipped** | **349 tests passing** | **Actively maintained**

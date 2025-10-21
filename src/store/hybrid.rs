@@ -4,7 +4,7 @@
 // 1. Vector similarity (semantic search via HNSW)
 // 2. Keyword search (BM25 algorithm)
 //
-// This is THE killer feature for RAG applications!
+// Useful for RAG applications that need both semantic and keyword signals.
 
 use super::types::{FilterExpr, Id};
 use crate::tokenizer::{SimpleTokenizer, Tokenizer};

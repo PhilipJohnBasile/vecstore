@@ -1,11 +1,11 @@
 {
-    "version": "1.0.0",
+    "version": "0.0.1",
     "description": "High-performance vector database with RAG toolkit",
     "homepage": "https://github.com/PhilipJohnBasile/vecstore",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/PhilipJohnBasile/vecstore/releases/download/v1.0.0/vecstore-windows-x86_64.zip",
+            "url": "https://github.com/PhilipJohnBasile/vecstore/releases/download/v0.0.1/vecstore-windows-x86_64.zip",
             "hash": "TBD - Will be updated once binaries are built"
         }
     },

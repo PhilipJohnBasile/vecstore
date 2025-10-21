@@ -2,6 +2,8 @@
 
 High-performance vector database with RAG toolkit for Python, powered by Rust.
 
+> **Status:** Python bindings track the 0.0.1 alpha release. APIs may change between versions.
+
 ## Installation
 
 ```bash
@@ -38,9 +40,9 @@ for result in results:
 
 ## Features
 
-- **Fast**: 10-100x faster than pure Python implementations
+- **Fast**: Rust core avoids Python hot loops for distance calculations
 - **Complete RAG Toolkit**: Text splitting, reranking, evaluation
-- **Production Ready**: Persistence, namespaces, server mode
+- **Operational Features**: Persistence, namespaces, server mode
 - **Pythonic API**: Type hints, familiar patterns
 - **Zero Config**: Works out of the box
 
@@ -49,7 +51,7 @@ for result in results:
 See the main repository documentation:
 
 - [Quick Start](../QUICKSTART.md)
-- [Complete Documentation](../MASTER-DOCUMENTATION.md)
+- [Documentation Index](../docs/README.md)
 - [API Reference (Rust docs)](https://docs.rs/vecstore)
 - [Examples](examples/)
 

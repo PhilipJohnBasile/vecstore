@@ -150,10 +150,10 @@ fn scrape_websites() -> Result<Vec<WebPage>> {
         WebPage {
             url: "https://docs.vecstore.io/intro".to_string(),
             title: "VecStore Introduction".to_string(),
-            content: "VecStore is a high-performance vector database built in Rust. \
-                     It provides HNSW indexing for fast approximate nearest neighbor search, \
-                     persistence to disk, and a complete toolkit for RAG applications. \
-                     VecStore achieves 10-100x faster performance compared to Python implementations.".to_string(),
+            content: "VecStore is a Rust-based vector database that focuses on local deployments. \
+                     It provides HNSW indexing for approximate nearest neighbour search, \
+                     persistence to disk, and supporting tooling for RAG applications. \
+                     Rust and SIMD implementations generally run faster than pure Python alternatives.".to_string(),
             timestamp: 1704067200, // 2024-01-01
         },
         WebPage {
@@ -169,10 +169,10 @@ fn scrape_websites() -> Result<Vec<WebPage>> {
         WebPage {
             url: "https://docs.vecstore.io/benchmarks".to_string(),
             title: "Performance Benchmarks".to_string(),
-            content: "VecStore benchmarks show exceptional performance across all operations. \
-                     Insert throughput: 50,000 vectors/sec. Query latency: <1ms for 1M vectors. \
-                     Memory usage: 50% lower with product quantization. SIMD acceleration provides \
-                     3-5x speedup for distance calculations. Hybrid search combines dense and sparse \
+            content: "VecStore benchmarks will be republished with reproducible harnesses. \
+                     Run the Criterion benches inside the repository to gather latency and throughput \
+                     numbers on your hardware. Product quantization and SIMD acceleration are available \
+                     to help balance memory usage and speed. Hybrid search combines dense and sparse \
                      vectors for improved relevance.".to_string(),
             timestamp: 1704240000, // 2024-01-03
         },
