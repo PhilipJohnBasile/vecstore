@@ -29,11 +29,11 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/vecstore"
+Homepage = "https://github.com/PhilipJohnBasile/vecstore"
 Documentation = "https://docs.rs/vecstore"
-Repository = "https://github.com/yourusername/vecstore"
-Issues = "https://github.com/yourusername/vecstore/issues"
-Changelog = "https://github.com/yourusername/vecstore/blob/main/CHANGELOG.md"
+Repository = "https://github.com/PhilipJohnBasile/vecstore"
+Issues = "https://github.com/PhilipJohnBasile/vecstore/issues"
+Changelog = "https://github.com/PhilipJohnBasile/vecstore/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [
