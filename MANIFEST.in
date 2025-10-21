@@ -1,0 +1,28 @@
+# Include license and readme
+include LICENSE
+include README.md
+include CHANGELOG.md
+
+# Include Python specific files
+include python/README.md
+recursive-include python/vecstore *.pyi
+
+# Include Rust source for building
+include Cargo.toml
+include Cargo.lock
+include build.rs
+include rust-toolchain.toml
+recursive-include src *.rs
+recursive-include benches *.rs
+recursive-include tests *.rs
+
+# Include proto files if using server mode
+recursive-include proto *.proto
+
+# Exclude unnecessary files
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude .DS_Store
+global-exclude *.so
+global-exclude *.db
+global-exclude *.db-*

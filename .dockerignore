@@ -1,0 +1,43 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+
+# Test data
+*.db
+test_data/
+benchmarks/
+
+# Examples
+examples/
+
+# Python bindings (not needed for server)
+*.so
+*.pyd
+__pycache__/
+*.pyc
+
+# WASM builds
+*.wasm
+wasm-pack.log
+
+# CI/CD
+.github/
