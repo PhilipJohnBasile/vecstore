@@ -3,7 +3,13 @@
 Run high-performance vector search directly in the browser. No backend required.
 
 ```bash
-npm install vecstore-wasm
+npm install @vecstore/core
+```
+
+Or with built-in embedding support:
+
+```bash
+npm install @vecstore/embeddings @vecstore/core @xenova/transformers
 ```
 
 ---
@@ -60,9 +66,46 @@ main();
 
 ---
 
-## Getting Embeddings
+## Built-in Embeddings (Recommended)
 
-VecStore stores and searches vectors—you need to generate embeddings separately. Here are your options:
+The `@vecstore/embeddings` package provides automatic embedding generation using Transformers.js:
+
+```typescript
+import { VecStoreWithEmbeddings } from '@vecstore/embeddings';
+
+// Create store with automatic embedding generation
+const store = await VecStoreWithEmbeddings.create({
+  model: 'Xenova/all-MiniLM-L6-v2',
+  progressCallback: (p) => console.log(`Loading: ${p.status}`)
+});
+
+// Add texts - embeddings generated automatically
+await store.addTexts(
+  ['Hello world', 'Machine learning is great'],
+  [{ source: 'a' }, { source: 'b' }]
+);
+
+// Search by text - query embedded automatically
+const results = await store.search('AI', 5);
+for (const doc of results) {
+  console.log(`${doc.pageContent} (score: ${doc.score.toFixed(3)})`);
+}
+```
+
+### Supported Models
+
+| Model | Dimensions | Speed | Quality |
+|-------|------------|-------|---------|
+| `Xenova/all-MiniLM-L6-v2` (default) | 384 | Fast | Good |
+| `Xenova/all-mpnet-base-v2` | 768 | Medium | High |
+| `Xenova/bge-small-en-v1.5` | 384 | Fast | Good |
+| `Xenova/bge-base-en-v1.5` | 768 | Medium | High |
+
+---
+
+## Manual Embeddings
+
+If you need more control, use the core WASM module directly and generate embeddings manually:
 
 ### Option 1: Transformers.js (Local, Privacy-First)
 

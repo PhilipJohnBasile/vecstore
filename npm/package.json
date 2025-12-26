@@ -1,0 +1,50 @@
+{
+  "name": "@vecstore/embeddings",
+  "version": "0.0.2",
+  "description": "Embedding integration for VecStore using Transformers.js",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PhilipJohnBasile/vecstore.git",
+    "directory": "npm"
+  },
+  "keywords": [
+    "vector-database",
+    "embeddings",
+    "transformers.js",
+    "wasm",
+    "semantic-search",
+    "rag",
+    "browser"
+  ],
+  "author": "VecStore Contributors",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/PhilipJohnBasile/vecstore/issues"
+  },
+  "homepage": "https://github.com/PhilipJohnBasile/vecstore#readme",
+  "peerDependencies": {
+    "@vecstore/core": ">=0.0.1",
+    "@xenova/transformers": ">=2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
