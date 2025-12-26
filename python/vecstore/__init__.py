@@ -16,6 +16,16 @@ Multi-collection usage:
     >>> collection = db.create_collection("documents")
     >>> collection.upsert("doc1", [0.1, 0.2, 0.3], {"text": "Hello"})
 
+LangChain integration:
+    >>> from vecstore import LangChainVectorStore, Document
+    >>> store = LangChainVectorStore("./my_db")
+    >>> store.add_embeddings(
+    ...     texts=["Hello world"],
+    ...     embeddings=[[0.1, 0.2, 0.3]],
+    ...     metadatas=[{"source": "doc1"}]
+    ... )
+    >>> results = store.similarity_search_by_vector([0.1, 0.2, 0.3], k=5)
+
 Text splitting:
     >>> from vecstore import RecursiveCharacterTextSplitter
     >>> splitter = RecursiveCharacterTextSplitter(500, 50)
@@ -31,11 +41,16 @@ from .vecstore import (
     HybridQuery,
     SearchResult,
     RecursiveCharacterTextSplitter,
+    # LangChain integration classes
+    Document,
+    ScoredDocument,
+    LangChainVectorStore,
 )
 
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 __all__ = [
+    # Core classes
     "VecStore",
     "VecDatabase",
     "Collection",
@@ -43,4 +58,8 @@ __all__ = [
     "HybridQuery",
     "SearchResult",
     "RecursiveCharacterTextSplitter",
+    # LangChain integration
+    "Document",
+    "ScoredDocument",
+    "LangChainVectorStore",
 ]
