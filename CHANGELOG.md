@@ -5,6 +5,63 @@ All notable changes to VecStore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2025-12-26
+
+### Added
+
+#### Quantization Wiring
+- Quantized vectors now used during search operations
+- `train_quantizer()` method for training on existing vectors
+- `is_quantizer_trained()` and `quantization_stats()` introspection methods
+- Automatic quantization on upsert when trained
+- Quantizer state persisted to disk
+
+#### LangChain Integration
+- Native `Document`, `ScoredDocument`, and `LangChainVectorStore` classes
+- Full LangChain VectorStore API compatibility
+- Export from main Python package
+
+#### Built-in Embedding Support
+
+**Python (sentence-transformers):**
+- `VecStoreWithEmbeddings` class for automatic embedding generation
+- `EmbeddingModel` wrapper for any sentence-transformers model
+- Support for all-MiniLM-L6-v2, all-mpnet-base-v2, bge-*, multilingual models
+- Optional dependency: `pip install vecstore-rs[embeddings]`
+
+**WASM/Browser (Transformers.js):**
+- `@vecstore/embeddings` npm package
+- `VecStoreWithEmbeddings` TypeScript class
+- Automatic model loading from HuggingFace
+- WebGPU acceleration when available
+
+#### GPU Acceleration Infrastructure
+- Feature flags: `cuda`, `metal`, `webgpu`
+- `cudarc` crate integration for NVIDIA GPUs
+- `metal-rs` crate integration for Apple Silicon
+- `wgpu` crate for cross-platform WebGPU
+- GPU acceleration documentation and roadmap
+
+#### Disk-Based HNSW
+- `DiskVectorStorage` for memory-mapped vector files
+- `DiskHNSWIndex` combining graph + vector storage
+- Support for larger-than-RAM datasets
+- Minimal memory footprint via OS page cache
+- Streaming search implementation
+
+### Changed
+- Python package version bumped to 0.0.2
+- pyproject.toml updated with Apache-2.0 license
+- README updated with LangChain and embedding documentation
+- WASM docs updated with built-in embedding examples
+
+### Dependencies
+- Added: `cudarc` (0.12, optional)
+- Added: `metal-rs` (0.31, optional)
+- Added: `wgpu` (22, optional)
+
+---
+
 ## [0.0.1] - 2025-10-20
 
 ### Notes
