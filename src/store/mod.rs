@@ -63,6 +63,10 @@ pub struct VecStore {
     wal: Option<WriteAheadLog>,
     /// Metadata index manager for filter pushdown
     metadata_indexes: MetadataIndexManager,
+    /// Quantizer state for compressed vector storage
+    quantizer: Option<disk::QuantizerState>,
+    /// Quantized vectors (id -> compressed representation)
+    quantized_vectors: HashMap<Id, Vec<u8>>,
 }
 
 /// Builder for VecStore with customizable configuration
@@ -276,6 +280,9 @@ impl VecStore {
                 }
             }
 
+            // Load quantizer state if exists
+            let quantizer = layout.load_quantizer().ok();
+
             Ok(Self {
                 root,
                 backend,
@@ -287,6 +294,8 @@ impl VecStore {
                 #[cfg(not(target_arch = "wasm32"))]
                 wal,
                 metadata_indexes: MetadataIndexManager::new(),
+                quantizer,
+                quantized_vectors: HashMap::new(), // Will rebuild from records if needed
             })
         } else {
             // Create new store - infer dimension from first insert
@@ -315,6 +324,8 @@ impl VecStore {
                 #[cfg(not(target_arch = "wasm32"))]
                 wal,
                 metadata_indexes: MetadataIndexManager::new(),
+                quantizer: None, // Will be trained on first batch
+                quantized_vectors: HashMap::new(),
             })
         }
     }
@@ -331,6 +342,158 @@ impl VecStore {
     /// Get the full configuration
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    // ========================================================================
+    // Quantization Support
+    // ========================================================================
+
+    /// Train the quantizer on existing vectors
+    ///
+    /// This should be called after inserting enough vectors for training.
+    /// For scalar quantization, minimum ~100 vectors recommended.
+    /// For product quantization, minimum = num_centroids (typically 256).
+    pub fn train_quantizer(&mut self) -> Result<()> {
+        use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
+
+        if matches!(self.config.quantization, QuantizationConfig::None) {
+            return Ok(()); // No quantization configured
+        }
+
+        if self.records.is_empty() {
+            return Err(anyhow::anyhow!("Cannot train quantizer: no vectors in store"));
+        }
+
+        // Collect training vectors
+        let training_vectors: Vec<Vec<f32>> = self
+            .records
+            .values()
+            .filter(|r| !r.deleted)
+            .map(|r| r.vector.clone())
+            .collect();
+
+        if training_vectors.is_empty() {
+            return Err(anyhow::anyhow!("Cannot train quantizer: no active vectors"));
+        }
+
+        // Train based on quantization config
+        let quantizer = match &self.config.quantization {
+            QuantizationConfig::None => return Ok(()),
+
+            QuantizationConfig::Scalar8 { .. } => {
+                let sq = ScalarQuantizer8::train(&training_vectors)?;
+                disk::QuantizerState::Scalar8(sq)
+            }
+
+            QuantizationConfig::Scalar4 { .. } => {
+                let sq = ScalarQuantizer4::train(&training_vectors)?;
+                disk::QuantizerState::Scalar4(sq)
+            }
+
+            QuantizationConfig::Binary { use_mean_threshold } => {
+                let bq = if *use_mean_threshold {
+                    BinaryQuantizer::train(&training_vectors)?
+                } else {
+                    BinaryQuantizer::train_sign_based(self.dimension)
+                };
+                disk::QuantizerState::Binary(bq)
+            }
+
+            QuantizationConfig::Product {
+                num_subvectors,
+                num_centroids,
+                training_iterations,
+            } => {
+                let pq_config = quantization::PQConfig {
+                    num_subvectors: *num_subvectors,
+                    num_centroids: *num_centroids,
+                    training_iterations: *training_iterations,
+                };
+                let mut pq = quantization::ProductQuantizer::new(self.dimension, pq_config)?;
+                pq.train(&training_vectors)?;
+                disk::QuantizerState::Product(pq)
+            }
+        };
+
+        self.quantizer = Some(quantizer);
+
+        // Quantize all existing vectors
+        self.rebuild_quantized_vectors()?;
+
+        Ok(())
+    }
+
+    /// Rebuild quantized vector representations from records
+    fn rebuild_quantized_vectors(&mut self) -> Result<()> {
+        use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
+
+        let quantizer = match &self.quantizer {
+            Some(q) => q,
+            None => return Ok(()),
+        };
+
+        self.quantized_vectors.clear();
+
+        for record in self.records.values() {
+            if record.deleted {
+                continue;
+            }
+
+            let encoded = match quantizer {
+                disk::QuantizerState::None => continue,
+                disk::QuantizerState::Scalar8(sq) => sq.encode(&record.vector)?,
+                disk::QuantizerState::Scalar4(sq) => sq.encode(&record.vector)?,
+                disk::QuantizerState::Binary(bq) => bq.encode(&record.vector)?,
+                disk::QuantizerState::Product(pq) => pq.encode(&record.vector)?,
+            };
+
+            self.quantized_vectors.insert(record.id.clone(), encoded);
+        }
+
+        Ok(())
+    }
+
+    /// Encode a single vector using the trained quantizer
+    fn encode_vector(&self, vector: &[f32]) -> Option<Vec<u8>> {
+        use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
+
+        match &self.quantizer {
+            None => None,
+            Some(disk::QuantizerState::None) => None,
+            Some(disk::QuantizerState::Scalar8(sq)) => sq.encode(vector).ok(),
+            Some(disk::QuantizerState::Scalar4(sq)) => sq.encode(vector).ok(),
+            Some(disk::QuantizerState::Binary(bq)) => bq.encode(vector).ok(),
+            Some(disk::QuantizerState::Product(pq)) => pq.encode(vector).ok(),
+        }
+    }
+
+    /// Check if quantizer is trained and ready
+    pub fn is_quantizer_trained(&self) -> bool {
+        self.quantizer.is_some() && !matches!(self.quantizer, Some(disk::QuantizerState::None))
+    }
+
+    /// Get quantization statistics
+    pub fn quantization_stats(&self) -> Option<QuantizationStats> {
+        let quantizer = self.quantizer.as_ref()?;
+        if matches!(quantizer, disk::QuantizerState::None) {
+            return None;
+        }
+
+        let original_size = self.records.len() * self.dimension * 4; // 4 bytes per f32
+        let compressed_size: usize = self.quantized_vectors.values().map(|v| v.len()).sum();
+        let compression_ratio = if compressed_size > 0 {
+            original_size as f32 / compressed_size as f32
+        } else {
+            0.0
+        };
+
+        Some(QuantizationStats {
+            method: self.config.quantization.description().to_string(),
+            vectors_quantized: self.quantized_vectors.len(),
+            original_size_bytes: original_size,
+            compressed_size_bytes: compressed_size,
+            compression_ratio,
+        })
     }
 
     // ========================================================================
@@ -449,6 +612,12 @@ impl VecStore {
         let _ = self.metadata_indexes.insert(&metadata.fields, id.clone());
 
         self.backend.insert(id.clone(), &vector)?;
+
+        // Quantize vector if quantizer is trained
+        if let Some(encoded) = self.encode_vector(&vector) {
+            self.quantized_vectors.insert(id.clone(), encoded);
+        }
+
         self.records.insert(id, record);
 
         Ok(())
@@ -826,6 +995,11 @@ impl VecStore {
         // Save HNSW index
         if self.dimension > 0 {
             self.backend.save_index(&layout.hnsw_path())?;
+        }
+
+        // Save quantizer state if trained
+        if let Some(ref quantizer) = self.quantizer {
+            layout.save_quantizer(quantizer)?;
         }
 
         // Checkpoint and truncate WAL after successful save

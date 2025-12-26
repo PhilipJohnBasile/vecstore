@@ -100,6 +100,21 @@ impl Default for QuantizationConfig {
     }
 }
 
+/// Statistics about quantized vector storage
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuantizationStats {
+    /// Quantization method name
+    pub method: String,
+    /// Number of vectors that have been quantized
+    pub vectors_quantized: usize,
+    /// Original size in bytes (full precision)
+    pub original_size_bytes: usize,
+    /// Compressed size in bytes
+    pub compressed_size_bytes: usize,
+    /// Actual compression ratio achieved
+    pub compression_ratio: f32,
+}
+
 impl QuantizationConfig {
     /// Create scalar 8-bit quantization with default settings
     pub fn scalar8() -> Self {
