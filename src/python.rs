@@ -317,7 +317,7 @@ impl PyVecStore {
     }
 
     /// Save the store to disk
-    fn save(&self) -> PyResult<()> {
+    fn save(&mut self) -> PyResult<()> {
         self.inner
             .save()
             .map_err(|e| PyValueError::new_err(format!("Save failed: {}", e)))
@@ -667,13 +667,476 @@ impl PyRecursiveCharacterTextSplitter {
     }
 }
 
+// ============================================================================
+// LangChain / LlamaIndex Integration Classes
+// ============================================================================
+
+/// Document class compatible with LangChain/LlamaIndex patterns
+///
+/// Example:
+///     >>> doc = Document("Hello world", {"source": "test.txt"})
+///     >>> print(doc.page_content)
+///     'Hello world'
+#[pyclass(name = "Document")]
+#[derive(Clone)]
+pub struct PyDocument {
+    #[pyo3(get, set)]
+    pub page_content: String,
+    metadata_dict: HashMap<String, serde_json::Value>,
+}
+
+#[pymethods]
+impl PyDocument {
+    #[new]
+    #[pyo3(signature = (page_content, metadata=None))]
+    fn new(page_content: String, metadata: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let metadata_dict = if let Some(md) = metadata {
+            pydict_to_hashmap(md)?
+        } else {
+            HashMap::new()
+        };
+
+        Ok(Self {
+            page_content,
+            metadata_dict,
+        })
+    }
+
+    #[getter]
+    fn metadata(&self, py: Python) -> PyResult<PyObject> {
+        let dict = PyDict::new_bound(py);
+        for (key, value) in &self.metadata_dict {
+            let py_value = json_to_pyobject(py, value)?;
+            dict.set_item(key, py_value)?;
+        }
+        Ok(dict.into())
+    }
+
+    #[setter]
+    fn set_metadata(&mut self, metadata: &Bound<'_, PyDict>) -> PyResult<()> {
+        self.metadata_dict = pydict_to_hashmap(metadata)?;
+        Ok(())
+    }
+
+    fn __repr__(&self) -> String {
+        let preview = if self.page_content.len() > 50 {
+            format!("{}...", &self.page_content[..50])
+        } else {
+            self.page_content.clone()
+        };
+        format!("Document(page_content='{}', metadata={{...}})", preview)
+    }
+}
+
+/// Scored document returned from similarity search
+#[pyclass(name = "ScoredDocument")]
+pub struct PyScoredDocument {
+    #[pyo3(get)]
+    pub document: PyDocument,
+    #[pyo3(get)]
+    pub score: f32,
+}
+
+#[pymethods]
+impl PyScoredDocument {
+    fn __repr__(&self) -> String {
+        format!("ScoredDocument(score={:.4}, ...)", self.score)
+    }
+}
+
+/// LangChain-compatible vector store
+///
+/// Provides an interface compatible with LangChain VectorStore patterns.
+///
+/// Example:
+///     >>> from vecstore import LangChainVectorStore
+///     >>> store = LangChainVectorStore("vectors.db")
+///     >>> # Add documents with embeddings
+///     >>> store.add_embeddings(
+///     ...     texts=["Hello world", "Goodbye world"],
+///     ...     embeddings=[[0.1, 0.2, ...], [0.3, 0.4, ...]],
+///     ...     metadatas=[{"source": "a"}, {"source": "b"}]
+///     ... )
+///     >>> # Search by vector
+///     >>> results = store.similarity_search_by_vector([0.1, 0.2, ...], k=5)
+#[pyclass(name = "LangChainVectorStore")]
+pub struct PyLangChainVectorStore {
+    inner: VecStore,
+}
+
+#[pymethods]
+impl PyLangChainVectorStore {
+    #[new]
+    fn new(path: String) -> PyResult<Self> {
+        let store = VecStore::open(&path)
+            .map_err(|e| PyValueError::new_err(format!("Failed to open store: {}", e)))?;
+        Ok(Self { inner: store })
+    }
+
+    /// Add texts with pre-computed embeddings
+    ///
+    /// Args:
+    ///     texts: List of text contents
+    ///     embeddings: List of embedding vectors (same length as texts)
+    ///     metadatas: Optional list of metadata dicts (same length as texts)
+    ///     ids: Optional list of IDs (auto-generated if not provided)
+    ///
+    /// Returns:
+    ///     List of document IDs
+    #[pyo3(signature = (texts, embeddings, metadatas=None, ids=None))]
+    fn add_embeddings(
+        &mut self,
+        py: Python,
+        texts: Vec<String>,
+        embeddings: Vec<Vec<f32>>,
+        metadatas: Option<Vec<PyObject>>,
+        ids: Option<Vec<String>>,
+    ) -> PyResult<Py<PyList>> {
+        if texts.len() != embeddings.len() {
+            return Err(PyValueError::new_err(
+                "texts and embeddings must have the same length",
+            ));
+        }
+
+        let mut result_ids = Vec::new();
+
+        for (i, (text, embedding)) in texts.into_iter().zip(embeddings).enumerate() {
+            let id = if let Some(ref id_list) = ids {
+                id_list.get(i).cloned().unwrap_or_else(|| format!("doc_{}", i))
+            } else {
+                format!("doc_{}", i)
+            };
+
+            let mut fields = HashMap::new();
+            fields.insert("text".to_string(), serde_json::json!(text.clone()));
+
+            // Add user metadata if provided
+            if let Some(ref meta_list) = metadatas {
+                if let Some(meta_obj) = meta_list.get(i) {
+                    if let Ok(meta_dict) = meta_obj.downcast_bound::<PyDict>(py) {
+                        let user_meta = pydict_to_hashmap(&meta_dict)?;
+                        fields.extend(user_meta);
+                    }
+                }
+            }
+
+            let metadata = Metadata { fields };
+
+            self.inner
+                .upsert(id.clone(), embedding, metadata)
+                .map_err(|e| PyValueError::new_err(format!("Upsert failed: {}", e)))?;
+
+            // Index text for hybrid search
+            let _ = self.inner.index_text(&id, &text);
+
+            result_ids.push(id);
+        }
+
+        let py_list = PyList::new_bound(py, &result_ids);
+        Ok(py_list.unbind())
+    }
+
+    /// Similarity search using a pre-computed embedding vector
+    ///
+    /// Args:
+    ///     embedding: Query embedding vector
+    ///     k: Number of results to return
+    ///     filter: Optional filter expression (e.g., "category = 'tech'")
+    ///
+    /// Returns:
+    ///     List of ScoredDocument objects
+    #[pyo3(signature = (embedding, k=4, filter=None))]
+    fn similarity_search_by_vector(
+        &self,
+        py: Python,
+        embedding: Vec<f32>,
+        k: usize,
+        filter: Option<String>,
+    ) -> PyResult<Py<PyList>> {
+        let mut query = Query::new(embedding).with_limit(k);
+        if let Some(f) = filter {
+            query = query.with_filter(&f);
+        }
+
+        let results = self
+            .inner
+            .query(query)
+            .map_err(|e| PyValueError::new_err(format!("Query failed: {}", e)))?;
+
+        let scored_docs: Vec<PyScoredDocument> = results
+            .into_iter()
+            .map(|neighbor| {
+                let text = neighbor
+                    .metadata
+                    .fields
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                PyScoredDocument {
+                    document: PyDocument {
+                        page_content: text,
+                        metadata_dict: neighbor.metadata.fields,
+                    },
+                    score: neighbor.score,
+                }
+            })
+            .collect();
+
+        let py_list = PyList::new_bound(py, scored_docs.into_iter().map(|sd| sd.into_py(py)));
+        Ok(py_list.unbind())
+    }
+
+    /// Similarity search (returns documents only, no scores)
+    #[pyo3(signature = (embedding, k=4, filter=None))]
+    fn similarity_search(
+        &self,
+        py: Python,
+        embedding: Vec<f32>,
+        k: usize,
+        filter: Option<String>,
+    ) -> PyResult<Py<PyList>> {
+        let mut query = Query::new(embedding).with_limit(k);
+        if let Some(f) = filter {
+            query = query.with_filter(&f);
+        }
+
+        let results = self
+            .inner
+            .query(query)
+            .map_err(|e| PyValueError::new_err(format!("Query failed: {}", e)))?;
+
+        let docs: Vec<PyDocument> = results
+            .into_iter()
+            .map(|neighbor| {
+                let text = neighbor
+                    .metadata
+                    .fields
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                PyDocument {
+                    page_content: text,
+                    metadata_dict: neighbor.metadata.fields,
+                }
+            })
+            .collect();
+
+        let py_list = PyList::new_bound(py, docs.into_iter().map(|d| d.into_py(py)));
+        Ok(py_list.unbind())
+    }
+
+    /// MMR search for diverse results
+    ///
+    /// Args:
+    ///     embedding: Query embedding vector
+    ///     k: Number of results to return
+    ///     fetch_k: Number of candidates to fetch before MMR selection
+    ///     lambda_mult: Balance between relevance (1.0) and diversity (0.0)
+    ///     filter: Optional filter expression
+    ///
+    /// Returns:
+    ///     List of Document objects (diverse results)
+    #[pyo3(signature = (embedding, k=4, fetch_k=20, lambda_mult=0.5, filter=None))]
+    fn max_marginal_relevance_search(
+        &self,
+        py: Python,
+        embedding: Vec<f32>,
+        k: usize,
+        fetch_k: usize,
+        lambda_mult: f32,
+        filter: Option<String>,
+    ) -> PyResult<Py<PyList>> {
+        // Fetch candidates
+        let mut query = Query::new(embedding.clone()).with_limit(fetch_k);
+        if let Some(f) = &filter {
+            query = query.with_filter(f);
+        }
+
+        let candidates = self
+            .inner
+            .query(query)
+            .map_err(|e| PyValueError::new_err(format!("Query failed: {}", e)))?;
+
+        if candidates.is_empty() {
+            return Ok(PyList::empty_bound(py).unbind());
+        }
+
+        // Simple MMR implementation
+        let mut selected_indices = Vec::new();
+        let mut remaining: Vec<usize> = (0..candidates.len()).collect();
+
+        // Select first (most relevant)
+        if !remaining.is_empty() {
+            selected_indices.push(remaining.remove(0));
+        }
+
+        // MMR selection
+        while selected_indices.len() < k && !remaining.is_empty() {
+            let mut best_score = f32::NEG_INFINITY;
+            let mut best_idx = 0;
+
+            for (i, &cand_idx) in remaining.iter().enumerate() {
+                let relevance = 1.0 - candidates[cand_idx].score;
+
+                // Compute max similarity to selected documents
+                let mut max_sim: f32 = 0.0;
+                for &sel_idx in &selected_indices {
+                    // Use score difference as proxy for similarity
+                    let sim = 1.0 - (candidates[cand_idx].score - candidates[sel_idx].score).abs();
+                    max_sim = max_sim.max(sim);
+                }
+
+                let mmr = lambda_mult * relevance - (1.0 - lambda_mult) * max_sim;
+                if mmr > best_score {
+                    best_score = mmr;
+                    best_idx = i;
+                }
+            }
+
+            selected_indices.push(remaining.remove(best_idx));
+        }
+
+        // Build result documents
+        let docs: Vec<PyDocument> = selected_indices
+            .into_iter()
+            .map(|idx| {
+                let neighbor = &candidates[idx];
+                let text = neighbor
+                    .metadata
+                    .fields
+                    .get("text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                PyDocument {
+                    page_content: text,
+                    metadata_dict: neighbor.metadata.fields.clone(),
+                }
+            })
+            .collect();
+
+        let py_list = PyList::new_bound(py, docs.into_iter().map(|d| d.into_py(py)));
+        Ok(py_list.unbind())
+    }
+
+    /// Delete documents by IDs
+    fn delete(&mut self, ids: Vec<String>) -> PyResult<()> {
+        for id in ids {
+            self.inner
+                .remove(&id)
+                .map_err(|e| PyValueError::new_err(format!("Delete failed: {}", e)))?;
+        }
+        Ok(())
+    }
+
+    /// Save the store to disk
+    fn save(&mut self) -> PyResult<()> {
+        self.inner
+            .save()
+            .map_err(|e| PyValueError::new_err(format!("Save failed: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get number of vectors in the store
+    fn count(&self) -> usize {
+        self.inner.count()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("LangChainVectorStore(vectors={})", self.inner.count())
+    }
+}
+
+// Helper function to convert PyDict to HashMap
+fn pydict_to_hashmap(dict: &Bound<'_, PyDict>) -> PyResult<HashMap<String, serde_json::Value>> {
+    let mut map = HashMap::new();
+    for (key, value) in dict.iter() {
+        let key_str: String = key.extract()?;
+        let json_value = pyobject_to_json(value)?;
+        map.insert(key_str, json_value);
+    }
+    Ok(map)
+}
+
+// Helper function to convert PyObject to serde_json::Value
+fn pyobject_to_json(obj: Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
+    if obj.is_none() {
+        Ok(serde_json::Value::Null)
+    } else if let Ok(b) = obj.extract::<bool>() {
+        Ok(serde_json::json!(b))
+    } else if let Ok(i) = obj.extract::<i64>() {
+        Ok(serde_json::json!(i))
+    } else if let Ok(f) = obj.extract::<f64>() {
+        Ok(serde_json::json!(f))
+    } else if let Ok(s) = obj.extract::<String>() {
+        Ok(serde_json::json!(s))
+    } else if let Ok(list) = obj.downcast::<PyList>() {
+        let vec: Vec<serde_json::Value> = list
+            .iter()
+            .map(|item| pyobject_to_json(item))
+            .collect::<PyResult<_>>()?;
+        Ok(serde_json::json!(vec))
+    } else if let Ok(dict) = obj.downcast::<PyDict>() {
+        let map = pydict_to_hashmap(dict)?;
+        Ok(serde_json::json!(map))
+    } else {
+        Ok(serde_json::json!(obj.to_string()))
+    }
+}
+
+// Helper function to convert serde_json::Value to PyObject
+fn json_to_pyobject(py: Python, value: &serde_json::Value) -> PyResult<PyObject> {
+    match value {
+        serde_json::Value::Null => Ok(py.None()),
+        serde_json::Value::Bool(b) => Ok(b.into_py(py)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Ok(i.into_py(py))
+            } else if let Some(f) = n.as_f64() {
+                Ok(f.into_py(py))
+            } else {
+                Ok(py.None())
+            }
+        }
+        serde_json::Value::String(s) => Ok(s.into_py(py)),
+        serde_json::Value::Array(arr) => {
+            let list = PyList::new_bound(
+                py,
+                arr.iter()
+                    .map(|v| json_to_pyobject(py, v))
+                    .collect::<PyResult<Vec<_>>>()?,
+            );
+            Ok(list.into())
+        }
+        serde_json::Value::Object(obj) => {
+            let dict = PyDict::new_bound(py);
+            for (k, v) in obj {
+                dict.set_item(k, json_to_pyobject(py, v)?)?;
+            }
+            Ok(dict.into())
+        }
+    }
+}
+
 /// vecstore - Lightweight vector database for RAG applications
 ///
 /// This module provides Python bindings for the vecstore library,
 /// offering fast vector similarity search with HNSW indexing,
 /// hybrid search (vector + keyword), and metadata filtering.
+///
+/// LangChain Integration:
+///     >>> from vecstore import LangChainVectorStore, Document
+///     >>> store = LangChainVectorStore("vectors.db")
+///     >>> store.add_embeddings(texts=["hello"], embeddings=[[0.1, 0.2, ...]])
+///     >>> results = store.similarity_search_by_vector([0.1, 0.2, ...], k=5)
 #[pymodule]
 fn vecstore(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Core classes
     m.add_class::<PyVecStore>()?;
     m.add_class::<PyQuery>()?;
     m.add_class::<PyHybridQuery>()?;
@@ -681,5 +1144,11 @@ fn vecstore(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyVecDatabase>()?;
     m.add_class::<PyCollection>()?;
     m.add_class::<PyRecursiveCharacterTextSplitter>()?;
+
+    // LangChain integration classes
+    m.add_class::<PyDocument>()?;
+    m.add_class::<PyScoredDocument>()?;
+    m.add_class::<PyLangChainVectorStore>()?;
+
     Ok(())
 }

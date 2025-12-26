@@ -7,6 +7,169 @@ use std::collections::HashMap;
 
 pub type Id = String;
 
+// ============================================================================
+// QUANTIZATION CONFIGURATION
+// ============================================================================
+
+/// Quantization configuration for memory reduction
+///
+/// Quantization compresses vectors to reduce memory usage with minimal accuracy loss.
+/// Following Qdrant's approach, scalar quantization is recommended as the default
+/// for most use cases (4x compression, 99% recall retained).
+///
+/// ## Compression Comparison
+///
+/// | Method | Compression | Recall | Speed | Best For |
+/// |--------|-------------|--------|-------|----------|
+/// | None | 1x | 100% | 1x | Small datasets |
+/// | Scalar8 | 4x | 99% | 2x | General use (recommended) |
+/// | Scalar4 | 8x | 96% | 3x | Large datasets |
+/// | Binary | 32x | 90% | 8x | High-dim embeddings (1024+) |
+/// | ProductQuantization | 32x | 70-90% | 0.5x | Maximum compression |
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum QuantizationConfig {
+    /// No quantization - full float32 vectors
+    None,
+
+    /// 8-bit scalar quantization (INT8)
+    /// 4x memory reduction, ~99% recall retained
+    /// Best for: General use, recommended default for memory-constrained environments
+    Scalar8 {
+        /// Quantile to exclude outliers (0.99 = exclude 1% extreme values)
+        #[serde(default = "default_quantile")]
+        quantile: f32,
+    },
+
+    /// 4-bit scalar quantization
+    /// 8x memory reduction, ~96% recall retained
+    /// Best for: Very large datasets where memory is critical
+    Scalar4 {
+        /// Quantile to exclude outliers
+        #[serde(default = "default_quantile")]
+        quantile: f32,
+    },
+
+    /// Binary quantization (1-bit)
+    /// 32x memory reduction, ~90% recall (higher with rescoring)
+    /// Best for: High-dimensional embeddings (1024+), OpenAI/Cohere embeddings
+    Binary {
+        /// Use mean as threshold (true) or zero (false, sign-based)
+        #[serde(default)]
+        use_mean_threshold: bool,
+    },
+
+    /// Product Quantization
+    /// Up to 32x memory reduction, variable recall (70-90%)
+    /// Best for: Maximum compression when accuracy can be traded
+    Product {
+        /// Number of subvectors (M) - dimension must be divisible by this
+        /// Common values: 8, 16, 32
+        #[serde(default = "default_pq_subvectors")]
+        num_subvectors: usize,
+
+        /// Number of centroids per subspace (K)
+        /// 256 = 1 byte per subvector, 65536 = 2 bytes
+        #[serde(default = "default_pq_centroids")]
+        num_centroids: usize,
+
+        /// Number of training iterations for k-means
+        #[serde(default = "default_pq_iterations")]
+        training_iterations: usize,
+    },
+}
+
+fn default_quantile() -> f32 {
+    0.99
+}
+
+fn default_pq_subvectors() -> usize {
+    16
+}
+
+fn default_pq_centroids() -> usize {
+    256
+}
+
+fn default_pq_iterations() -> usize {
+    20
+}
+
+impl Default for QuantizationConfig {
+    fn default() -> Self {
+        QuantizationConfig::None
+    }
+}
+
+impl QuantizationConfig {
+    /// Create scalar 8-bit quantization with default settings
+    pub fn scalar8() -> Self {
+        QuantizationConfig::Scalar8 {
+            quantile: default_quantile(),
+        }
+    }
+
+    /// Create scalar 4-bit quantization with default settings
+    pub fn scalar4() -> Self {
+        QuantizationConfig::Scalar4 {
+            quantile: default_quantile(),
+        }
+    }
+
+    /// Create binary quantization with mean threshold
+    pub fn binary() -> Self {
+        QuantizationConfig::Binary {
+            use_mean_threshold: true,
+        }
+    }
+
+    /// Create product quantization with default settings
+    pub fn product(num_subvectors: usize) -> Self {
+        QuantizationConfig::Product {
+            num_subvectors,
+            num_centroids: default_pq_centroids(),
+            training_iterations: default_pq_iterations(),
+        }
+    }
+
+    /// Get the expected compression ratio
+    pub fn compression_ratio(&self) -> f32 {
+        match self {
+            QuantizationConfig::None => 1.0,
+            QuantizationConfig::Scalar8 { .. } => 4.0,
+            QuantizationConfig::Scalar4 { .. } => 8.0,
+            QuantizationConfig::Binary { .. } => 32.0,
+            QuantizationConfig::Product { num_subvectors, .. } => {
+                // Assuming 128-dim vectors as reference
+                // Original: 128 * 4 bytes = 512 bytes
+                // Compressed: num_subvectors * 1 byte
+                512.0 / *num_subvectors as f32
+            }
+        }
+    }
+
+    /// Get human-readable description
+    pub fn description(&self) -> &'static str {
+        match self {
+            QuantizationConfig::None => "No quantization (full precision)",
+            QuantizationConfig::Scalar8 { .. } => "8-bit scalar quantization (4x compression, 99% recall)",
+            QuantizationConfig::Scalar4 { .. } => "4-bit scalar quantization (8x compression, 96% recall)",
+            QuantizationConfig::Binary { .. } => "Binary quantization (32x compression, 90% recall)",
+            QuantizationConfig::Product { .. } => "Product quantization (variable compression, 70-90% recall)",
+        }
+    }
+
+    /// Check if quantization requires training
+    pub fn requires_training(&self) -> bool {
+        matches!(
+            self,
+            QuantizationConfig::Scalar8 { .. }
+                | QuantizationConfig::Scalar4 { .. }
+                | QuantizationConfig::Binary { use_mean_threshold: true }
+                | QuantizationConfig::Product { .. }
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 pub enum Distance {
     /// Cosine similarity (default) - measures angle between vectors
@@ -132,6 +295,16 @@ pub struct Config {
     /// allowing recovery after crashes.
     #[serde(default)]
     pub wal_enabled: bool,
+
+    /// Quantization configuration for memory reduction (default: None)
+    ///
+    /// Enable quantization to reduce memory usage at the cost of some accuracy:
+    /// - `Scalar8`: 4x compression, 99% recall (recommended)
+    /// - `Scalar4`: 8x compression, 96% recall
+    /// - `Binary`: 32x compression, 90% recall
+    /// - `Product`: variable compression, 70-90% recall
+    #[serde(default)]
+    pub quantization: QuantizationConfig,
 }
 
 fn default_hnsw_max_elements() -> usize {
@@ -146,6 +319,7 @@ impl Default for Config {
             hnsw_ef_construction: 200,
             hnsw_max_elements: 100_000,
             wal_enabled: false,
+            quantization: QuantizationConfig::None,
         }
     }
 }

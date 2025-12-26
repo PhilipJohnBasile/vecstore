@@ -47,7 +47,7 @@ impl Default for PQConfig {
 }
 
 /// Product Quantizer for vector compression
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProductQuantizer {
     /// Configuration
     config: PQConfig,

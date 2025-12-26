@@ -254,8 +254,8 @@ pub use store::{
     make_record, parse_filter, BatchError, BatchOperation, BatchResult, CompactionConfig,
     CompactionResult, Config, Distance, ExplainedNeighbor, FilterExpr, FilterOp, FilterParseError,
     HNSWSearchParams, HybridQuery, Metadata, Neighbor, PQConfig, PQVectorStore, PrefetchQuery,
-    ProductQuantizer, Query, QueryEstimate, QueryExplanation, QueryPlan, QueryStage, QueryStep,
-    Record, VecStore, VecStoreBuilder,
+    ProductQuantizer, QuantizationConfig, Query, QueryEstimate, QueryExplanation, QueryPlan,
+    QueryStage, QueryStep, Record, VecStore, VecStoreBuilder,
 };
 pub use text_splitter::{
     RecursiveCharacterTextSplitter, TextChunk, TextSplitter, TokenTextSplitter,

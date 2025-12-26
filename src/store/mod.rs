@@ -125,6 +125,30 @@ impl VecStoreBuilder {
         self
     }
 
+    /// Set quantization configuration for memory reduction
+    ///
+    /// Quantization compresses vectors to reduce memory usage with minimal accuracy loss.
+    /// The quantizer is automatically trained on the first batch of vectors inserted.
+    ///
+    /// # Options
+    /// - `QuantizationConfig::scalar8()` - 4x compression, 99% recall (recommended)
+    /// - `QuantizationConfig::scalar4()` - 8x compression, 96% recall
+    /// - `QuantizationConfig::binary()` - 32x compression, 90% recall
+    /// - `QuantizationConfig::product(16)` - 32x compression, variable recall
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use vecstore::{VecStore, QuantizationConfig};
+    /// let store = VecStore::builder("./data")
+    ///     .with_quantization(QuantizationConfig::scalar8())
+    ///     .build()?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn with_quantization(mut self, config: QuantizationConfig) -> Self {
+        self.config.quantization = config;
+        self
+    }
+
     /// Build the VecStore with the configured settings
     pub fn build(self) -> Result<VecStore> {
         VecStore::open_with_config(self.path, self.config)

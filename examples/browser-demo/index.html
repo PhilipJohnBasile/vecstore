@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VecStore Browser Demo</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    header {
+      text-align: center;
+      color: white;
+      margin-bottom: 2rem;
+    }
+
+    header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    header p {
+      opacity: 0.9;
+      font-size: 1.1rem;
+    }
+
+    .card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .status.loading {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status.ready {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status.error {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    .loading .status-dot { background: #f59e0b; }
+    .ready .status-dot { background: #10b981; animation: none; }
+    .error .status-dot { background: #ef4444; animation: none; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    h2 {
+      color: #1f2937;
+      margin-bottom: 1rem;
+      font-size: 1.25rem;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 0.75rem 1rem;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      padding: 0.75rem 1.5rem;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #5a67d8;
+    }
+
+    button:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+
+    .results {
+      margin-top: 1rem;
+    }
+
+    .result-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+      transition: background 0.2s;
+    }
+
+    .result-item:hover {
+      background: #f9fafb;
+    }
+
+    .result-content {
+      flex: 1;
+    }
+
+    .result-title {
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 0.25rem;
+    }
+
+    .result-text {
+      color: #6b7280;
+      font-size: 0.9rem;
+    }
+
+    .result-score {
+      background: #ede9fe;
+      color: #5b21b6;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    .sample-docs {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .sample-doc {
+      padding: 0.75rem;
+      background: #f3f4f6;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      color: #374151;
+    }
+
+    .sample-doc strong {
+      color: #1f2937;
+    }
+
+    .stats {
+      display: flex;
+      gap: 2rem;
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .stat-label {
+      font-size: 0.8rem;
+      color: #6b7280;
+      text-transform: uppercase;
+    }
+
+    .toggle-group {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .toggle-btn {
+      padding: 0.5rem 1rem;
+      background: #f3f4f6;
+      color: #374151;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    .toggle-btn.active {
+      background: #667eea;
+      color: white;
+    }
+
+    footer {
+      text-align: center;
+      color: rgba(255,255,255,0.8);
+      margin-top: 2rem;
+      font-size: 0.9rem;
+    }
+
+    footer a {
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>VecStore Browser Demo</h1>
+      <p>Semantic search running entirely in your browser via WebAssembly</p>
+    </header>
+
+    <div class="card">
+      <div id="status" class="status loading">
+        <span class="status-dot"></span>
+        <span id="status-text">Loading VecStore and embedding model...</span>
+      </div>
+
+      <h2>Search Documents</h2>
+
+      <div class="toggle-group">
+        <button class="toggle-btn active" data-mode="vector">Semantic Search</button>
+        <button class="toggle-btn" data-mode="hybrid">Hybrid Search</button>
+      </div>
+
+      <div class="search-box">
+        <input type="text" id="query" placeholder="Enter your search query..." disabled>
+        <button id="search-btn" disabled>Search</button>
+      </div>
+
+      <div id="results" class="results"></div>
+
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-value" id="doc-count">0</div>
+          <div class="stat-label">Documents</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="search-time">-</div>
+          <div class="stat-label">Search Time</div>
+        </div>
+        <div class="stat">
+          <div class="stat-value" id="dimension">384</div>
+          <div class="stat-label">Dimensions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Sample Documents (Pre-loaded)</h2>
+      <div class="sample-docs" id="sample-docs"></div>
+    </div>
+
+    <footer>
+      <p>Powered by <a href="https://github.com/PhilipJohnBasile/vecstore" target="_blank">VecStore</a> + <a href="https://huggingface.co/docs/transformers.js" target="_blank">Transformers.js</a></p>
+      <p>All processing happens locally in your browser. No data is sent to any server.</p>
+    </footer>
+  </div>
+
+  <script type="module">
+    // Sample documents to index
+    const SAMPLE_DOCS = [
+      { id: "1", title: "Machine Learning Basics", text: "Machine learning is a subset of artificial intelligence that enables systems to learn from data.", category: "tech" },
+      { id: "2", title: "Neural Networks", text: "Neural networks are computing systems inspired by biological neural networks in the human brain.", category: "tech" },
+      { id: "3", title: "Deep Learning", text: "Deep learning uses multiple layers of neural networks to progressively extract features from raw input.", category: "tech" },
+      { id: "4", title: "Natural Language Processing", text: "NLP enables computers to understand, interpret, and generate human language.", category: "tech" },
+      { id: "5", title: "Computer Vision", text: "Computer vision trains machines to interpret and understand visual information from the world.", category: "tech" },
+      { id: "6", title: "Italian Pasta Recipe", text: "Traditional Italian pasta is made with simple ingredients: flour, eggs, and olive oil.", category: "food" },
+      { id: "7", title: "Sushi Making Guide", text: "Making sushi requires fresh fish, seasoned rice, and seaweed sheets called nori.", category: "food" },
+      { id: "8", title: "French Cooking Techniques", text: "French cuisine emphasizes techniques like braising, sauteing, and creating rich sauces.", category: "food" },
+      { id: "9", title: "Climate Change Overview", text: "Climate change refers to long-term shifts in global temperatures and weather patterns.", category: "science" },
+      { id: "10", title: "Renewable Energy", text: "Renewable energy sources include solar, wind, hydro, and geothermal power.", category: "science" }
+    ];
+
+    let store = null;
+    let embedder = null;
+    let searchMode = 'vector';
+
+    // UI elements
+    const statusEl = document.getElementById('status');
+    const statusText = document.getElementById('status-text');
+    const queryInput = document.getElementById('query');
+    const searchBtn = document.getElementById('search-btn');
+    const resultsEl = document.getElementById('results');
+    const docCountEl = document.getElementById('doc-count');
+    const searchTimeEl = document.getElementById('search-time');
+    const sampleDocsEl = document.getElementById('sample-docs');
+
+    // Display sample docs
+    sampleDocsEl.innerHTML = SAMPLE_DOCS.map(doc =>
+      `<div class="sample-doc"><strong>${doc.title}</strong>: ${doc.text}</div>`
+    ).join('');
+
+    // Toggle search mode
+    document.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        searchMode = btn.dataset.mode;
+      });
+    });
+
+    // Initialize
+    async function init() {
+      try {
+        // Load Transformers.js for embeddings
+        statusText.textContent = 'Loading embedding model (first time may take a minute)...';
+        const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.0');
+        embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+
+        // Load VecStore WASM
+        statusText.textContent = 'Loading VecStore WASM...';
+        const vecstore = await import('https://cdn.jsdelivr.net/npm/vecstore-wasm@latest/vecstore_wasm.js');
+        await vecstore.default();
+        store = new vecstore.WasmVecStore(384);
+
+        // Index sample documents
+        statusText.textContent = 'Indexing sample documents...';
+        for (const doc of SAMPLE_DOCS) {
+          const embedding = await embed(doc.text);
+          store.upsert(doc.id, embedding, { title: doc.title, text: doc.text, category: doc.category });
+          store.index_text(doc.id, doc.text);
+        }
+
+        // Ready!
+        statusEl.className = 'status ready';
+        statusText.textContent = 'Ready! Try searching for "how does AI learn?" or "cooking recipes"';
+        queryInput.disabled = false;
+        searchBtn.disabled = false;
+        docCountEl.textContent = store.count();
+
+      } catch (error) {
+        console.error('Init error:', error);
+        statusEl.className = 'status error';
+        statusText.textContent = `Error: ${error.message}`;
+      }
+    }
+
+    // Generate embedding
+    async function embed(text) {
+      const output = await embedder(text, { pooling: 'mean', normalize: true });
+      return new Float32Array(output.data);
+    }
+
+    // Search
+    async function search() {
+      const query = queryInput.value.trim();
+      if (!query || !store) return;
+
+      searchBtn.disabled = true;
+      searchBtn.textContent = 'Searching...';
+
+      try {
+        const startTime = performance.now();
+        const queryEmbedding = await embed(query);
+
+        let results;
+        if (searchMode === 'hybrid') {
+          results = store.hybrid_query(queryEmbedding, query, 5, 0.7);
+        } else {
+          results = store.query(queryEmbedding, 5);
+        }
+
+        const endTime = performance.now();
+        searchTimeEl.textContent = `${(endTime - startTime).toFixed(1)}ms`;
+
+        // Display results
+        if (results.length === 0) {
+          resultsEl.innerHTML = '<p style="color: #6b7280;">No results found.</p>';
+        } else {
+          resultsEl.innerHTML = results.map(r => {
+            const meta = JSON.parse(r.metadata);
+            return `
+              <div class="result-item">
+                <div class="result-content">
+                  <div class="result-title">${meta.title}</div>
+                  <div class="result-text">${meta.text}</div>
+                </div>
+                <span class="result-score">${(r.score * 100).toFixed(1)}%</span>
+              </div>
+            `;
+          }).join('');
+        }
+
+      } catch (error) {
+        console.error('Search error:', error);
+        resultsEl.innerHTML = `<p style="color: #991b1b;">Error: ${error.message}</p>`;
+      } finally {
+        searchBtn.disabled = false;
+        searchBtn.textContent = 'Search';
+      }
+    }
+
+    // Event listeners
+    searchBtn.addEventListener('click', search);
+    queryInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') search();
+    });
+
+    // Start initialization
+    init();
+  </script>
+</body>
+</html>

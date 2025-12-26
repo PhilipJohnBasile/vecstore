@@ -1,12 +1,29 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025 VecStore Contributors
 
+use super::quantization::ProductQuantizer;
 use super::types::{Config, Id, Record};
+use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// Serializable quantizer state for persistence
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum QuantizerState {
+    /// No quantization
+    None,
+    /// 8-bit scalar quantizer
+    Scalar8(ScalarQuantizer8),
+    /// 4-bit scalar quantizer
+    Scalar4(ScalarQuantizer4),
+    /// Binary quantizer
+    Binary(BinaryQuantizer),
+    /// Product quantizer
+    Product(ProductQuantizer),
+}
 
 const SCHEMA_VERSION: u32 = 4; // Incremented for binary vectors format (storage optimization)
 
@@ -68,6 +85,11 @@ impl DiskLayout {
 
     pub fn text_index_path(&self) -> PathBuf {
         self.root.join("text_index.json")
+    }
+
+    /// Path for quantization codebooks (trained quantizer state)
+    pub fn quantization_path(&self) -> PathBuf {
+        self.root.join("quantization.bin")
     }
 
     pub fn ensure_directory(&self) -> Result<()> {
@@ -202,5 +224,35 @@ impl DiskLayout {
         fs::rename(&temp_path, path)
             .with_context(|| format!("Failed to rename temp file to: {:?}", path))?;
         Ok(())
+    }
+
+    /// Save quantizer state (trained codebooks) to disk
+    pub fn save_quantizer(&self, state: &QuantizerState) -> Result<()> {
+        // Only save if there's a trained quantizer
+        if matches!(state, QuantizerState::None) {
+            // Remove old quantizer file if exists
+            let path = self.quantization_path();
+            if path.exists() {
+                fs::remove_file(&path).ok();
+            }
+            return Ok(());
+        }
+
+        let data = bincode::serialize(state).context("Failed to serialize quantizer state")?;
+        self.atomic_write(&self.quantization_path(), &data)?;
+        Ok(())
+    }
+
+    /// Load quantizer state from disk
+    pub fn load_quantizer(&self) -> Result<QuantizerState> {
+        let path = self.quantization_path();
+        if !path.exists() {
+            return Ok(QuantizerState::None);
+        }
+
+        let data = fs::read(&path).context("Failed to read quantizer state")?;
+        let state: QuantizerState =
+            bincode::deserialize(&data).context("Failed to deserialize quantizer state")?;
+        Ok(state)
     }
 }
