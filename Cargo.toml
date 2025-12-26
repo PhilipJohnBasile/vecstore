@@ -63,6 +63,11 @@ candle-transformers = { version = "0.9", optional = true }
 hf-hub = { version = "0.4", optional = true }
 safetensors = { version = "0.6", optional = true }
 
+# GPU acceleration dependencies
+cudarc = { version = "0.12", optional = true }  # NVIDIA CUDA bindings
+metal-rs = { package = "metal", version = "0.31", optional = true }  # Apple Metal bindings
+wgpu = { version = "22", optional = true }  # Cross-platform GPU (WebGPU)
+
 memmap2 = "0.9"
 tempfile = "3"
 ordered-float = { version = "5", features = ["serde"] }
@@ -145,8 +150,12 @@ server = [
 # Optional features for experimental/future functionality
 compression = []  # Future: compression support
 tracing = []      # Future: distributed tracing
-cuda = []         # Future: CUDA GPU support
-metal = []        # Future: Metal GPU support
+
+# GPU acceleration features
+# Note: Requires appropriate SDK installed (CUDA Toolkit, Metal SDK)
+cuda = ["cudarc"]         # NVIDIA GPU support via CUDA
+metal = ["metal-rs"]      # Apple Silicon GPU support via Metal
+webgpu = ["wgpu"]         # Cross-platform GPU via WebGPU/wgpu
 
 [[bench]]
 name = "vecstore_bench"

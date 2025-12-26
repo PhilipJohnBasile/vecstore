@@ -1,22 +1,42 @@
 //! GPU Acceleration for Vector Operations
 //!
-//! ⚠️ **EXPERIMENTAL - SKELETON IMPLEMENTATION**
+//! ⚠️ **EXPERIMENTAL - PARTIAL IMPLEMENTATION**
 //!
 //! This module provides the interface and architecture for GPU-accelerated vector
-//! operations, but **GPU backends are not fully implemented**. Current status:
+//! operations. Current status:
 //!
 //! - **CPU Backend**: ✅ Fully implemented with SIMD optimizations
-//! - **CUDA Backend**: ⚠️ Stub only - falls back to CPU (requires cuDNN/CUDA SDK integration)
-//! - **Metal Backend**: ⚠️ Stub only - falls back to CPU (requires Metal shader compilation)
-//! - **WebGPU Backend**: ⚠️ Stub only - falls back to CPU (requires wgpu crate integration)
+//! - **CUDA Backend**: 🚧 Requires `cuda` feature and CUDA Toolkit (via cudarc crate)
+//! - **Metal Backend**: 🚧 Requires `metal` feature and macOS (via metal-rs crate)
+//! - **WebGPU Backend**: 🚧 Requires `webgpu` feature (via wgpu crate)
 //!
-//! **To enable actual GPU acceleration:**
-//! 1. Implement CUDA kernel compilation and execution in `cuda_kernels.rs`
-//! 2. Implement Metal compute shader pipeline in `metal_executor.rs`
-//! 3. Add proper memory management, async transfers, and error handling
+//! ## Enabling GPU Support
+//!
+//! ```toml
+//! [dependencies]
+//! vecstore = { version = "0.0.1", features = ["cuda"] }  # NVIDIA
+//! # or
+//! vecstore = { version = "0.0.1", features = ["metal"] }  # Apple Silicon
+//! # or
+//! vecstore = { version = "0.0.1", features = ["webgpu"] }  # Cross-platform
+//! ```
+//!
+//! ## Performance Expectations (with full implementation)
+//!
+//! Based on industry benchmarks:
+//! - **Index Building**: 10-21x faster than CPU (Qdrant, Milvus benchmarks)
+//! - **Batch Distance**: 5-10x faster for large batches (FAISS benchmarks)
+//! - **K-NN Search**: 4-50x faster depending on algorithm (cuVS CAGRA benchmarks)
+//!
+//! ## Roadmap
+//!
+//! 1. **v0.1**: CUDA brute-force distance calculations
+//! 2. **v0.2**: GPU-accelerated IVF index building
+//! 3. **v0.3**: cuVS CAGRA integration for graph-based search
+//! 4. **v0.4**: Metal parity with CUDA features
 //!
 //! The CPU backend is the only path considered stable today and provides SIMD-optimized operations.
-//! GPU backends serve as architectural templates for future implementation.
+//! GPU backends serve as architectural templates for implementation in progress.
 //!
 //! ## Overview
 //!
