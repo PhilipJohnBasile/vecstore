@@ -55,6 +55,10 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
         store
             .upsert(req.id, req.vector, metadata)
             .map_err(|e| Status::internal(format!("Upsert failed: {}", e)))?;
+        // Persist changes to disk for durability
+        store
+            .save()
+            .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
 
         Ok(Response::new(pb::UpsertResponse {
             success: true,
@@ -83,6 +87,13 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
                 }
                 Err(e) => errors.push(format!("{}: invalid metadata: {}", upsert_req.id, e)),
             }
+        }
+
+        // Persist changes to disk for durability
+        if inserted > 0 {
+            store
+                .save()
+                .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
         }
 
         Ok(Response::new(pb::BatchUpsertResponse {
@@ -163,6 +174,10 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
         store
             .remove(&req.id)
             .map_err(|e| Status::internal(format!("Delete failed: {}", e)))?;
+        // Persist changes to disk for durability
+        store
+            .save()
+            .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
 
         Ok(Response::new(pb::DeleteResponse {
             found: true,
@@ -181,6 +196,12 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
         let marked = store
             .soft_delete(&req.id)
             .map_err(|e| Status::internal(format!("Soft delete failed: {}", e)))?;
+        // Persist changes to disk for durability
+        if marked {
+            store
+                .save()
+                .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
+        }
 
         Ok(Response::new(pb::SoftDeleteResponse {
             found: marked,
@@ -199,6 +220,12 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
         let restored = store
             .restore(&req.id)
             .map_err(|e| Status::internal(format!("Restore failed: {}", e)))?;
+        // Persist changes to disk for durability
+        if restored {
+            store
+                .save()
+                .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
+        }
 
         Ok(Response::new(pb::RestoreResponse {
             found: restored,
@@ -215,6 +242,12 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
         let removed_count = store
             .compact()
             .map_err(|e| Status::internal(format!("Compact failed: {}", e)))?;
+        // Persist changes to disk for durability
+        if removed_count > 0 {
+            store
+                .save()
+                .map_err(|e| Status::internal(format!("Save failed: {}", e)))?;
+        }
 
         Ok(Response::new(pb::CompactResponse {
             removed_count: removed_count as i32,

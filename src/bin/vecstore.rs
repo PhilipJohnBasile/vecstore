@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::collections::HashMap;
@@ -8,8 +11,8 @@ use vecstore::{FilterExpr, Metadata, Query, Record, VecDatabase, VecStore};
 
 #[derive(Parser)]
 #[command(name = "vecstore")]
-#[command(version = "1.1.0")]
-#[command(about = "Production-ready vector database CLI", long_about = None)]
+#[command(version = "0.0.1")]
+#[command(about = "Embedded vector database CLI (alpha)", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -296,7 +299,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { dir, dimension } => {
-            let store = VecStore::open(&dir)?;
+            let mut store = VecStore::open(&dir)?;
             store.save()?;
             println!("✓ Initialized vector store at: {:?}", dir);
             if let Some(dim) = dimension {

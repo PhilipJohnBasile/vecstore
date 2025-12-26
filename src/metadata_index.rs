@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 //! Metadata indexing for fast filtered queries
 //!
 //! This module provides indexing structures for metadata fields to dramatically
@@ -455,7 +458,7 @@ impl MetadataIndexManager {
     /// Insert metadata into all relevant indexes
     pub fn insert(
         &mut self,
-        metadata: &serde_json::Map<String, serde_json::Value>,
+        metadata: &std::collections::HashMap<String, serde_json::Value>,
         id: String,
     ) -> Result<()> {
         for (index_name, index) in &mut self.indexes {
@@ -472,7 +475,7 @@ impl MetadataIndexManager {
     /// Remove metadata from all relevant indexes
     pub fn remove(
         &mut self,
-        metadata: &serde_json::Map<String, serde_json::Value>,
+        metadata: &std::collections::HashMap<String, serde_json::Value>,
         id: &str,
     ) -> Result<()> {
         for (index_name, index) in &mut self.indexes {

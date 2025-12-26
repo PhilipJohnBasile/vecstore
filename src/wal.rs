@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 //! Write-Ahead Logging (WAL) for crash recovery
 //!
 //! This module provides a write-ahead log implementation that ensures
@@ -53,8 +56,14 @@ pub enum LogEntry {
     /// Update an existing vector
     Update { id: String, vector: Vec<f32> },
 
-    /// Delete a vector
+    /// Delete a vector (hard delete)
     Delete { id: String },
+
+    /// Soft delete a vector (mark as deleted without removing)
+    SoftDelete { id: String },
+
+    /// Restore a soft-deleted vector
+    Restore { id: String },
 
     /// Begin a transaction
     BeginTx { tx_id: u64 },

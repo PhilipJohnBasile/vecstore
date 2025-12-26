@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 // WebAssembly bindings for vecstore
 //
 // This module provides browser-compatible APIs for running vecstore in WASM.

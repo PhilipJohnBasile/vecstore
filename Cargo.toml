@@ -2,7 +2,7 @@
 name = "vecstore"
 version = "0.0.1"
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 description = "Embeddable vector database (alpha) with HNSW search and RAG tooling"
 repository = "https://github.com/PhilipJohnBasile/vecstore"
 homepage = "https://github.com/PhilipJohnBasile/vecstore"

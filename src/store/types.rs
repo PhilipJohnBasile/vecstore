@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 use anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -109,10 +112,30 @@ pub struct Config {
     pub distance: Distance,
 
     /// HNSW parameter: number of connections per layer (default: 16)
+    /// Higher values improve recall but increase memory and build time.
+    /// Typical range: 8-64
     pub hnsw_m: usize,
 
     /// HNSW parameter: size of dynamic candidate list during construction (default: 200)
+    /// Higher values improve index quality but increase build time.
+    /// Typical range: 100-500
     pub hnsw_ef_construction: usize,
+
+    /// Maximum number of elements the HNSW index can hold (default: 100,000)
+    /// This is pre-allocated, so set appropriately for your use case.
+    /// Inserting beyond this limit will return an error.
+    #[serde(default = "default_hnsw_max_elements")]
+    pub hnsw_max_elements: usize,
+
+    /// Enable write-ahead logging for crash recovery (default: false)
+    /// When enabled, all mutations are logged before being applied,
+    /// allowing recovery after crashes.
+    #[serde(default)]
+    pub wal_enabled: bool,
+}
+
+fn default_hnsw_max_elements() -> usize {
+    100_000
 }
 
 impl Default for Config {
@@ -121,6 +144,8 @@ impl Default for Config {
             distance: Distance::Cosine,
             hnsw_m: 16,
             hnsw_ef_construction: 200,
+            hnsw_max_elements: 100_000,
+            wal_enabled: false,
         }
     }
 }

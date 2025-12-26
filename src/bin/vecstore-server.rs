@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 //! VecStore Server
 //!
 //! Multi-protocol vector database server supporting gRPC and HTTP/REST APIs.

@@ -1,8 +1,37 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 use super::types::{Distance, Id};
 use anyhow::{anyhow, Result};
 use hnsw_rs::prelude::*;
 use std::collections::HashMap;
 use std::path::Path;
+
+/// Default HNSW parameters
+pub const DEFAULT_HNSW_M: usize = 16;
+pub const DEFAULT_HNSW_EF_CONSTRUCTION: usize = 200;
+pub const DEFAULT_MAX_ELEMENTS: usize = 100_000;
+
+/// HNSW configuration parameters
+#[derive(Debug, Clone)]
+pub struct HnswConfig {
+    /// Number of connections per layer (M parameter)
+    pub m: usize,
+    /// Size of dynamic candidate list during construction
+    pub ef_construction: usize,
+    /// Maximum number of elements the index can hold
+    pub max_elements: usize,
+}
+
+impl Default for HnswConfig {
+    fn default() -> Self {
+        Self {
+            m: DEFAULT_HNSW_M,
+            ef_construction: DEFAULT_HNSW_EF_CONSTRUCTION,
+            max_elements: DEFAULT_MAX_ELEMENTS,
+        }
+    }
+}
 
 // Enum to hold different HNSW instances for different distance metrics
 enum HnswInstance {
@@ -18,29 +47,44 @@ pub struct HnswBackend {
     next_idx: usize,
     dimension: usize,
     distance: Distance,
+    config: HnswConfig,
 }
 
 impl HnswBackend {
+    /// Create a new HNSW backend with default configuration
     pub fn new(dimension: usize, distance: Distance) -> Result<Self> {
+        Self::with_config(dimension, distance, HnswConfig::default())
+    }
+
+    /// Create a new HNSW backend with custom configuration
+    pub fn with_config(dimension: usize, distance: Distance, config: HnswConfig) -> Result<Self> {
         let hnsw = match distance {
             Distance::Cosine => HnswInstance::Cosine(Hnsw::<f32, DistCosine>::new(
-                16,      // max_nb_connection
-                100_000, // max_elements
-                16,      // max_layer
-                200,     // ef_construction
+                config.m,              // max_nb_connection
+                config.max_elements,   // max_elements
+                config.m,              // max_layer (typically same as M)
+                config.ef_construction, // ef_construction
                 DistCosine,
             )),
-            Distance::Euclidean => {
-                HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(16, 100_000, 16, 200, DistL2))
-            }
-            Distance::DotProduct => {
-                HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(16, 100_000, 16, 200, DistDot))
-            }
+            Distance::Euclidean => HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistL2,
+            )),
+            Distance::DotProduct => HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistDot,
+            )),
             _ => {
                 return Err(anyhow!(
                     "Distance metric {:?} is not yet supported by the HNSW backend. \
                      Supported metrics: Cosine, Euclidean, DotProduct. \
-                     See https://github.com/yourusername/vecstore/issues for updates.",
+                     See https://github.com/PhilipJohnBasile/vecstore/issues for updates.",
                     distance
                 ))
             }
@@ -53,7 +97,33 @@ impl HnswBackend {
             next_idx: 0,
             dimension,
             distance,
+            config,
         })
+    }
+
+    /// Get the current HNSW configuration
+    pub fn config(&self) -> &HnswConfig {
+        &self.config
+    }
+
+    /// Get the maximum capacity of this index
+    pub fn max_capacity(&self) -> usize {
+        self.config.max_elements
+    }
+
+    /// Get the current number of vectors in the index
+    pub fn len(&self) -> usize {
+        self.id_to_idx.len()
+    }
+
+    /// Check if the index is empty
+    pub fn is_empty(&self) -> bool {
+        self.id_to_idx.is_empty()
+    }
+
+    /// Check if the index is at capacity
+    pub fn is_at_capacity(&self) -> bool {
+        self.id_to_idx.len() >= self.config.max_elements
     }
 
     pub fn insert(&mut self, id: Id, vector: &[f32]) -> Result<()> {
@@ -62,6 +132,16 @@ impl HnswBackend {
                 "Vector dimension mismatch: expected {}, got {}",
                 self.dimension,
                 vector.len()
+            ));
+        }
+
+        // Check capacity before inserting new vectors (not updates)
+        let is_update = self.id_to_idx.contains_key(&id);
+        if !is_update && self.id_to_idx.len() >= self.config.max_elements {
+            return Err(anyhow!(
+                "HNSW index is at capacity ({} vectors). Cannot insert more vectors. \
+                 Consider increasing max_elements in HnswConfig or using a new index.",
+                self.config.max_elements
             ));
         }
 
@@ -86,8 +166,19 @@ impl HnswBackend {
         Ok(())
     }
 
+    /// Remove a vector's ID mapping from the backend.
+    ///
+    /// **Note**: This creates a "ghost node" in the HNSW graph. The underlying `hnsw_rs`
+    /// library does not support true node deletion. This method only removes the ID
+    /// mapping, leaving the vector data in the graph structure. The ghost node:
+    /// - Cannot be found by ID lookup
+    /// - Is excluded from search results (filtered by the ID mapping)
+    /// - Still occupies memory in the graph
+    ///
+    /// To reclaim memory, use [`optimize()`](Self::optimize) to rebuild the graph.
     pub fn remove(&mut self, id: &str) -> Result<()> {
         if let Some(&idx) = self.id_to_idx.get(id) {
+            // Remove ID mapping only - the vector remains as a ghost node in HNSW
             self.id_to_idx.remove(id);
             self.idx_to_id.remove(&idx);
             Ok(())
@@ -172,21 +263,44 @@ impl HnswBackend {
         idx_to_id: HashMap<usize, Id>,
         next_idx: usize,
     ) -> Result<Self> {
+        Self::restore_with_config(dimension, distance, id_to_idx, idx_to_id, next_idx, HnswConfig::default())
+    }
+
+    pub fn restore_with_config(
+        dimension: usize,
+        distance: Distance,
+        id_to_idx: HashMap<Id, usize>,
+        idx_to_id: HashMap<usize, Id>,
+        next_idx: usize,
+        config: HnswConfig,
+    ) -> Result<Self> {
         let hnsw = match distance {
             Distance::Cosine => HnswInstance::Cosine(Hnsw::<f32, DistCosine>::new(
-                16, 100_000, 16, 200, DistCosine,
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistCosine,
             )),
-            Distance::Euclidean => {
-                HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(16, 100_000, 16, 200, DistL2))
-            }
-            Distance::DotProduct => {
-                HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(16, 100_000, 16, 200, DistDot))
-            }
+            Distance::Euclidean => HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistL2,
+            )),
+            Distance::DotProduct => HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistDot,
+            )),
             _ => {
                 return Err(anyhow!(
                     "Distance metric {:?} is not yet supported by the HNSW backend. \
                      Supported metrics: Cosine, Euclidean, DotProduct. \
-                     See https://github.com/yourusername/vecstore/issues for updates.",
+                     See https://github.com/PhilipJohnBasile/vecstore/issues for updates.",
                     distance
                 ))
             }
@@ -199,6 +313,7 @@ impl HnswBackend {
             next_idx,
             dimension,
             distance,
+            config,
         })
     }
 
@@ -231,10 +346,66 @@ impl HnswBackend {
         Ok(())
     }
 
-    pub fn optimize(&mut self, _vectors: &[(Id, Vec<f32>)]) -> Result<usize> {
-        // HNSW doesn't need explicit optimization
-        // Return number of vectors in index
-        Ok(self.id_to_idx.len())
+    /// Optimize the HNSW index by rebuilding it from scratch.
+    ///
+    /// This removes "ghost" nodes that accumulate after deletions.
+    /// The HNSW graph structure doesn't support true node removal, so deleted
+    /// nodes remain in the graph until optimize() is called.
+    ///
+    /// Returns the number of ghost nodes that were removed.
+    pub fn optimize(&mut self, vectors: &[(Id, Vec<f32>)]) -> Result<usize> {
+        if vectors.is_empty() {
+            return Ok(0);
+        }
+
+        // Count ghost nodes (nodes in old index that aren't in the vectors list)
+        let old_count = self.id_to_idx.len();
+        let new_count = vectors.len();
+        let ghost_count = if old_count > new_count { old_count - new_count } else { 0 };
+
+        // Create a fresh HNSW instance with same configuration
+        let new_hnsw = match self.distance {
+            Distance::Cosine => HnswInstance::Cosine(Hnsw::<f32, DistCosine>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistCosine,
+            )),
+            Distance::Euclidean => HnswInstance::Euclidean(Hnsw::<f32, DistL2>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistL2,
+            )),
+            Distance::DotProduct => HnswInstance::DotProduct(Hnsw::<f32, DistDot>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistDot,
+            )),
+            _ => {
+                return Err(anyhow!(
+                    "Distance metric {:?} is not supported for optimization",
+                    self.distance
+                ))
+            }
+        };
+
+        // Replace the old HNSW with the new empty one
+        self.hnsw = new_hnsw;
+        self.id_to_idx.clear();
+        self.idx_to_id.clear();
+        self.next_idx = 0;
+
+        // Re-insert all vectors into the fresh index
+        for (id, vector) in vectors {
+            self.insert(id.clone(), vector)?;
+        }
+
+        Ok(ghost_count)
     }
 
     pub fn search_with_ef(

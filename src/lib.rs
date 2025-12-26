@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 //! # vecstore
 //!
 //! Embeddable vector database with HNSW indexing, metadata-aware filtering, and optional

@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 //! Server mode for vecstore
 //!
 //! Provides gRPC and HTTP/REST APIs for remote access to vecstore.

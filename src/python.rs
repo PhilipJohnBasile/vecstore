@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 // Python bindings for vecstore using PyO3
 //
 // This module provides Python-friendly wrappers around the Rust API.

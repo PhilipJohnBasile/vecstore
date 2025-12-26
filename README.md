@@ -4,7 +4,7 @@
 
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
 [![Documentation](https://docs.rs/vecstore/badge.svg)](https://docs.rs/vecstore)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Tests](https://img.shields.io/badge/tests-670%20passing-brightgreen)](https://github.com/PhilipJohnBasile/vecstore/actions)
 
 VecStore keeps data local: open a file, upsert vectors, query via HNSW, and take snapshots. Optional bindings (Python) and feature-flagged server code exist for experimentation, but the priority for 0.0.1 is the embedded store.
@@ -103,4 +103,4 @@ High-impact areas right now:
 
 ## License
 
-MIT – see [LICENSE](LICENSE).
+Apache 2.0 – see [LICENSE](LICENSE).

@@ -359,6 +359,8 @@ async fn upsert(
 
     let mut store = server.store.write().await;
     store.upsert(req.id, req.vector, metadata)?;
+    // Persist changes to disk for durability
+    store.save()?;
 
     let duration = start.elapsed().as_secs_f64();
     super::metrics::record_upsert(false);
@@ -389,6 +391,11 @@ async fn batch_upsert(
             Ok(_) => inserted += 1,
             Err(e) => errors.push(format!("{}: {}", upsert_req.id, e)),
         }
+    }
+
+    // Persist changes to disk for durability
+    if inserted > 0 {
+        store.save()?;
     }
 
     let duration = start.elapsed().as_secs_f64();
@@ -434,6 +441,11 @@ async fn batch_execute(
 
     let mut store = server.store.write().await;
     let result = store.batch_execute(operations)?;
+
+    // Persist changes to disk for durability
+    if result.succeeded > 0 {
+        store.save()?;
+    }
 
     // Convert result errors to DTOs
     let errors_dto: Vec<BatchErrorDto> = result
@@ -612,6 +624,8 @@ async fn delete_vector(
 ) -> Result<Json<DeleteResponse>, ApiError> {
     let mut store = server.store.write().await;
     store.remove(&id)?;
+    // Persist changes to disk for durability
+    store.save()?;
 
     Ok(Json(DeleteResponse {
         found: true,
@@ -625,6 +639,10 @@ async fn soft_delete(
 ) -> Result<Json<SoftDeleteResponse>, ApiError> {
     let mut store = server.store.write().await;
     let marked = store.soft_delete(&id)?;
+    // Persist changes to disk for durability
+    if marked {
+        store.save()?;
+    }
 
     Ok(Json(SoftDeleteResponse {
         found: marked,
@@ -638,6 +656,10 @@ async fn restore(
 ) -> Result<Json<RestoreResponse>, ApiError> {
     let mut store = server.store.write().await;
     let restored = store.restore(&id)?;
+    // Persist changes to disk for durability
+    if restored {
+        store.save()?;
+    }
 
     Ok(Json(RestoreResponse {
         found: restored,
@@ -650,6 +672,10 @@ async fn compact(
 ) -> Result<Json<CompactResponse>, ApiError> {
     let mut store = server.store.write().await;
     let removed_count = store.compact()?;
+    // Persist changes to disk for durability
+    if removed_count > 0 {
+        store.save()?;
+    }
 
     Ok(Json(CompactResponse {
         removed_count: removed_count as i32,

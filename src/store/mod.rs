@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
 pub mod advanced_filters;
 mod disk;
 pub mod disk_hnsw;
@@ -7,6 +10,9 @@ pub mod filters; // Public for WASM module
 // HNSW backend only available on non-WASM targets (requires hnsw_rs which needs mmap)
 #[cfg(not(target_arch = "wasm32"))]
 pub mod hnsw_backend;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub use hnsw_backend::HnswConfig;
 
 // WASM-compatible HNSW implementation (pure in-memory, no mmap)
 // Available on all platforms for testing/benchmarking, but only used as backend for WASM
@@ -37,6 +43,13 @@ use chrono::Utc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+// Import WAL for durability (non-WASM only)
+#[cfg(not(target_arch = "wasm32"))]
+use crate::wal::{LogEntry, WriteAheadLog};
+
+// Import metadata indexing
+use crate::metadata_index::{IndexConfig, MetadataIndexManager};
+
 pub struct VecStore {
     root: PathBuf,
     backend: VectorBackend,
@@ -45,6 +58,11 @@ pub struct VecStore {
     text_index: hybrid::TextIndex,
     compaction_config: CompactionConfig,
     config: Config,
+    /// Optional write-ahead log for durability
+    #[cfg(not(target_arch = "wasm32"))]
+    wal: Option<WriteAheadLog>,
+    /// Metadata index manager for filter pushdown
+    metadata_indexes: MetadataIndexManager,
 }
 
 /// Builder for VecStore with customizable configuration
@@ -95,6 +113,18 @@ impl VecStoreBuilder {
         self
     }
 
+    /// Enable write-ahead logging for crash recovery
+    ///
+    /// When enabled, all mutations are logged before being applied,
+    /// allowing recovery after crashes. This adds some write overhead
+    /// but provides durability guarantees.
+    ///
+    /// Default: false
+    pub fn wal_enabled(mut self, enabled: bool) -> Self {
+        self.config.wal_enabled = enabled;
+        self
+    }
+
     /// Build the VecStore with the configured settings
     pub fn build(self) -> Result<VecStore> {
         VecStore::open_with_config(self.path, self.config)
@@ -133,14 +163,23 @@ impl VecStore {
             );
         }
 
+        // Initialize WAL if enabled (non-WASM only)
+        #[cfg(not(target_arch = "wasm32"))]
+        let wal = if config.wal_enabled {
+            let wal_path = root.join("vecstore.wal");
+            Some(WriteAheadLog::open(&wal_path).context("Failed to open WAL")?)
+        } else {
+            None
+        };
+
         if layout.exists() {
             // Load existing store
             let (
-                records,
+                mut records,
                 id_to_idx,
                 idx_to_id,
                 next_idx,
-                dimension,
+                mut dimension,
                 loaded_config,
                 text_index_data,
             ) = layout.load_all().context("Failed to load existing store")?;
@@ -149,7 +188,14 @@ impl VecStore {
             let config = loaded_config.unwrap_or(config);
 
             #[cfg(not(target_arch = "wasm32"))]
-            let mut backend = VectorBackend::new(dimension, config.distance)?;
+            let mut backend = {
+                let hnsw_config = hnsw_backend::HnswConfig {
+                    m: config.hnsw_m,
+                    ef_construction: config.hnsw_ef_construction,
+                    max_elements: config.hnsw_max_elements,
+                };
+                VectorBackend::with_config(dimension, config.distance, hnsw_config)?
+            };
             #[cfg(target_arch = "wasm32")]
             let mut backend = VectorBackend::new(dimension);
             backend.set_mappings(id_to_idx, idx_to_id, next_idx);
@@ -167,6 +213,45 @@ impl VecStore {
                 text_index.import_texts(texts);
             }
 
+            // WAL recovery: replay any uncommitted entries
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(ref mut wal_ref) = wal.as_ref().map(|_| ()) {
+                let _ = wal_ref; // suppress unused warning
+                // Replay WAL entries to recover uncommitted changes
+                let wal_path = root.join("vecstore.wal");
+                if wal_path.exists() {
+                    let mut recovery_wal = WriteAheadLog::open(&wal_path)?;
+                    let entries = recovery_wal.replay()?;
+                    for entry in entries {
+                        match entry {
+                            LogEntry::Insert { id, vector } | LogEntry::Update { id, vector } => {
+                                // Update dimension if needed
+                                if dimension == 0 && !vector.is_empty() {
+                                    dimension = vector.len();
+                                }
+                                // Apply to records
+                                let record = Record {
+                                    id: id.clone(),
+                                    vector: vector.clone(),
+                                    metadata: Metadata { fields: HashMap::new() },
+                                    created_at: Utc::now().timestamp(),
+                                    deleted: false,
+                                    deleted_at: None,
+                                    expires_at: None,
+                                };
+                                records.insert(id.clone(), record);
+                                backend.insert(id, &vector)?;
+                            }
+                            LogEntry::Delete { id } => {
+                                records.remove(&id);
+                                let _ = backend.remove(&id);
+                            }
+                            _ => {} // Ignore transaction markers for now
+                        }
+                    }
+                }
+            }
+
             Ok(Self {
                 root,
                 backend,
@@ -175,13 +260,23 @@ impl VecStore {
                 text_index,
                 compaction_config: CompactionConfig::default(),
                 config,
+                #[cfg(not(target_arch = "wasm32"))]
+                wal,
+                metadata_indexes: MetadataIndexManager::new(),
             })
         } else {
             // Create new store - infer dimension from first insert
             layout.ensure_directory()?;
 
             #[cfg(not(target_arch = "wasm32"))]
-            let backend = VectorBackend::new(0, config.distance)?;
+            let backend = {
+                let hnsw_config = hnsw_backend::HnswConfig {
+                    m: config.hnsw_m,
+                    ef_construction: config.hnsw_ef_construction,
+                    max_elements: config.hnsw_max_elements,
+                };
+                VectorBackend::with_config(0, config.distance, hnsw_config)?
+            };
             #[cfg(target_arch = "wasm32")]
             let backend = VectorBackend::new(0);
 
@@ -193,6 +288,9 @@ impl VecStore {
                 text_index: hybrid::TextIndex::new(),
                 compaction_config: CompactionConfig::default(),
                 config,
+                #[cfg(not(target_arch = "wasm32"))]
+                wal,
+                metadata_indexes: MetadataIndexManager::new(),
             })
         }
     }
@@ -211,6 +309,56 @@ impl VecStore {
         &self.config
     }
 
+    // ========================================================================
+    // Metadata Index Management
+    // ========================================================================
+
+    /// Create a metadata index for faster filtered queries
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use vecstore::{VecStore, metadata_index::{IndexConfig, IndexType}};
+    /// # let mut store = VecStore::open("./data")?;
+    /// // Create a BTree index for range queries on price
+    /// store.create_metadata_index("price", IndexConfig {
+    ///     index_type: IndexType::BTree,
+    ///     field: "price".to_string(),
+    /// })?;
+    /// # Ok::<(), anyhow::Error>(())
+    /// ```
+    pub fn create_metadata_index(&mut self, name: &str, config: IndexConfig) -> Result<()> {
+        self.metadata_indexes.create_index(name, config)
+            .map_err(|e| anyhow::anyhow!("Failed to create index: {}", e))
+    }
+
+    /// Drop a metadata index
+    pub fn drop_metadata_index(&mut self, name: &str) -> Result<()> {
+        self.metadata_indexes.drop_index(name)
+            .map_err(|e| anyhow::anyhow!("Failed to drop index: {}", e))
+    }
+
+    /// List all metadata indexes
+    pub fn list_metadata_indexes(&self) -> Vec<String> {
+        self.metadata_indexes.list_indexes()
+    }
+
+    /// Rebuild metadata indexes from existing records
+    ///
+    /// Call this after creating indexes on a store that already has data.
+    pub fn rebuild_metadata_indexes(&mut self) -> Result<usize> {
+        let mut indexed = 0;
+        for record in self.records.values() {
+            if !record.deleted {
+                let _ = self.metadata_indexes.insert(
+                    &record.metadata.fields,
+                    record.id.clone(),
+                );
+                indexed += 1;
+            }
+        }
+        Ok(indexed)
+    }
+
     #[tracing::instrument(skip(self, vector, metadata), fields(dimension = vector.len()))]
     pub fn upsert(&mut self, id: Id, vector: Vec<f32>, metadata: Metadata) -> Result<()> {
         // Validate vector is non-empty (Critical Issue #20 fix)
@@ -225,7 +373,12 @@ impl VecStore {
             self.dimension = vector.len();
             #[cfg(not(target_arch = "wasm32"))]
             {
-                self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
+                let hnsw_config = hnsw_backend::HnswConfig {
+                    m: self.config.hnsw_m,
+                    ef_construction: self.config.hnsw_ef_construction,
+                    max_elements: self.config.hnsw_max_elements,
+                };
+                self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -241,15 +394,35 @@ impl VecStore {
             ));
         }
 
+        // Log to WAL before applying (for crash recovery)
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(ref mut wal) = self.wal {
+            let is_update = self.records.contains_key(&id);
+            let entry = if is_update {
+                LogEntry::Update { id: id.clone(), vector: vector.clone() }
+            } else {
+                LogEntry::Insert { id: id.clone(), vector: vector.clone() }
+            };
+            wal.append(entry)?;
+        }
+
+        // Remove old entry from metadata indexes if updating
+        if let Some(old_record) = self.records.get(&id) {
+            let _ = self.metadata_indexes.remove(&old_record.metadata.fields, &id);
+        }
+
         let record = Record {
             id: id.clone(),
             vector: vector.clone(),
-            metadata,
+            metadata: metadata.clone(),
             created_at: Utc::now().timestamp(),
             deleted: false,
             deleted_at: None,
             expires_at: None,
         };
+
+        // Add to metadata indexes
+        let _ = self.metadata_indexes.insert(&metadata.fields, id.clone());
 
         self.backend.insert(id.clone(), &vector)?;
         self.records.insert(id, record);
@@ -257,7 +430,42 @@ impl VecStore {
         Ok(())
     }
 
+    /// Remove a vector from the store by ID.
+    ///
+    /// # HNSW Ghost Nodes
+    ///
+    /// **Important**: This operation removes the vector from the record store and metadata
+    /// indexes, but creates a "ghost node" in the HNSW graph. The underlying `hnsw_rs` library
+    /// does not support true node deletion - the vector's slot remains allocated in the graph
+    /// but is no longer reachable by ID lookup.
+    ///
+    /// Ghost nodes have the following implications:
+    /// - **Memory**: Ghost nodes continue to occupy memory in the HNSW graph
+    /// - **Search**: Ghost nodes are excluded from search results (filtered by ID mapping)
+    /// - **Performance**: Excessive ghost nodes can degrade search performance over time
+    ///
+    /// To reclaim memory and rebuild a clean graph, call [`optimize()`](Self::optimize) which
+    /// creates a fresh HNSW index with only active vectors.
+    ///
+    /// For workloads with frequent deletions, consider using [`soft_delete()`](Self::soft_delete)
+    /// with periodic [`compact()`](Self::compact) instead.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the ID does not exist in the store.
     pub fn remove(&mut self, id: &str) -> Result<()> {
+        // Log to WAL before applying (for crash recovery)
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(ref mut wal) = self.wal {
+            wal.append(LogEntry::Delete { id: id.to_string() })?;
+        }
+
+        // Remove from metadata indexes before removing record
+        if let Some(record) = self.records.get(id) {
+            let _ = self.metadata_indexes.remove(&record.metadata.fields, id);
+        }
+
+        // Note: This creates a ghost node in HNSW - see docstring above
         self.backend.remove(id)?;
         self.records
             .remove(id)
@@ -305,7 +513,12 @@ impl VecStore {
                 self.dimension = first.vector.len();
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
+                    let hnsw_config = hnsw_backend::HnswConfig {
+                        m: self.config.hnsw_m,
+                        ef_construction: self.config.hnsw_ef_construction,
+                        max_elements: self.config.hnsw_max_elements,
+                    };
+                    self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
                 }
                 #[cfg(target_arch = "wasm32")]
                 {
@@ -565,7 +778,7 @@ impl VecStore {
         Ok(results)
     }
 
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         let layout = disk::DiskLayout::new(&self.root);
 
         // Export text index if any texts are indexed (Major Issue #6 fix)
@@ -589,6 +802,14 @@ impl VecStore {
         // Save HNSW index
         if self.dimension > 0 {
             self.backend.save_index(&layout.hnsw_path())?;
+        }
+
+        // Checkpoint and truncate WAL after successful save
+        // The main store is now durable, so WAL entries can be discarded
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(ref mut wal) = self.wal {
+            wal.checkpoint()?;
+            wal.truncate()?;
         }
 
         Ok(())
@@ -996,6 +1217,12 @@ impl VecStore {
     pub fn soft_delete(&mut self, id: &str) -> Result<bool> {
         if let Some(record) = self.records.get_mut(id) {
             if !record.deleted {
+                // Log to WAL before applying (for crash recovery)
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(ref mut wal) = self.wal {
+                    wal.append(LogEntry::SoftDelete { id: id.to_string() })?;
+                }
+
                 record.deleted = true;
                 record.deleted_at = Some(Utc::now().timestamp());
                 return Ok(true);
@@ -1015,6 +1242,12 @@ impl VecStore {
     pub fn restore(&mut self, id: &str) -> Result<bool> {
         if let Some(record) = self.records.get_mut(id) {
             if record.deleted {
+                // Log to WAL before applying (for crash recovery)
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(ref mut wal) = self.wal {
+                    wal.append(LogEntry::Restore { id: id.to_string() })?;
+                }
+
                 record.deleted = false;
                 record.deleted_at = None;
                 return Ok(true);
@@ -1481,7 +1714,12 @@ impl VecStore {
             self.dimension = vector.len();
             #[cfg(not(target_arch = "wasm32"))]
             {
-                self.backend = VectorBackend::new(self.dimension, self.config.distance)?;
+                let hnsw_config = hnsw_backend::HnswConfig {
+                    m: self.config.hnsw_m,
+                    ef_construction: self.config.hnsw_ef_construction,
+                    max_elements: self.config.hnsw_max_elements,
+                };
+                self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
             }
             #[cfg(target_arch = "wasm32")]
             {
