@@ -26,6 +26,12 @@ LangChain integration:
     ... )
     >>> results = store.similarity_search_by_vector([0.1, 0.2, 0.3], k=5)
 
+With built-in embeddings (requires sentence-transformers):
+    >>> from vecstore import VecStoreWithEmbeddings
+    >>> store = VecStoreWithEmbeddings("./my_db")
+    >>> store.add_texts(["Hello world", "Machine learning"])
+    >>> results = store.search("AI", k=5)
+
 Text splitting:
     >>> from vecstore import RecursiveCharacterTextSplitter
     >>> splitter = RecursiveCharacterTextSplitter(500, 50)
@@ -47,6 +53,15 @@ from .vecstore import (
     LangChainVectorStore,
 )
 
+# Import embedding support (optional dependency)
+from .embeddings import (
+    EmbeddingModel,
+    VecStoreWithEmbeddings,
+    LangChainVectorStoreWithEmbeddings,
+    is_embedding_available,
+    create_store,
+)
+
 __version__ = "0.0.2"
 
 __all__ = [
@@ -62,4 +77,10 @@ __all__ = [
     "Document",
     "ScoredDocument",
     "LangChainVectorStore",
+    # Embedding support (optional)
+    "EmbeddingModel",
+    "VecStoreWithEmbeddings",
+    "LangChainVectorStoreWithEmbeddings",
+    "is_embedding_available",
+    "create_store",
 ]

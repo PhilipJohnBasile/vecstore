@@ -10,6 +10,12 @@ High-performance vector database with RAG toolkit for Python, powered by Rust.
 pip install vecstore-rs
 ```
 
+With built-in embedding support (sentence-transformers):
+
+```bash
+pip install vecstore-rs[embeddings]
+```
+
 **Note:** The package is published as `vecstore-rs` on PyPI, but imports as `vecstore` in Python.
 
 ## Quick Start
@@ -67,7 +73,44 @@ for doc in results:
     print(f"Score: {doc.score}")
 ```
 
-### With Your Embedding Model
+## Built-in Embeddings
+
+VecStore includes optional built-in embedding support via sentence-transformers. No need to manage embeddings manually:
+
+```bash
+pip install vecstore-rs[embeddings]
+```
+
+```python
+from vecstore import VecStoreWithEmbeddings
+
+# Create store with automatic embedding generation
+store = VecStoreWithEmbeddings("./my_db", model_name="all-MiniLM-L6-v2")
+
+# Add texts - embeddings generated automatically
+store.add_texts(
+    texts=["Hello world", "Machine learning is great", "AI revolution"],
+    metadatas=[{"source": "a"}, {"source": "b"}, {"source": "c"}]
+)
+
+# Search by text - query embedded automatically
+results = store.search("artificial intelligence", k=5)
+for doc in results:
+    print(f"{doc.document.page_content} (score: {doc.score:.3f})")
+```
+
+### Supported Models
+
+Any model from [sentence-transformers](https://www.sbert.net/docs/pretrained_models.html):
+
+| Model | Dimensions | Speed | Quality | Use Case |
+|-------|------------|-------|---------|----------|
+| `all-MiniLM-L6-v2` (default) | 384 | Fast | Good | General purpose |
+| `all-mpnet-base-v2` | 768 | Medium | High | Best quality |
+| `multi-qa-MiniLM-L6-cos-v1` | 384 | Fast | Good | Q&A optimized |
+| `paraphrase-multilingual-MiniLM-L12-v2` | 384 | Fast | Good | Multilingual |
+
+### With Custom Embedding Model
 
 ```python
 from vecstore import LangChainVectorStore
@@ -90,6 +133,7 @@ results = store.similarity_search_by_vector(query_embedding, k=3)
 ## Features
 
 - **Fast**: Rust core avoids Python hot loops for distance calculations
+- **Built-in Embeddings**: Optional sentence-transformers integration
 - **Complete RAG Toolkit**: Text splitting, reranking, evaluation
 - **LangChain Compatible**: Native Document and VectorStore classes
 - **Operational Features**: Persistence, namespaces, server mode
