@@ -456,7 +456,6 @@ impl TimeTravelIndex {
         let mut ts_idx = self.timestamp_index.write().unwrap();
 
         let mut versions_removed = 0;
-        let mut vectors_removed = 0;
 
         // Prune old versions
         for history in histories.values_mut() {
@@ -468,7 +467,7 @@ impl TimeTravelIndex {
         // Remove empty histories (deleted with all versions pruned)
         let before = histories.len();
         histories.retain(|_, h| !h.versions.is_empty());
-        vectors_removed = before - histories.len();
+        let vectors_removed = before - histories.len();
 
         // Clean timestamp index
         ts_idx.retain(|ts, _| *ts >= cutoff);

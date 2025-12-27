@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025 VecStore Contributors
 
+// Allow dead code for comprehensive library with many optional features
+#![allow(dead_code)]
+
 //! # vecstore
 //!
 //! Embeddable vector database with HNSW indexing, metadata-aware filtering, and optional

@@ -264,7 +264,7 @@ impl LeaderState {
 
 /// Pending proposal
 #[derive(Debug, Clone)]
-struct PendingProposal {
+pub struct PendingProposal {
     index: u64,
     term: u64,
     data: Vec<u8>,

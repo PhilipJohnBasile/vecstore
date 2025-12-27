@@ -72,7 +72,7 @@ pub enum Operation {
 
 /// WAL entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct WalEntry {
+pub struct WalEntry {
     sequence: u64,
     timestamp: u64,
     operation: Operation,
