@@ -295,6 +295,15 @@ pub mod discovery;          // Discovery API (vector-space exploration)
 pub mod change_streams;     // Change Streams (real-time subscriptions)
 pub mod gpu_indexing;       // GPU Index Building (10x faster ingestion)
 
+// 2026 Competitive Features - Phase 5 (Production Readiness)
+pub mod otel;            // OpenTelemetry OTLP Export (distributed tracing)
+pub mod query_explain;   // Visual Query Explain (EXPLAIN ANALYZE)
+pub mod adaptive_cache;  // Multi-Tier Adaptive Cache (L1/L2/L3)
+pub mod backpressure;    // Streaming Backpressure (flow control)
+pub mod rest_api;        // REST API with OpenAPI (spec generation)
+pub mod raft_consensus;  // Production Raft Consensus (leader election)
+pub mod sdk_gen;         // Multi-Language SDK Generation (TS/Python/Go)
+
 #[cfg(feature = "async")]
 pub mod kafka_connector;
 
@@ -657,6 +666,40 @@ pub use gpu_indexing::{
     BuildStats, GpuBackendType, GpuConfig as GpuIndexConfig, GpuDeviceInfo as GpuIndexDeviceInfo,
     GpuDistanceMetric, GpuHnswIndex, GpuIndexBuilder, GpuIndexStats,
     HnswParams as GpuHnswParams, MemoryPoolStats,
+};
+
+// Export 2026 Competitive Features - Phase 5 (Production Readiness)
+pub use otel::{
+    BatchConfig as OtelBatchConfig, ExporterType, MetricPoint as OtelMetricPoint,
+    MetricType as OtelMetricType, OtelConfig, OtlpExportData, OtlpSpan, SamplingStrategy,
+    Span as OtelSpan, SpanAttribute, SpanEvent, SpanKind, SpanStatus, TelemetryProvider,
+    TraceContext, VecStoreMetrics,
+};
+pub use query_explain::{
+    ExecutionStats, ExplainFormat, ExplainOptions, ExplainResult, IndexStats as ExplainIndexStats,
+    OptimizationSuggestion, PlanNode, PlanNodeType, QueryExplainer, SuggestionType,
+};
+pub use adaptive_cache::{
+    AdaptiveCache, BloomFilter, CacheConfig as AdaptiveCacheConfig, CacheEntry,
+    CacheKeyGenerator, CacheStats as AdaptiveCacheStats, CachedResult, TierStats,
+};
+pub use backpressure::{
+    BackpressureController, BackpressureState, BatchProcessor, Checkpoint,
+    DeadLetterRecord, LagMetrics, StreamConfig as BackpressureStreamConfig, StreamRecord,
+    StreamStats,
+};
+pub use rest_api::{
+    ApiInfo, ApiRateLimiter, HttpMethod, OpenApiGenerator, Request as RestRequest,
+    Response as RestResponse, RestConfig, Route as RestRoute, Router as RestRouter,
+};
+pub use raft_consensus::{
+    AppendEntriesRequest, AppendEntriesResponse, ClusterStatus, EntryType, InstallSnapshotRequest,
+    LeaderState, LogEntry, PersistentState, RaftConfig, RaftError, RaftNode, RaftState,
+    SnapshotMetadata, VolatileState, VoteRequest, VoteResponse,
+};
+pub use sdk_gen::{
+    FieldDef as SdkFieldDef, FieldType as SdkFieldType, Language as SdkLanguage, MethodDef,
+    ParamDef, ParamLocation, SdkGenerator, TypeDef,
 };
 
 /// Initialize tracing subscriber for logging
