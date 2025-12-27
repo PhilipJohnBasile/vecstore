@@ -2,6 +2,7 @@
 name = "vecstore"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.92"
 license = "Apache-2.0"
 description = "The Explainable Vector Database - embeddable, privacy-first with HNSW, DiskANN, GPU acceleration, and enterprise features"
 repository = "https://github.com/PhilipJohnBasile/vecstore"

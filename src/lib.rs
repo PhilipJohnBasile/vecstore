@@ -312,6 +312,13 @@ pub mod ab_testing;        // A/B Testing Framework (experiments, variants)
 pub mod incremental_index; // Incremental Index Updates (delta indexes, WAL)
 pub mod federation;        // Federation (cross-store queries, multi-cluster)
 
+// 2026 Competitive Features - Phase 7 (Advanced Analytics & ML)
+pub mod neural_ranker;     // Neural Ranker (cross-encoder, late interaction, SPLADE)
+pub mod auto_tuning;       // Auto-Tuning Engine (Bayesian optimization, hyperparameter search)
+pub mod anomaly_detection; // Anomaly Detection (isolation forest, LOF, drift monitoring)
+pub mod query_analytics;   // Query Analytics Dashboard (performance insights, trends)
+pub mod cost_optimizer;    // Cost Optimizer (resource right-sizing, auto-scaling)
+
 #[cfg(feature = "async")]
 pub mod kafka_connector;
 
@@ -747,6 +754,49 @@ pub use federation::{
     FederatedQuery, FederatedQueryResult, FederatedResult, Federation, FederationBuilder,
     FederationConfig, FederationMember, FederationStatus, MemberCapabilities, MemberHealth,
     MemberStatus, MemberType, MergeStrategy,
+};
+
+// Phase 7 exports
+pub use neural_ranker::{
+    ActivationFn, CombinationMethod, CrossEncoder, CrossEncoderConfig, EnsembleConfig,
+    EnsembleRanker, LateInteractionConfig, LateInteractionModel, LearnedSparseConfig,
+    LearnedSparseModel, ModelType as NeuralModelType, NeuralRanker, NeuralRankerBuilder,
+    NeuralRankerConfig, RankerStatsSummary, Ranker as NeuralRankerTrait, RerankCandidate,
+    RerankResponse, RerankResult, SimilarityFn, SparseRepresentation,
+};
+pub use auto_tuning::{
+    AcquisitionFunction, AutoTuneConfig, AutoTuner as HyperparameterTuner,
+    AutoTunerBuilder as HyperparameterTunerBuilder, Constraint as TuneConstraint,
+    ConstraintType as TuneConstraintType, IndexTuningPreset, OptimizeDirection,
+    Parameter as TuneParameter, ParameterSpace, ParameterType as TuneParameterType,
+    ParameterValue, SearchStrategy, Trial, TrialState, TuneMetric, TuneResult,
+    TunerStatsSummary, WorkloadAnalyzer as TuneWorkloadAnalyzer, WorkloadConfig as TuneWorkloadConfig,
+    WorkloadRecommendation as TuneWorkloadRecommendation,
+    hnsw_parameter_space, ivf_parameter_space,
+};
+pub use anomaly_detection::{
+    AnomalyConfig, AnomalyDetector as VectorAnomalyDetector,
+    AnomalyDetectorBuilder as VectorAnomalyDetectorBuilder, AnomalyRecord, AnomalyType,
+    BatchDetectionResult, DetectionMethod, DetectionResult, DetectionStats, DetectionSummary,
+    DriftConfig, DriftDetector, DriftEvent, DriftMethod, DriftSeverity,
+};
+pub use query_analytics::{
+    AggregateStats as AnalyticsAggregateStats, Alert as AnalyticsAlert,
+    AlertSeverity as AnalyticsAlertSeverity, AnalyticsConfig as QueryAnalyticsConfig,
+    CollectionStats as AnalyticsCollectionStats, DashboardData, DashboardSummary, ErrorInfo,
+    ErrorSummary, EventType, Impact as AnalyticsImpact, LatencyHistogram,
+    Metrics as AnalyticsMetrics, QueryAnalytics, QueryAnalyticsBuilder, QueryEvent, QueryPatterns,
+    QueryRecommender, QuerySummary, Recommendation as AnalyticsRecommendation,
+    RecommendationCategory, ReportConfig, ReportFormat, TimeRange, TimeSeriesPoint, TrendData,
+    TrendDirection as AnalyticsTrendDirection,
+};
+pub use cost_optimizer::{
+    AutoScalerConfig, BudgetStatus, CostAnalysis, CostAwareAutoScaler,
+    CostBreakdown as CostOptimizerBreakdown, CostForecast, CostOptimizer, CostOptimizerBuilder,
+    CostOptimizerConfig, CostPeriod, CostRecommendation, CostRecord, CostTrend, EffortLevel,
+    OptimizationAction, OptimizationCategory, OptimizerStatsSummary, RecommendationStatus,
+    ResourcePricing, ResourceUsage as CostResourceUsage, RiskLevel, ScaleAction, ScalingDecision,
+    TrendDirection as CostTrendDirection,
 };
 
 /// Initialize tracing subscriber for logging
