@@ -283,6 +283,18 @@ pub mod zero_copy;       // LanceDB-style versioning
 pub mod dynamic_schema;  // Runtime schema flexibility
 pub mod embedded_onnx;   // Chroma-style local embeddings
 
+// 2026 Competitive Features - Phase 4 (Market Leadership)
+pub mod agentic;            // Agentic Query Framework (multi-step retrieval)
+pub mod object_store;       // Object Storage Backend (S3/GCS, 100x cost reduction)
+pub mod hybrid_rerank;      // Hybrid Reranking Pipeline (dense+sparse+BM25)
+pub mod managed_embeddings; // Managed Embedding Service (pay-as-you-go)
+pub mod advanced_quant;     // Advanced Quantization (1.5-bit, 2-bit, asymmetric)
+pub mod multimodal_search;  // Multimodal Search (text↔image↔video)
+pub mod enterprise_protect; // Enterprise Protection (CMEK, backup/restore)
+pub mod discovery;          // Discovery API (vector-space exploration)
+pub mod change_streams;     // Change Streams (real-time subscriptions)
+pub mod gpu_indexing;       // GPU Index Building (10x faster ingestion)
+
 #[cfg(feature = "async")]
 pub mod kafka_connector;
 
@@ -596,6 +608,55 @@ pub use dynamic_schema::{
 };
 pub use embedded_onnx::{
     EmbeddedStore, EmbeddingFunction, EmbeddingModel, ModelConfig, ModelType,
+};
+
+// Export 2026 Competitive Features - Phase 4 (Market Leadership)
+pub use agentic::{
+    AgentConfig, AgentExecutor, AgentExecutionResult, AgentState, AgentStats,
+    DecompositionStrategy, FusedResult, FusionStrategy as AgenticFusionStrategy,
+    QueryPlan as AgenticQueryPlan, QueryPlanner, SubQuery, ToolCall, ToolDefinition, ToolResult,
+};
+pub use object_store::{
+    CacheStats, CacheTier, CostEstimate, ObjectMetadata, ObjectStoreBackend, ObjectStoreConfig,
+    ObjectStoreStats, PreWarmingConfig, PreWarmStrategy, StorageProvider, StoredVector,
+    TieredStorageManager, TieredStorageStats,
+};
+pub use hybrid_rerank::{
+    BooleanQuery, FusionMethod, HybridConfig, HybridDocument, HybridPipeline, HybridResult,
+    HybridSearchQuery, PipelineStats, RerankerConfig, RerankerType, ScoreExplanation,
+    SignalType, SparseQueryVector,
+};
+pub use managed_embeddings::{
+    EmbeddingCollection, EmbeddingProvider as ManagedEmbeddingProvider, EmbeddingRequest,
+    EmbeddingResponse, EmbeddingService, EmbeddingServiceConfig,
+    ModelConfig as EmbeddingModelConfig, QueryResult as EmbeddingQueryResult, TaskType, UsageStats,
+};
+pub use advanced_quant::{
+    AdaptiveQuantizer, AsymmetricQuantizer, BinaryQuantizer as AdvancedBinaryQuantizer,
+    BitWidth, FourBitQuantizer, QuantConfig, QuantizedIndex, QuantizedIndexStats,
+    QuantizedVector, QuantParams, QuantStrategy, TernaryQuantizer, TwoBitQuantizer,
+};
+pub use multimodal_search::{
+    Modality as SearchModality, MultimodalConfig, MultimodalDocument, MultimodalIndex,
+    MultimodalQuery, MultimodalResult, MultimodalStats,
+};
+pub use enterprise_protect::{
+    BackupConfig, BackupManager, BackupMetadata, BackupStats, CMEKConfig, ComplianceChecker,
+    ComplianceFramework, ComplianceStatus, ComplianceSummary, EncryptedData, EncryptionManager,
+    EnterpriseConfig, KMSProvider, KeyRotationResult, RetentionAction, RetentionPolicy,
+};
+pub use discovery::{
+    DiscoveryConfig, DiscoveryIndex, DiscoveryMode, DiscoveryQuery, DiscoveryResult,
+    DiscoveryStats, ExplorationResult, Region,
+};
+pub use change_streams::{
+    ChangeEvent, ChangeFilter, ChangeMetadata, ChangeSource, ChangeStream, ChangeStreamManager,
+    ChangeStreamStats, DocumentSnapshot, Operation, ResumeToken, Subscription,
+};
+pub use gpu_indexing::{
+    BuildStats, GpuBackendType, GpuConfig as GpuIndexConfig, GpuDeviceInfo as GpuIndexDeviceInfo,
+    GpuDistanceMetric, GpuHnswIndex, GpuIndexBuilder, GpuIndexStats,
+    HnswParams as GpuHnswParams, MemoryPoolStats,
 };
 
 /// Initialize tracing subscriber for logging

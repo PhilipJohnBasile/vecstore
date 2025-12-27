@@ -150,6 +150,26 @@ pub enum VecStoreError {
     /// Other errors
     #[error("Error: {0}")]
     Other(String),
+
+    /// GPU acceleration errors
+    #[error("GPU error: {0}")]
+    GpuError(String),
+
+    /// Encryption/decryption errors
+    #[error("Encryption error: {0}")]
+    EncryptionError(String),
+
+    /// Backup/restore errors
+    #[error("Backup error: {0}")]
+    BackupError(String),
+
+    /// Embedding service errors
+    #[error("Embedding service error: {0}")]
+    EmbeddingError(String),
+
+    /// Object storage errors
+    #[error("Object storage error: {0}")]
+    ObjectStoreError(String),
 }
 
 // Implement conversions from various error types
