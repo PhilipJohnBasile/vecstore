@@ -388,52 +388,65 @@ impl AdaptiveCache {
 
         // Quick bloom filter check
         if !self.bloom.might_contain(key) {
-            self.l1_stats.write().unwrap().misses += 1;
+            if let Ok(mut stats) = self.l1_stats.write() {
+                stats.misses += 1;
+            }
             return None;
         }
 
         // Check L1 (hot)
         {
-            let mut l1 = self.l1.write().unwrap();
-            if let Some(entry) = l1.get_mut(key) {
-                if !entry.is_expired(Duration::from_secs(self.config.l1_ttl_seconds)) {
-                    entry.touch();
-                    self.l1_stats.write().unwrap().hits += 1;
-                    return Some(entry.value.clone());
-                } else {
-                    l1.remove(key);
+            if let Ok(mut l1) = self.l1.write() {
+                if let Some(entry) = l1.get_mut(key) {
+                    if !entry.is_expired(Duration::from_secs(self.config.l1_ttl_seconds)) {
+                        entry.touch();
+                        if let Ok(mut stats) = self.l1_stats.write() {
+                            stats.hits += 1;
+                        }
+                        return Some(entry.value.clone());
+                    } else {
+                        l1.remove(key);
+                    }
                 }
             }
         }
 
         // Check L2 (warm) and promote to L1
         {
-            let mut l2 = self.l2.write().unwrap();
-            if let Some(entry) = l2.remove(key) {
-                if !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds)) {
-                    self.l2_stats.write().unwrap().hits += 1;
-                    let value = entry.value.clone();
-                    self.promote_to_l1(key, entry);
-                    return Some(value);
+            if let Ok(mut l2) = self.l2.write() {
+                if let Some(entry) = l2.remove(key) {
+                    if !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds)) {
+                        if let Ok(mut stats) = self.l2_stats.write() {
+                            stats.hits += 1;
+                        }
+                        let value = entry.value.clone();
+                        let _ = self.promote_to_l1(key, entry);
+                        return Some(value);
+                    }
                 }
             }
         }
 
         // Check L3 (disk) and promote to L2
         if self.config.enable_l3 {
-            let mut l3 = self.l3.write().unwrap();
-            if let Some(entry) = l3.remove(key) {
-                if !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds)) {
-                    self.l3_stats.write().unwrap().hits += 1;
-                    let value = entry.value.clone();
-                    self.promote_to_l2(key, entry);
-                    return Some(value);
+            if let Ok(mut l3) = self.l3.write() {
+                if let Some(entry) = l3.remove(key) {
+                    if !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds)) {
+                        if let Ok(mut stats) = self.l3_stats.write() {
+                            stats.hits += 1;
+                        }
+                        let value = entry.value.clone();
+                        let _ = self.promote_to_l2(key, entry);
+                        return Some(value);
+                    }
                 }
             }
         }
 
         // Miss
-        self.l1_stats.write().unwrap().misses += 1;
+        if let Ok(mut stats) = self.l1_stats.write() {
+            stats.misses += 1;
+        }
         None
     }
 
@@ -449,12 +462,14 @@ impl AdaptiveCache {
         }
 
         // Try semantic matching in L1
-        let l1 = self.l1.read().unwrap();
+        let l1 = self.l1.read().ok()?;
         for (_, entry) in l1.iter() {
             if let Some(ref cached_vector) = entry.query_vector {
                 let similarity = cosine_similarity(query_vector, cached_vector);
                 if similarity >= self.config.similarity_threshold {
-                    self.l1_stats.write().unwrap().hits += 1;
+                    if let Ok(mut stats) = self.l1_stats.write() {
+                        stats.hits += 1;
+                    }
                     return Some(entry.value.clone());
                 }
             }
@@ -486,19 +501,22 @@ impl AdaptiveCache {
 
         // Record for prefetching
         if self.config.enable_prefetch {
-            let mut prefetch = self.prefetch.write().unwrap();
-            prefetch.record(key, query_vector);
+            if let Ok(mut prefetch) = self.prefetch.write() {
+                prefetch.record(key, query_vector);
+            }
         }
 
         // Evict if necessary and insert into L1
-        self.evict_l1_if_needed();
+        let _ = self.evict_l1_if_needed();
 
-        let mut l1 = self.l1.write().unwrap();
-        l1.insert(key.to_string(), entry);
+        if let Ok(mut l1) = self.l1.write() {
+            l1.insert(key.to_string(), entry);
 
-        let mut stats = self.l1_stats.write().unwrap();
-        stats.entries = l1.len();
-        stats.size_bytes += size_bytes;
+            if let Ok(mut stats) = self.l1_stats.write() {
+                stats.entries = l1.len();
+                stats.size_bytes += size_bytes;
+            }
+        }
     }
 
     /// Warm cache with prefetch
@@ -517,62 +535,91 @@ impl AdaptiveCache {
 
         self.bloom.add(key);
 
-        let mut l2 = self.l2.write().unwrap();
-        l2.insert(key.to_string(), entry);
+        if let Ok(mut l2) = self.l2.write() {
+            l2.insert(key.to_string(), entry);
+        }
     }
 
     /// Invalidate cache entry
     pub fn invalidate(&self, key: &str) {
-        self.l1.write().unwrap().remove(key);
-        self.l2.write().unwrap().remove(key);
-        self.l3.write().unwrap().remove(key);
+        if let Ok(mut l1) = self.l1.write() {
+            l1.remove(key);
+        }
+        if let Ok(mut l2) = self.l2.write() {
+            l2.remove(key);
+        }
+        if let Ok(mut l3) = self.l3.write() {
+            l3.remove(key);
+        }
     }
 
     /// Clear all caches
     pub fn clear(&self) {
-        self.l1.write().unwrap().clear();
-        self.l2.write().unwrap().clear();
-        self.l3.write().unwrap().clear();
+        if let Ok(mut l1) = self.l1.write() {
+            l1.clear();
+        }
+        if let Ok(mut l2) = self.l2.write() {
+            l2.clear();
+        }
+        if let Ok(mut l3) = self.l3.write() {
+            l3.clear();
+        }
         self.bloom.clear();
 
-        *self.l1_stats.write().unwrap() = TierStats::default();
-        *self.l2_stats.write().unwrap() = TierStats::default();
-        *self.l3_stats.write().unwrap() = TierStats::default();
+        if let Ok(mut stats) = self.l1_stats.write() {
+            *stats = TierStats::default();
+        }
+        if let Ok(mut stats) = self.l2_stats.write() {
+            *stats = TierStats::default();
+        }
+        if let Ok(mut stats) = self.l3_stats.write() {
+            *stats = TierStats::default();
+        }
     }
 
     /// Get cache statistics
     pub fn stats(&self) -> CacheStats {
         CacheStats {
-            l1: self.l1_stats.read().unwrap().clone(),
-            l2: self.l2_stats.read().unwrap().clone(),
-            l3: self.l3_stats.read().unwrap().clone(),
+            l1: self.l1_stats.read().map(|s| s.clone()).unwrap_or_default(),
+            l2: self.l2_stats.read().map(|s| s.clone()).unwrap_or_default(),
+            l3: self.l3_stats.read().map(|s| s.clone()).unwrap_or_default(),
             total_operations: self.total_ops.load(Ordering::Relaxed),
         }
     }
 
     /// Get frequent query patterns for prefetching
     pub fn get_prefetch_candidates(&self) -> Vec<String> {
-        self.prefetch.read().unwrap().get_frequent_patterns()
+        self.prefetch.read().map(|p| p.get_frequent_patterns()).unwrap_or_default()
     }
 
-    fn promote_to_l1(&self, key: &str, mut entry: CacheEntry<CachedResult>) {
+    fn promote_to_l1(&self, key: &str, mut entry: CacheEntry<CachedResult>) -> bool {
         entry.touch();
-        self.evict_l1_if_needed();
+        let _ = self.evict_l1_if_needed();
 
-        let mut l1 = self.l1.write().unwrap();
-        l1.insert(key.to_string(), entry);
+        if let Ok(mut l1) = self.l1.write() {
+            l1.insert(key.to_string(), entry);
+            true
+        } else {
+            false
+        }
     }
 
-    fn promote_to_l2(&self, key: &str, mut entry: CacheEntry<CachedResult>) {
+    fn promote_to_l2(&self, key: &str, mut entry: CacheEntry<CachedResult>) -> bool {
         entry.touch();
-        self.evict_l2_if_needed();
+        let _ = self.evict_l2_if_needed();
 
-        let mut l2 = self.l2.write().unwrap();
-        l2.insert(key.to_string(), entry);
+        if let Ok(mut l2) = self.l2.write() {
+            l2.insert(key.to_string(), entry);
+            true
+        } else {
+            false
+        }
     }
 
-    fn evict_l1_if_needed(&self) {
-        let mut l1 = self.l1.write().unwrap();
+    fn evict_l1_if_needed(&self) -> bool {
+        let Ok(mut l1) = self.l1.write() else {
+            return false;
+        };
 
         while l1.len() >= self.config.l1_size {
             // Find LRU entry
@@ -583,17 +630,22 @@ impl AdaptiveCache {
             if let Some(key) = lru_key {
                 if let Some(entry) = l1.remove(&key) {
                     // Demote to L2
-                    self.demote_to_l2(&key, entry);
-                    self.l1_stats.write().unwrap().evictions += 1;
+                    let _ = self.demote_to_l2(&key, entry);
+                    if let Ok(mut stats) = self.l1_stats.write() {
+                        stats.evictions += 1;
+                    }
                 }
             } else {
                 break;
             }
         }
+        true
     }
 
-    fn evict_l2_if_needed(&self) {
-        let mut l2 = self.l2.write().unwrap();
+    fn evict_l2_if_needed(&self) -> bool {
+        let Ok(mut l2) = self.l2.write() else {
+            return false;
+        };
 
         while l2.len() >= self.config.l2_size {
             let lru_key = l2.iter()
@@ -603,27 +655,38 @@ impl AdaptiveCache {
             if let Some(key) = lru_key {
                 if let Some(entry) = l2.remove(&key) {
                     if self.config.enable_l3 {
-                        self.demote_to_l3(&key, entry);
+                        let _ = self.demote_to_l3(&key, entry);
                     }
-                    self.l2_stats.write().unwrap().evictions += 1;
+                    if let Ok(mut stats) = self.l2_stats.write() {
+                        stats.evictions += 1;
+                    }
                 }
             } else {
                 break;
             }
         }
+        true
     }
 
-    fn demote_to_l2(&self, key: &str, entry: CacheEntry<CachedResult>) {
-        self.evict_l2_if_needed();
+    fn demote_to_l2(&self, key: &str, entry: CacheEntry<CachedResult>) -> bool {
+        let _ = self.evict_l2_if_needed();
 
-        let mut l2 = self.l2.write().unwrap();
-        l2.insert(key.to_string(), entry);
+        if let Ok(mut l2) = self.l2.write() {
+            l2.insert(key.to_string(), entry);
+            true
+        } else {
+            false
+        }
     }
 
-    fn demote_to_l3(&self, key: &str, entry: CacheEntry<CachedResult>) {
+    fn demote_to_l3(&self, key: &str, entry: CacheEntry<CachedResult>) -> bool {
         // In production, this would write to disk
-        let mut l3 = self.l3.write().unwrap();
-        l3.insert(key.to_string(), entry);
+        if let Ok(mut l3) = self.l3.write() {
+            l3.insert(key.to_string(), entry);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -781,7 +844,7 @@ mod tests {
         }
 
         // L1 should have at most 3 entries
-        assert!(cache.l1.read().unwrap().len() <= 3);
+        assert!(cache.l1.read().map(|l| l.len()).unwrap_or(0) <= 3);
     }
 
     #[test]

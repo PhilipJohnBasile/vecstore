@@ -11,8 +11,8 @@ use vecstore::{FilterExpr, Metadata, Query, Record, VecDatabase, VecStore};
 
 #[derive(Parser)]
 #[command(name = "vecstore")]
-#[command(version = "0.0.1")]
-#[command(about = "Embedded vector database CLI (alpha)", long_about = None)]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(about = "Embedded vector database CLI", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

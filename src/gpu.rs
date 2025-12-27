@@ -14,11 +14,11 @@
 //!
 //! ```toml
 //! [dependencies]
-//! vecstore = { version = "0.0.1", features = ["cuda"] }  # NVIDIA
+//! vecstore = { version = "0.1.0", features = ["cuda"] }  # NVIDIA
 //! # or
-//! vecstore = { version = "0.0.1", features = ["metal"] }  # Apple Silicon
+//! vecstore = { version = "0.1.0", features = ["metal"] }  # Apple Silicon
 //! # or
-//! vecstore = { version = "0.0.1", features = ["webgpu"] }  # Cross-platform
+//! vecstore = { version = "0.1.0", features = ["webgpu"] }  # Cross-platform
 //! ```
 //!
 //! ## Performance Expectations (with full implementation)

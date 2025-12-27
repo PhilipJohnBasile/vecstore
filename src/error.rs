@@ -298,6 +298,11 @@ impl VecStoreError {
         VecStoreError::ConcurrentAccess(msg.into())
     }
 
+    /// Create a lock error
+    pub fn lock_error(msg: impl Into<String>) -> Self {
+        VecStoreError::LockError(msg.into())
+    }
+
     /// Create a feature not enabled error
     pub fn feature_not_enabled(feature: impl Into<String>) -> Self {
         VecStoreError::FeatureNotEnabled {

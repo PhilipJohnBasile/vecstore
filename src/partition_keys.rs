@@ -198,19 +198,19 @@ impl Partition {
         }
 
         let is_new = {
-            let mut vectors = self.vectors.write().unwrap();
+            let mut vectors = self.vectors.write()?;
             let is_new = !vectors.contains_key(id);
             vectors.insert(id.to_string(), vector);
             is_new
         };
 
         if let Some(meta) = metadata {
-            self.vector_metadata.write().unwrap().insert(id.to_string(), meta);
+            self.vector_metadata.write()?.insert(id.to_string(), meta);
         }
 
         // Update partition metadata
         {
-            let mut meta = self.meta.write().unwrap();
+            let mut meta = self.meta.write()?;
             meta.last_accessed = unix_timestamp();
             if is_new {
                 meta.vector_count += 1;
@@ -223,13 +223,13 @@ impl Partition {
     /// Delete a vector (soft delete)
     pub fn delete(&self, id: &str) -> Result<bool> {
         let existed = {
-            let mut vectors = self.vectors.write().unwrap();
+            let mut vectors = self.vectors.write()?;
             vectors.remove(id).is_some()
         };
 
         if existed {
-            self.vector_metadata.write().unwrap().remove(id);
-            let mut meta = self.meta.write().unwrap();
+            self.vector_metadata.write()?.remove(id);
+            let mut meta = self.meta.write()?;
             meta.vector_count = meta.vector_count.saturating_sub(1);
             meta.deleted_count += 1;
         }
@@ -239,16 +239,18 @@ impl Partition {
 
     /// Get a vector
     pub fn get(&self, id: &str) -> Option<(Vec<f32>, Option<serde_json::Value>)> {
-        let vectors = self.vectors.read().unwrap();
+        let vectors = self.vectors.read().ok()?;
         vectors.get(id).map(|v| {
-            let meta = self.vector_metadata.read().unwrap().get(id).cloned();
+            let meta = self.vector_metadata.read().ok().and_then(|m| m.get(id).cloned());
             (v.clone(), meta)
         })
     }
 
     /// Search within partition
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<PartitionSearchResult> {
-        let vectors = self.vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else {
+            return Vec::new();
+        };
 
         let mut results: Vec<_> = vectors.iter()
             .map(|(id, vec)| {
@@ -260,7 +262,7 @@ impl Partition {
         results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         results.truncate(top_k);
 
-        let partition_id = self.meta.read().unwrap().id;
+        let partition_id = self.meta.read().map(|m| m.id).unwrap_or(0);
 
         results.into_iter()
             .map(|(id, score)| PartitionSearchResult {
@@ -273,12 +275,24 @@ impl Partition {
 
     /// Get partition metadata
     pub fn meta(&self) -> PartitionMeta {
-        self.meta.read().unwrap().clone()
+        self.meta.read().map(|m| m.clone()).unwrap_or_else(|_| PartitionMeta {
+            id: 0,
+            key_value: String::new(),
+            state: PartitionState::Active,
+            created_at: 0,
+            last_accessed: 0,
+            vector_count: 0,
+            deleted_count: 0,
+            ttl_expiry: 0,
+            metadata: None,
+        })
     }
 
     /// Check if compaction is needed
     pub fn needs_compaction(&self, threshold: f32) -> bool {
-        let meta = self.meta.read().unwrap();
+        let Ok(meta) = self.meta.read() else {
+            return false;
+        };
         if meta.vector_count == 0 {
             return false;
         }
@@ -288,7 +302,14 @@ impl Partition {
 
     /// Compact partition (remove tombstones)
     pub fn compact(&self) -> CompactionResult {
-        let mut meta = self.meta.write().unwrap();
+        let Ok(mut meta) = self.meta.write() else {
+            return CompactionResult {
+                partition_id: 0,
+                vectors_before: 0,
+                vectors_after: 0,
+                tombstones_removed: 0,
+            };
+        };
         let before = meta.deleted_count;
         meta.deleted_count = 0;
         meta.state = PartitionState::Active;
@@ -381,7 +402,7 @@ impl PartitionedIndex {
 
         // Check if exists
         {
-            let partitions = self.partitions.read().unwrap();
+            let partitions = self.partitions.read()?;
             if let Some(p) = partitions.get(&partition_id) {
                 return Ok(p.clone());
             }
@@ -389,7 +410,7 @@ impl PartitionedIndex {
 
         // Create new partition
         {
-            let mut partitions = self.partitions.write().unwrap();
+            let mut partitions = self.partitions.write()?;
 
             // Double-check after acquiring write lock
             if let Some(p) = partitions.get(&partition_id) {
@@ -408,12 +429,11 @@ impl PartitionedIndex {
             partitions.insert(partition_id, partition.clone());
 
             self.key_to_partition
-                .write()
-                .unwrap()
+                .write()?
                 .insert(key_value.to_string(), partition_id);
 
             // Update stats
-            self.stats.write().unwrap().partition_count += 1;
+            self.stats.write()?.partition_count += 1;
 
             Ok(partition)
         }
@@ -443,7 +463,7 @@ impl PartitionedIndex {
         partition.upsert(id, vector, Some(metadata))?;
 
         // Update stats
-        self.stats.write().unwrap().total_vectors += 1;
+        self.stats.write()?.total_vectors += 1;
 
         Ok(())
     }
@@ -452,12 +472,12 @@ impl PartitionedIndex {
     pub fn delete(&self, id: &str, partition_key_value: &str) -> Result<bool> {
         let partition_id = self.hash_key(partition_key_value);
 
-        let partitions = self.partitions.read().unwrap();
+        let partitions = self.partitions.read()?;
         if let Some(partition) = partitions.get(&partition_id) {
             let deleted = partition.delete(id)?;
             if deleted {
-                self.stats.write().unwrap().total_vectors =
-                    self.stats.read().unwrap().total_vectors.saturating_sub(1);
+                let current = self.stats.read()?.total_vectors;
+                self.stats.write()?.total_vectors = current.saturating_sub(1);
             }
             Ok(deleted)
         } else {
@@ -474,7 +494,7 @@ impl PartitionedIndex {
     ) -> Result<Vec<PartitionSearchResult>> {
         let partition_id = self.hash_key(partition_key_value);
 
-        let partitions = self.partitions.read().unwrap();
+        let partitions = self.partitions.read()?;
         if let Some(partition) = partitions.get(&partition_id) {
             Ok(partition.search(query, top_k))
         } else {
@@ -494,7 +514,7 @@ impl PartitionedIndex {
             ));
         }
 
-        let partitions = self.partitions.read().unwrap();
+        let partitions = self.partitions.read()?;
         let mut all_results: Vec<PartitionSearchResult> = Vec::new();
 
         for partition in partitions.values() {
@@ -514,7 +534,7 @@ impl PartitionedIndex {
         top_k: usize,
         partition_key_values: &[String],
     ) -> Result<Vec<PartitionSearchResult>> {
-        let partitions = self.partitions.read().unwrap();
+        let partitions = self.partitions.read()?;
         let mut all_results: Vec<PartitionSearchResult> = Vec::new();
 
         for key_value in partition_key_values {
@@ -533,14 +553,13 @@ impl PartitionedIndex {
     /// Get partition info
     pub fn get_partition(&self, partition_key_value: &str) -> Option<PartitionMeta> {
         let partition_id = self.hash_key(partition_key_value);
-        let partitions = self.partitions.read().unwrap();
+        let partitions = self.partitions.read().ok()?;
         partitions.get(&partition_id).map(|p| p.meta())
     }
 
     /// List all partitions
     pub fn list_partitions(&self) -> Vec<PartitionMeta> {
-        let partitions = self.partitions.read().unwrap();
-        partitions.values().map(|p| p.meta()).collect()
+        self.partitions.read().map(|p| p.values().map(|p| p.meta()).collect()).unwrap_or_default()
     }
 
     /// Drop a partition
@@ -548,13 +567,13 @@ impl PartitionedIndex {
         let partition_id = self.hash_key(partition_key_value);
 
         let removed = {
-            let mut partitions = self.partitions.write().unwrap();
+            let mut partitions = self.partitions.write()?;
             partitions.remove(&partition_id).is_some()
         };
 
         if removed {
-            self.key_to_partition.write().unwrap().remove(partition_key_value);
-            let mut stats = self.stats.write().unwrap();
+            self.key_to_partition.write()?.remove(partition_key_value);
+            let mut stats = self.stats.write()?;
             stats.partition_count = stats.partition_count.saturating_sub(1);
         }
 
@@ -563,7 +582,9 @@ impl PartitionedIndex {
 
     /// Run compaction on all partitions
     pub fn compact_all(&self) -> Vec<CompactionResult> {
-        let partitions = self.partitions.read().unwrap();
+        let Ok(partitions) = self.partitions.read() else {
+            return Vec::new();
+        };
         let mut results = Vec::new();
 
         for partition in partitions.values() {
@@ -577,7 +598,7 @@ impl PartitionedIndex {
 
     /// Get statistics
     pub fn stats(&self) -> PartitionedIndexStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().map(|s| s.clone()).unwrap_or_default()
     }
 }
 
@@ -615,16 +636,16 @@ impl PartitionRouter {
 
     /// Record access to partition
     pub fn record_access(&self, partition_id: u64) {
-        *self.access_counts
-            .write()
-            .unwrap()
-            .entry(partition_id)
-            .or_insert(0) += 1;
+        if let Ok(mut counts) = self.access_counts.write() {
+            *counts.entry(partition_id).or_insert(0) += 1;
+        }
     }
 
     /// Update hot/cold classification
     pub fn update_classification(&self, threshold: u64) {
-        let counts = self.access_counts.read().unwrap();
+        let Ok(counts) = self.access_counts.read() else {
+            return;
+        };
 
         let mut hot = Vec::new();
         let mut cold = Vec::new();
@@ -637,23 +658,29 @@ impl PartitionRouter {
             }
         }
 
-        *self.hot_partitions.write().unwrap() = hot;
-        *self.cold_partitions.write().unwrap() = cold;
+        if let Ok(mut hp) = self.hot_partitions.write() {
+            *hp = hot;
+        }
+        if let Ok(mut cp) = self.cold_partitions.write() {
+            *cp = cold;
+        }
     }
 
     /// Get hot partitions
     pub fn hot_partitions(&self) -> Vec<u64> {
-        self.hot_partitions.read().unwrap().clone()
+        self.hot_partitions.read().map(|h| h.clone()).unwrap_or_default()
     }
 
     /// Get cold partitions (candidates for archival)
     pub fn cold_partitions(&self) -> Vec<u64> {
-        self.cold_partitions.read().unwrap().clone()
+        self.cold_partitions.read().map(|c| c.clone()).unwrap_or_default()
     }
 
     /// Reset access counts (call periodically)
     pub fn reset_counts(&self) {
-        self.access_counts.write().unwrap().clear();
+        if let Ok(mut counts) = self.access_counts.write() {
+            counts.clear();
+        }
     }
 }
 

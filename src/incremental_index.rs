@@ -218,18 +218,18 @@ impl IncrementalIndex {
         };
 
         {
-            let mut vectors = self.delta.vectors.write().unwrap();
+            let mut vectors = self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             let is_new = !vectors.contains_key(&id);
             vectors.insert(id.clone(), entry);
 
             if is_new {
                 self.delta.size.fetch_add(1, Ordering::Relaxed);
-                self.delta.insertion_order.write().unwrap().push(id.clone());
+                self.delta.insertion_order.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.push(id.clone());
             }
         }
 
         // Remove from tombstones if exists
-        self.tombstones.write().unwrap().remove(&id);
+        self.tombstones.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.remove(&id);
 
         self.stats.inserts.fetch_add(1, Ordering::Relaxed);
         self.pending_ops.fetch_add(1, Ordering::Relaxed);
@@ -269,13 +269,13 @@ impl IncrementalIndex {
         };
 
         {
-            let mut vectors = self.delta.vectors.write().unwrap();
+            let mut vectors = self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             let is_new = !vectors.contains_key(&id);
             vectors.insert(id.clone(), entry);
 
             if is_new {
                 self.delta.size.fetch_add(1, Ordering::Relaxed);
-                self.delta.insertion_order.write().unwrap().push(id);
+                self.delta.insertion_order.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.push(id);
             }
         }
 
@@ -304,11 +304,11 @@ impl IncrementalIndex {
                 deleted_at: current_timestamp(),
                 version: self.wal_sequence.load(Ordering::Relaxed),
             };
-            self.tombstones.write().unwrap().insert(id.clone(), tombstone);
+            self.tombstones.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.insert(id.clone(), tombstone);
         }
 
         // Remove from delta if present
-        let mut vectors = self.delta.vectors.write().unwrap();
+        let mut vectors = self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         if vectors.remove(&id).is_some() {
             self.delta.size.fetch_sub(1, Ordering::Relaxed);
         }
@@ -344,19 +344,25 @@ impl IncrementalIndex {
     /// Check if vector exists
     pub fn exists(&self, id: &str) -> bool {
         // Check tombstones first
-        if self.tombstones.read().unwrap().contains_key(id) {
-            return false;
+        if let Ok(tombstones) = self.tombstones.read() {
+            if tombstones.contains_key(id) {
+                return false;
+            }
         }
 
         // Check delta
-        if self.delta.vectors.read().unwrap().contains_key(id) {
-            return true;
+        if let Ok(delta) = self.delta.vectors.read() {
+            if delta.contains_key(id) {
+                return true;
+            }
         }
 
         // Check base indexes
-        for base in self.base_indexes.read().unwrap().iter() {
-            if base.vectors.contains_key(id) {
-                return true;
+        if let Ok(bases) = self.base_indexes.read() {
+            for base in bases.iter() {
+                if base.vectors.contains_key(id) {
+                    return true;
+                }
             }
         }
 
@@ -366,12 +372,12 @@ impl IncrementalIndex {
     /// Get a vector by ID
     pub fn get(&self, id: &str) -> Option<VectorEntry> {
         // Check tombstones
-        if self.tombstones.read().unwrap().contains_key(id) {
+        if self.tombstones.read().ok()?.contains_key(id) {
             return None;
         }
 
         // Check delta first (most recent)
-        if let Some(entry) = self.delta.vectors.read().unwrap().get(id) {
+        if let Some(entry) = self.delta.vectors.read().ok()?.get(id) {
             return Some(VectorEntry {
                 id: entry.id.clone(),
                 vector: entry.vector.clone(),
@@ -381,7 +387,7 @@ impl IncrementalIndex {
         }
 
         // Check base indexes (from newest to oldest)
-        let bases = self.base_indexes.read().unwrap();
+        let bases = self.base_indexes.read().ok()?;
         for base in bases.iter().rev() {
             if let Some(entry) = base.vectors.get(id) {
                 return Some(VectorEntry {
@@ -401,11 +407,11 @@ impl IncrementalIndex {
         self.validate_vector(query)?;
         self.stats.searches.fetch_add(1, Ordering::Relaxed);
 
-        let tombstones = self.tombstones.read().unwrap();
+        let tombstones = self.tombstones.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         let mut results = Vec::new();
 
         // Search delta index
-        let delta_vectors = self.delta.vectors.read().unwrap();
+        let delta_vectors = self.delta.vectors.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         for (id, entry) in delta_vectors.iter() {
             if tombstones.contains_key(id) {
                 continue;
@@ -420,7 +426,7 @@ impl IncrementalIndex {
         }
 
         // Search base indexes
-        for base in self.base_indexes.read().unwrap().iter() {
+        for base in self.base_indexes.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.iter() {
             for (id, entry) in &base.vectors {
                 if tombstones.contains_key(id) || delta_vectors.contains_key(id) {
                     continue; // Skip deleted or overridden
@@ -454,10 +460,10 @@ impl IncrementalIndex {
 
         // Collect all vectors (delta + base - tombstones)
         let mut all_vectors = HashMap::new();
-        let tombstones = self.tombstones.read().unwrap();
+        let tombstones = self.tombstones.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
 
         // Add base vectors
-        for base in self.base_indexes.read().unwrap().iter() {
+        for base in self.base_indexes.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.iter() {
             for (id, entry) in &base.vectors {
                 if !tombstones.contains_key(id) {
                     all_vectors.insert(id.clone(), BaseEntry {
@@ -470,7 +476,7 @@ impl IncrementalIndex {
         }
 
         // Add/override with delta vectors
-        for (id, entry) in self.delta.vectors.read().unwrap().iter() {
+        for (id, entry) in self.delta.vectors.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.iter() {
             if !tombstones.contains_key(id) {
                 all_vectors.insert(id.clone(), BaseEntry {
                     id: id.clone(),
@@ -492,32 +498,32 @@ impl IncrementalIndex {
 
         // Replace indexes
         {
-            let mut bases = self.base_indexes.write().unwrap();
+            let mut bases = self.base_indexes.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             let _old_count = bases.len();
             bases.clear();
             bases.push(new_base);
 
             // Clear delta
-            self.delta.vectors.write().unwrap().clear();
-            self.delta.insertion_order.write().unwrap().clear();
+            self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.clear();
+            self.delta.insertion_order.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.clear();
             self.delta.size.store(0, Ordering::Relaxed);
 
             // Clear tombstones
-            let cleaned = self.tombstones.write().unwrap().len();
-            self.tombstones.write().unwrap().clear();
+            let cleaned = self.tombstones.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.len();
+            self.tombstones.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.clear();
 
             self.stats.tombstones_cleaned.fetch_add(cleaned as u64, Ordering::Relaxed);
         }
 
         // Update state
-        *self.last_merge.write().unwrap() = Instant::now();
+        *self.last_merge.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))? = Instant::now();
         self.pending_ops.store(0, Ordering::Relaxed);
         self.merge_in_progress.store(false, Ordering::SeqCst);
         self.stats.merges.fetch_add(1, Ordering::Relaxed);
 
         Ok(MergeResult {
             vectors_merged: delta_size,
-            new_index_size: self.base_indexes.read().unwrap()[0].vector_count,
+            new_index_size: self.base_indexes.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?[0].vector_count,
             duration: start.elapsed(),
             tombstones_removed: 0,
         })
@@ -529,7 +535,7 @@ impl IncrementalIndex {
             return Ok(0);
         }
 
-        let tombstone_count = self.tombstones.read().unwrap().len();
+        let tombstone_count = self.tombstones.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.len();
         let total_vectors = self.total_vectors();
 
         if total_vectors == 0 {
@@ -567,11 +573,11 @@ impl IncrementalIndex {
             checksum: 0, // In production: compute actual checksum
         };
 
-        self.wal_buffer.write().unwrap().push_back(entry);
+        self.wal_buffer.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.push_back(entry);
         self.stats.wal_entries_written.fetch_add(1, Ordering::Relaxed);
 
         // Flush if buffer is large
-        if self.wal_buffer.read().unwrap().len() > 1000 {
+        if self.wal_buffer.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.len() > 1000 {
             self.flush_wal()?;
         }
 
@@ -580,7 +586,7 @@ impl IncrementalIndex {
 
     fn flush_wal(&self) -> Result<()> {
         // In production: write to disk
-        let mut buffer = self.wal_buffer.write().unwrap();
+        let mut buffer = self.wal_buffer.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         buffer.clear();
         Ok(())
     }
@@ -601,7 +607,7 @@ impl IncrementalIndex {
     }
 
     fn maybe_trigger_cleanup(&self) -> Result<()> {
-        let tombstone_count = self.tombstones.read().unwrap().len();
+        let tombstone_count = self.tombstones.read().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.len();
         let total = self.total_vectors();
 
         if total > 0 {
@@ -617,13 +623,12 @@ impl IncrementalIndex {
     /// Get total vector count
     pub fn total_vectors(&self) -> usize {
         let delta_size = self.delta.size.load(Ordering::Relaxed);
-        let base_size: usize = self.base_indexes.read().unwrap()
-            .iter()
-            .map(|b| b.vector_count)
-            .sum();
-        let tombstone_count = self.tombstones.read().unwrap().len();
+        let base_size: usize = self.base_indexes.read()
+            .map(|b| b.iter().map(|b| b.vector_count).sum())
+            .unwrap_or(0);
+        let tombstone_count = self.tombstones.read().map(|t| t.len()).unwrap_or(0);
 
-        delta_size + base_size - tombstone_count
+        delta_size + base_size - tombstone_count.min(delta_size + base_size)
     }
 
     /// Get index statistics
@@ -631,8 +636,8 @@ impl IncrementalIndex {
         IndexStats {
             total_vectors: self.total_vectors(),
             delta_size: self.delta.size.load(Ordering::Relaxed),
-            base_index_count: self.base_indexes.read().unwrap().len(),
-            tombstone_count: self.tombstones.read().unwrap().len(),
+            base_index_count: self.base_indexes.read().map(|b| b.len()).unwrap_or(0),
+            tombstone_count: self.tombstones.read().map(|t| t.len()).unwrap_or(0),
             pending_operations: self.pending_ops.load(Ordering::Relaxed),
             inserts: self.stats.inserts.load(Ordering::Relaxed),
             updates: self.stats.updates.load(Ordering::Relaxed),

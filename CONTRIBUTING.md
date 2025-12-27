@@ -17,7 +17,7 @@ cd vecstore
 ### 2. Set Up Development Environment
 
 **Requirements:**
-- Rust 1.70+ (`rustup update stable`)
+- Rust 1.92+ (`rustup update stable`)
 - cargo (comes with Rust)
 
 **Optional (for full features):**

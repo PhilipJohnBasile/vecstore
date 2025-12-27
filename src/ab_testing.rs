@@ -247,7 +247,7 @@ impl ABTestManager {
             variant_data,
         };
 
-        self.experiments.write().unwrap().insert(experiment_id.clone(), state);
+        self.experiments.write()?.insert(experiment_id.clone(), state);
         self.metrics.experiments_created.fetch_add(1, Ordering::Relaxed);
 
         Ok(experiment_id)
@@ -255,7 +255,7 @@ impl ABTestManager {
 
     /// Start an experiment
     pub fn start_experiment(&self, experiment_id: &str) -> Result<()> {
-        let mut experiments = self.experiments.write().unwrap();
+        let mut experiments = self.experiments.write()?;
         let state = experiments.get_mut(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -273,7 +273,7 @@ impl ABTestManager {
 
     /// Pause an experiment
     pub fn pause_experiment(&self, experiment_id: &str) -> Result<()> {
-        let mut experiments = self.experiments.write().unwrap();
+        let mut experiments = self.experiments.write()?;
         let state = experiments.get_mut(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -287,7 +287,7 @@ impl ABTestManager {
 
     /// Complete an experiment
     pub fn complete_experiment(&self, experiment_id: &str) -> Result<ExperimentResults> {
-        let mut experiments = self.experiments.write().unwrap();
+        let mut experiments = self.experiments.write()?;
         let state = experiments.get_mut(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -300,7 +300,7 @@ impl ABTestManager {
 
     /// Get variant assignment for a request
     pub fn get_assignment(&self, experiment_id: &str, identity: &str) -> Result<VariantAssignment> {
-        let experiments = self.experiments.read().unwrap();
+        let experiments = self.experiments.read()?;
         let state = experiments.get(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -311,7 +311,7 @@ impl ABTestManager {
         }
 
         // Check for existing assignment (Rust 1.92 if-let chain)
-        let assignments = self.assignments.read().unwrap();
+        let assignments = self.assignments.read()?;
         if let Some((exp_id, var_id)) = assignments.get(identity)
             && exp_id == experiment_id
         {
@@ -333,7 +333,7 @@ impl ABTestManager {
         let variant = self.select_variant(&state.config, identity)?;
 
         // Store assignment for consistency
-        let mut assignments = self.assignments.write().unwrap();
+        let mut assignments = self.assignments.write()?;
         assignments.insert(
             identity.to_string(),
             (experiment_id.to_string(), variant.id.clone()),
@@ -398,7 +398,7 @@ impl ABTestManager {
         variant_id: &str,
         result: RequestResult,
     ) -> Result<()> {
-        let experiments = self.experiments.read().unwrap();
+        let experiments = self.experiments.read()?;
         let state = experiments.get(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -414,10 +414,10 @@ impl ABTestManager {
 
         // Record latency
         variant_data.total_latency_us.fetch_add(result.latency_us, Ordering::Relaxed);
-        variant_data.latency_samples.write().unwrap().push(result.latency_us);
+        variant_data.latency_samples.write()?.push(result.latency_us);
 
         // Record metrics
-        let mut metrics = variant_data.metric_values.write().unwrap();
+        let mut metrics = variant_data.metric_values.write()?;
         for (name, value) in result.metrics {
             metrics.entry(name).or_insert_with(Vec::new).push(value);
         }
@@ -429,7 +429,7 @@ impl ABTestManager {
 
     /// Get current experiment results
     pub fn get_results(&self, experiment_id: &str) -> Result<ExperimentResults> {
-        let experiments = self.experiments.read().unwrap();
+        let experiments = self.experiments.read()?;
         let state = experiments.get(experiment_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
 
@@ -449,10 +449,10 @@ impl ABTestManager {
                 let errors = vd.errors.load(Ordering::Relaxed);
                 let total_latency = vd.total_latency_us.load(Ordering::Relaxed);
 
-                let latencies = vd.latency_samples.read().unwrap().clone();
+                let latencies = vd.latency_samples.read()?.clone();
                 let (p50, p95, p99) = compute_percentiles(&latencies);
 
-                let metrics = vd.metric_values.read().unwrap();
+                let metrics = vd.metric_values.read()?;
                 let mut metric_summaries = HashMap::new();
 
                 for (name, values) in metrics.iter() {
@@ -599,7 +599,9 @@ impl ABTestManager {
 
     /// List all experiments
     pub fn list_experiments(&self) -> Vec<ExperimentSummary> {
-        let experiments = self.experiments.read().unwrap();
+        let Ok(experiments) = self.experiments.read() else {
+            return Vec::new();
+        };
         experiments.iter()
             .map(|(id, state)| ExperimentSummary {
                 id: id.clone(),
@@ -623,10 +625,9 @@ impl ABTestManager {
             experiments_completed: self.metrics.experiments_completed.load(Ordering::Relaxed),
             total_assignments: self.metrics.total_assignments.load(Ordering::Relaxed),
             total_results_recorded: self.metrics.total_results_recorded.load(Ordering::Relaxed),
-            active_experiments: self.experiments.read().unwrap()
-                .values()
-                .filter(|s| s.status == ExperimentStatus::Running)
-                .count(),
+            active_experiments: self.experiments.read()
+                .map(|e| e.values().filter(|s| s.status == ExperimentStatus::Running).count())
+                .unwrap_or(0),
         }
     }
 }

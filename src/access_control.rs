@@ -117,18 +117,24 @@ impl Role {
     }
 
     /// Add a permission
+    #[inline]
+    #[must_use]
     pub fn with_permission(mut self, permission: Permission) -> Self {
         self.permissions.insert(permission);
         self
     }
 
     /// Add multiple permissions
+    #[inline]
+    #[must_use]
     pub fn with_permissions(mut self, permissions: Vec<Permission>) -> Self {
         self.permissions.extend(permissions);
         self
     }
 
     /// Inherit from another role
+    #[inline]
+    #[must_use]
     pub fn inherits_from(mut self, role_name: impl Into<String>) -> Self {
         self.inherits_from.push(role_name.into());
         self
