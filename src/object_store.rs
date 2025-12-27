@@ -34,9 +34,9 @@
 //! let result = backend.search(&query, 10)?; // Uses cache when possible
 //! ```
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -828,7 +828,7 @@ impl ObjectStoreBackend {
         // Apply compression
         match &self.config.compression {
             CompressionType::None => Ok(json),
-            CompressionType::Zstd { level } => {
+            CompressionType::Zstd { level: _ } => {
                 // Simplified - in production would use actual zstd
                 Ok(json) // Placeholder
             }

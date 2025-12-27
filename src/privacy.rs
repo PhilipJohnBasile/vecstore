@@ -33,7 +33,6 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use rand::Rng;
 use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
 
@@ -58,7 +57,7 @@ impl Laplace {
 impl Distribution<f64> for Laplace {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> f64 {
         // Inverse CDF method for Laplace distribution
-        let u: f64 = rng.gen_range(-0.5..0.5);
+        let u: f64 = rng.random_range(-0.5..0.5);
         self.location - self.scale * u.signum() * (1.0 - 2.0 * u.abs()).ln()
     }
 }
@@ -248,7 +247,7 @@ impl PrivacyEngine {
         Self {
             config,
             budget: Arc::new(RwLock::new(budget)),
-            rng: rand::thread_rng(),
+            rng: rand::rng(),
         }
     }
 
@@ -488,7 +487,7 @@ impl PrivacyEngine {
             VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
         })?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let noisy: Vec<f32> = vector.iter()
             .map(|&v| v + normal.sample(&mut rng) as f32)
             .collect();
@@ -502,7 +501,7 @@ impl PrivacyEngine {
             VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
         })?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let noisy: Vec<f32> = vector.iter()
             .map(|&v| v + laplace.sample(&mut rng) as f32)
             .collect();
@@ -517,7 +516,7 @@ impl PrivacyEngine {
             VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
         })?;
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let noisy: Vec<f32> = vector.iter()
             .map(|&v| {
                 let noise = laplace.sample(&mut rng).round() as f32;

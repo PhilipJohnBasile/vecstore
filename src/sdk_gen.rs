@@ -23,7 +23,6 @@
 //! std::fs::write("vecstore-sdk.ts", ts_sdk)?;
 //! ```
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 /// Target language

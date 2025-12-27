@@ -164,7 +164,7 @@ impl SparseVector {
             .weights
             .iter()
             .enumerate()
-            .filter(|(_, &w)| w >= threshold)
+            .filter(|(_, w)| **w >= threshold)
             .map(|(i, _)| i)
             .collect();
 

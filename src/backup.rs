@@ -165,7 +165,7 @@ impl BackupManager {
         let now = chrono::Utc::now();
         // Include milliseconds and a random suffix for uniqueness
         use rand::Rng;
-        let random: u32 = rand::thread_rng().gen_range(0..10000);
+        let random: u32 = rand::rng().random_range(0..10000);
         format!(
             "backup_{}_{}",
             now.format("%Y%m%d_%H%M%S_%3f"),

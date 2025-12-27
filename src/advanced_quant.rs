@@ -743,7 +743,7 @@ impl AdaptiveQuantizer {
         }
 
         // Allocate bits based on importance
-        let total_bits = dim * match self.config.stored_bits {
+        let _total_bits = dim * match self.config.stored_bits {
             BitWidth::Bit1 => 1,
             BitWidth::Bit1_5 => 2,
             BitWidth::Bit2 => 2,
@@ -783,8 +783,8 @@ pub struct QuantizedIndex {
 impl QuantizedIndex {
     /// Create new quantized index
     pub fn new(config: QuantConfig, dimension: usize) -> Self {
-        let mut two_bit = TwoBitQuantizer::new(dimension);
-        let mut four_bit = FourBitQuantizer::new(dimension);
+        let two_bit = TwoBitQuantizer::new(dimension);
+        let four_bit = FourBitQuantizer::new(dimension);
 
         Self {
             config,

@@ -1,7 +1,7 @@
 // Cost Optimizer - Resource usage optimization and cost management
 // Automatic scaling recommendations, resource right-sizing, and cost forecasting
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, Instant};
@@ -629,7 +629,7 @@ impl CostOptimizer {
     /// Get budget status
     pub fn get_budget_status(&self) -> BudgetStatus {
         let total_cost = self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0;
-        let projected = {
+        let _projected = {
             let history = self.resource_usage.read().unwrap();
             self.project_monthly_cost(&history.samples)
         };
@@ -712,7 +712,7 @@ impl CostOptimizer {
         let monthly_cost = self.project_monthly_cost(&history.samples);
         let daily_cost = monthly_cost / 30.0;
 
-        let hours = days as f64 * 24.0;
+        let _hours = days as f64 * 24.0;
 
         CostForecast {
             period_days: days,
@@ -849,7 +849,7 @@ impl CostAwareAutoScaler {
     }
 
     /// Evaluate and return scaling decision
-    pub fn evaluate(&self, current_load: f64, current_latency: f64) -> ScalingDecision {
+    pub fn evaluate(&self, current_load: f64, _current_latency: f64) -> ScalingDecision {
         let state = self.current_scale.read().unwrap();
 
         // Check cooldown

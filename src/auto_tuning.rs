@@ -1,15 +1,15 @@
 // Auto-Tuning Engine - Automated parameter optimization for vector indexes
 // Bayesian optimization, hyperparameter search, and adaptive configuration
 
-use std::collections::{HashMap, BinaryHeap};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use std::cmp::Ordering as CmpOrdering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Result, VecStoreError};
+use crate::error::Result;
 
 /// Auto-tuning engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -316,7 +316,7 @@ impl AutoTuner {
             }
 
             let params = self.sample_random();
-            let result = self.evaluate_trial(&params, &objective_fn)?;
+            let _result = self.evaluate_trial(&params, &objective_fn)?;
             improvement_history.push(*self.stats.best_objective.read().unwrap());
         }
 
@@ -339,7 +339,7 @@ impl AutoTuner {
             };
 
             let prev_best = *self.stats.best_objective.read().unwrap();
-            let result = self.evaluate_trial(&params, &objective_fn)?;
+            let _result = self.evaluate_trial(&params, &objective_fn)?;
             let new_best = *self.stats.best_objective.read().unwrap();
 
             improvement_history.push(new_best);

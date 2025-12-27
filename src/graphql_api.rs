@@ -33,7 +33,6 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -63,7 +62,7 @@ impl GqlType {
             GqlType::Int => "Int".to_string(),
             GqlType::Float => "Float".to_string(),
             GqlType::Boolean => "Boolean".to_string(),
-            GqlType::Vector(dim) => format!("[Float!]"),
+            GqlType::Vector(_dim) => format!("[Float!]"),
             GqlType::Object(name) => name.clone(),
             GqlType::List(inner) => format!("[{}]", inner.to_sdl()),
             GqlType::NonNull(inner) => format!("{}!", inner.to_sdl()),
@@ -278,7 +277,7 @@ impl GraphQLExecutor {
 
     /// Execute a vector query
     pub fn execute(&self, query: VectorQuery) -> Result<QueryResult> {
-        let collection = self.collections.get(&query.collection)
+        let _collection = self.collections.get(&query.collection)
             .ok_or_else(|| VecStoreError::NotFound(format!("Collection: {}", query.collection)))?;
 
         let vectors = self.vectors.get(&query.collection).unwrap();
@@ -656,7 +655,7 @@ fn extract_limit(query: &str) -> Option<usize> {
     }
 }
 
-fn extract_fields(query: &str) -> Vec<String> {
+fn extract_fields(_query: &str) -> Vec<String> {
     // Would need proper parsing - return common defaults
     vec!["id".to_string(), "content".to_string(), "title".to_string()]
 }

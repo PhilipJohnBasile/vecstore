@@ -2,7 +2,7 @@
 // Implements Custom Resource Definitions (CRDs) for VecStore clusters
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};

@@ -35,7 +35,7 @@ anyhow = "1"
 thiserror = "2"
 rayon = "1"
 rand = "0.9"  # Edition 2024 compatible
-rand_distr = "0.4"  # Statistical distributions for privacy module
+rand_distr = "0.5"  # Statistical distributions for privacy module (rand 0.9 compatible)
 regex = "1"
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"

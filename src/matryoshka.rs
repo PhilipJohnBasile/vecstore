@@ -182,8 +182,8 @@ impl MatryoshkaEmbedding {
         // Return closest smaller dimension
         self.truncated
             .iter()
-            .filter(|(&d, _)| d <= dim)
-            .max_by_key(|(&d, _)| d)
+            .filter(|(d, _)| **d <= dim)
+            .max_by_key(|(d, _)| **d)
             .map(|(_, v)| v)
     }
 
@@ -195,7 +195,7 @@ impl MatryoshkaEmbedding {
 
         self.truncated
             .iter()
-            .max_by_key(|(&d, _)| d)
+            .max_by_key(|(d, _)| **d)
             .map(|(_, v)| v)
     }
 
@@ -203,7 +203,7 @@ impl MatryoshkaEmbedding {
     pub fn smallest(&self) -> Option<&Vec<f32>> {
         self.truncated
             .iter()
-            .min_by_key(|(&d, _)| d)
+            .min_by_key(|(d, _)| **d)
             .map(|(_, v)| v)
     }
 }
@@ -796,7 +796,7 @@ mod tests {
 
     fn generate_random_embeddings(n: usize, dim: usize) -> Vec<(String, Vec<f32>)> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         (0..n)
             .map(|i| {

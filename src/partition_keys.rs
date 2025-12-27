@@ -34,7 +34,6 @@
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{VecStoreError, Result};

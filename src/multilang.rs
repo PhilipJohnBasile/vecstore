@@ -24,7 +24,6 @@
 use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
 
 /// Supported languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

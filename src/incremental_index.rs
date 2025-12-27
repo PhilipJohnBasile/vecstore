@@ -1,7 +1,7 @@
 // Incremental Index Updates - Update indexes without full rebuilds
 // Supports online insertions, deletions, and modifications with minimal downtime
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
@@ -493,7 +493,7 @@ impl IncrementalIndex {
         // Replace indexes
         {
             let mut bases = self.base_indexes.write().unwrap();
-            let old_count = bases.len();
+            let _old_count = bases.len();
             bases.clear();
             bases.push(new_base);
 

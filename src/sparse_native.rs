@@ -38,7 +38,7 @@
 //! )?;
 //! ```
 
-use std::collections::{HashMap, BTreeMap};
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{VecStoreError, Result};
@@ -71,8 +71,8 @@ impl SparseVector {
     pub fn from_dense(dense: &[f32], threshold: f32) -> Self {
         let pairs: Vec<(u32, f32)> = dense.iter()
             .enumerate()
-            .filter(|(_, &v)| v.abs() > threshold)
-            .map(|(i, &v)| (i as u32, v))
+            .filter(|(_, v)| v.abs() > threshold)
+            .map(|(i, v)| (i as u32, *v))
             .collect();
         Self::new(pairs)
     }
@@ -199,7 +199,7 @@ impl InvertedSparseIndex {
     pub fn add(&mut self, doc_id: u32, sparse: &SparseVector) {
         self.total_docs += 1;
 
-        for (idx, (&term, &weight)) in sparse.indices.iter().zip(&sparse.values).enumerate() {
+        for (_idx, (&term, &weight)) in sparse.indices.iter().zip(&sparse.values).enumerate() {
             // Update document frequency
             *self.doc_freqs.entry(term).or_insert(0) += 1;
 

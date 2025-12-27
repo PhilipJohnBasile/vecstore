@@ -33,7 +33,7 @@
 //! ```
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicBool, AtomicUsize, Ordering}};
+use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};

@@ -28,11 +28,11 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
+use std::sync::{RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::Result;
 
 // ============================================================================
 // CONFIGURATION
@@ -453,7 +453,7 @@ impl ServerlessCluster {
     }
 
     /// Record a query
-    pub fn record_query(&self, latency_ms: f64) {
+    pub fn record_query(&self, _latency_ms: f64) {
         self.query_count.fetch_add(1, Ordering::SeqCst);
 
         // Update cost

@@ -38,7 +38,6 @@
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 
 // ============================================================================
 // CONFIGURATION
@@ -570,7 +569,7 @@ impl QueryAgent {
             IntentAction::Search
         };
 
-        let mut constraints = Vec::new();
+        let constraints = Vec::new();
         let mut modifiers = Vec::new();
 
         // Parse time modifiers

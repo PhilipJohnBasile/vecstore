@@ -90,7 +90,7 @@ struct HashFunction {
 impl HashFunction {
     /// Create a new random hash function
     fn new(dimension: usize, rng: &mut StdRng) -> Self {
-        let projection: Vec<f32> = (0..dimension).map(|_| rng.gen_range(-1.0..1.0)).collect();
+        let projection: Vec<f32> = (0..dimension).map(|_| rng.random_range(-1.0..1.0)).collect();
 
         Self { projection }
     }
@@ -472,10 +472,10 @@ mod tests {
 
     fn generate_random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen_range(-1.0..1.0)).collect())
+            .map(|_| (0..dim).map(|_| rng.random_range(-1.0..1.0)).collect())
             .collect()
     }
 

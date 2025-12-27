@@ -239,8 +239,8 @@ impl KMeans {
         let _dim = vectors[0].len();
 
         // Initialize centroids with k random vectors
-        use rand::seq::SliceRandom;
-        let mut rng = rand::thread_rng();
+        use rand::seq::IndexedRandom;
+        let mut rng = rand::rng();
         let mut centroids: Vec<Vec<f32>> =
             vectors.choose_multiple(&mut rng, self.k).cloned().collect();
 

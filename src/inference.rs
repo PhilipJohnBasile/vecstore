@@ -506,8 +506,8 @@ impl InferenceEngine {
     fn embed_openai(
         &self,
         texts: &[String],
-        model: &str,
-        api_key: &str,
+        _model: &str,
+        _api_key: &str,
         dimensions: Option<usize>,
     ) -> Result<Vec<Vec<f32>>> {
         // In production, this would make HTTP requests

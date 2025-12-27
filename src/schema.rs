@@ -182,7 +182,7 @@ impl FieldSchema {
         }
 
         // Pattern validation for strings
-        if let (Some(ref pattern), Value::String(s)) = (&self.pattern, value) {
+        if let (Some(pattern), Value::String(s)) = (&self.pattern, value) {
             // Simple contains check (in production, use regex crate)
             if !s.contains(pattern) {
                 return Err(ValidationError::PatternError {

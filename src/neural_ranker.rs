@@ -366,7 +366,7 @@ impl NeuralRanker {
     }
 
     /// Load model from path
-    pub fn load_model(&self, path: &str) -> Result<()> {
+    pub fn load_model(&self, _path: &str) -> Result<()> {
         // Simulate model loading
         let model = LoadedModel {
             model_type: self.config.model_type.clone(),

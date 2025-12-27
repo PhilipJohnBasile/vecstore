@@ -31,7 +31,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, atomic::{AtomicUsize, Ordering}};
+use std::sync::{RwLock, atomic::{AtomicUsize, Ordering}};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -555,7 +555,7 @@ impl GpuIndexBuilder {
         // Entry point is the node with the highest layer
         let entry_point = node_layers.iter()
             .enumerate()
-            .max_by_key(|(_, &l)| l)
+            .max_by_key(|(_, l)| **l)
             .map(|(i, _)| i);
 
         // Build graph layer by layer

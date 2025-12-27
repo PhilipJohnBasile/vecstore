@@ -246,7 +246,7 @@ impl AnomalyDetector {
                 DetectorModel::Statistical(self.build_statistical(vectors)?)
             }
             DetectionMethod::Ensemble => {
-                let mut detectors: Vec<Box<dyn Detector + Send + Sync>> = Vec::new();
+                let detectors: Vec<Box<dyn Detector + Send + Sync>> = Vec::new();
                 // Would add multiple detectors here
                 DetectorModel::Ensemble(detectors)
             }
@@ -399,7 +399,7 @@ impl AnomalyDetector {
         }
 
         // Compute quartiles (simplified)
-        let mut sorted_values: Vec<Vec<f64>> = (0..dim)
+        let sorted_values: Vec<Vec<f64>> = (0..dim)
             .map(|d| {
                 let mut vals: Vec<f64> = vectors.iter().map(|v| v[d] as f64).collect();
                 vals.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -643,7 +643,7 @@ impl AnomalyDetector {
             DetectorModel::LOF(_) => {
                 format!("LOF score {:.3}: Vector has low local density compared to neighbors", score)
             }
-            DetectorModel::Statistical(m) => {
+            DetectorModel::Statistical(_m) => {
                 let features = self.find_contributing_features(model, sample);
                 if features.is_empty() {
                     format!("Statistical score {:.3}: Overall deviation from normal", score)
@@ -685,7 +685,7 @@ impl AnomalyDetector {
     }
 
     /// Provide feedback on detection
-    pub fn feedback(&self, vector_id: &str, is_true_positive: bool) {
+    pub fn feedback(&self, _vector_id: &str, is_true_positive: bool) {
         if is_true_positive {
             self.stats.true_positives.fetch_add(1, Ordering::Relaxed);
         } else {

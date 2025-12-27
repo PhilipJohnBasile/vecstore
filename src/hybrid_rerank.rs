@@ -30,9 +30,9 @@
 //! let results = pipeline.search(query)?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 

@@ -319,7 +319,7 @@ mod tests {
     fn test_large_scale() {
         use rand::Rng;
         let mut backend = WasmVectorBackend::with_params(128, Distance::Cosine, 16, 200);
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Insert 1000 vectors
         for i in 0..1000 {

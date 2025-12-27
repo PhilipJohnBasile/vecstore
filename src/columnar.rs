@@ -39,7 +39,6 @@
 //! ```
 
 use std::collections::HashMap;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
@@ -786,7 +785,7 @@ impl<'a> Iterator for ColumnarIterator<'a> {
 
 impl ColumnarStore {
     /// Iterate over all vectors
-    pub fn iter(&self) -> ColumnarIterator {
+    pub fn iter(&self) -> ColumnarIterator<'_> {
         ColumnarIterator {
             store: self,
             id_iter: self.id_map.iter(),

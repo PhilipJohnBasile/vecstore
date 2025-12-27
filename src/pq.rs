@@ -53,7 +53,6 @@ use anyhow::{anyhow, Result};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ============================================================================
 // CONFIGURATION
@@ -208,7 +207,7 @@ impl ProductQuantizer {
         let training_vectors: Vec<&Vec<f32>> = if self.config.max_training_samples > 0
             && vectors.len() > self.config.max_training_samples
         {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let mut indices: Vec<usize> = (0..vectors.len()).collect();
             indices.shuffle(&mut rng);
             indices
@@ -335,7 +334,7 @@ impl ProductQuantizer {
     ) -> Result<Vec<Vec<f32>>> {
         // Simplified: just use current rotation with small random perturbation
         // Full OPQ would use SVD of X^T * Y
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut new_rotation = current.to_vec();
 
         for row in &mut new_rotation {
@@ -431,8 +430,8 @@ impl ProductQuantizer {
                     }
                 } else {
                     // Reinitialize empty centroid with random vector
-                    let mut rng = rand::thread_rng();
-                    let random_idx = rng.gen_range(0..vectors.len());
+                    let mut rng = rand::rng();
+                    let random_idx = rng.random_range(0..vectors.len());
                     new_centroids[c] = vectors[random_idx].clone();
                 }
             }
@@ -445,11 +444,11 @@ impl ProductQuantizer {
 
     /// K-means++ initialization
     fn kmeans_plus_plus_init(&self, vectors: &[Vec<f32>], k: usize) -> Result<Vec<Vec<f32>>> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut centroids = Vec::with_capacity(k);
 
         // First centroid: random
-        let first_idx = rng.gen_range(0..vectors.len());
+        let first_idx = rng.random_range(0..vectors.len());
         centroids.push(vectors[first_idx].clone());
 
         // Remaining centroids: probability proportional to distance^2
@@ -467,7 +466,7 @@ impl ProductQuantizer {
             let total: f32 = distances.iter().sum();
             if total == 0.0 {
                 // All vectors are identical to existing centroids
-                let random_idx = rng.gen_range(0..vectors.len());
+                let random_idx = rng.random_range(0..vectors.len());
                 centroids.push(vectors[random_idx].clone());
                 continue;
             }
@@ -861,7 +860,7 @@ impl IVFPQ {
         }
 
         // Train coarse centroids
-        let temp_pq = ProductQuantizer::new(PQConfig {
+        let _temp_pq = ProductQuantizer::new(PQConfig {
             dimension: self.config.pq_config.dimension,
             num_subspaces: 1,
             num_centroids: self.config.num_lists,
@@ -900,10 +899,10 @@ impl IVFPQ {
         let dim = vectors[0].len();
 
         // Initialize with random vectors
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut centroids: Vec<Vec<f32>> = (0..k)
             .map(|_| {
-                let idx = rng.gen_range(0..vectors.len());
+                let idx = rng.random_range(0..vectors.len());
                 vectors[idx].clone()
             })
             .collect();
@@ -1056,7 +1055,7 @@ mod tests {
 
     fn generate_random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         (0..n)
             .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())

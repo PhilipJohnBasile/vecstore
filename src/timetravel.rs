@@ -33,7 +33,7 @@
 //! ```
 
 use std::collections::{HashMap, BTreeMap};
-use std::sync::{Arc, RwLock};
+use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use chrono::{DateTime, Utc, Duration as ChronoDuration};
 

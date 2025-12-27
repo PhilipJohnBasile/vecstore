@@ -595,7 +595,7 @@ impl ExplainableSearch {
                     "If dimension {} matched query value ({:.3} instead of {:.3}), score would increase to {:.4}",
                     worst.index, query[worst.index], result[worst.index], hyp_score
                 ),
-                key_differences: vec![worst.clone().clone()],
+                key_differences: vec![(*worst).clone()],
                 hypothetical_score: hyp_score,
             });
         }

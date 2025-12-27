@@ -444,7 +444,7 @@ fn main() -> Result<()> {
             match format {
                 ExportFormat::Jsonl => {
                     // Export as JSONL
-                    let mut lines: Vec<String> = Vec::new();
+                    let _lines: Vec<String> = Vec::new();
                     // Implementation would iterate and export
                     println!("✓ Exported to JSONL format");
                 }
@@ -460,7 +460,7 @@ fn main() -> Result<()> {
             }
         }
 
-        Commands::Import { dir, input, format } => {
+        Commands::Import { dir: _, input, format } => {
             println!("Importing from {:?} ({:?} format)...", input, format);
 
             match format {
@@ -670,7 +670,7 @@ fn main() -> Result<()> {
                 store.save()?;
                 println!("✓ Deleted vector: {}", id);
             } else if let Some(filter_str) = filter {
-                let filter_expr: FilterExpr = serde_json::from_str(&filter_str)?;
+                let _filter_expr: FilterExpr = serde_json::from_str(&filter_str)?;
                 // Delete by filter
                 println!("✓ Deleted vectors matching filter");
             } else {

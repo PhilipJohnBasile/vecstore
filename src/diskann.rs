@@ -51,7 +51,7 @@ use rand::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs::File;
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
@@ -183,7 +183,7 @@ impl PQQuantizer {
         }
 
         let dim = vectors[0].len();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Initialize centroids randomly
         let mut centroids: Vec<Vec<f32>> = vectors
@@ -443,7 +443,7 @@ impl DiskANN {
 
         // Train PQ quantizer
         let sample_size = self.config.pq_sample_size.min(vectors.len());
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let sample: Vec<Vec<f32>> = vectors
             .choose_multiple(&mut rng, sample_size)
             .cloned()
@@ -512,7 +512,7 @@ impl DiskANN {
         }
 
         // Random permutation for insertion order
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut order: Vec<usize> = (0..n).collect();
         order.shuffle(&mut rng);
 
@@ -923,7 +923,7 @@ mod tests {
     use super::*;
 
     fn random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..n)
             .map(|_| (0..dim).map(|_| rng.random::<f32>()).collect())
             .collect()

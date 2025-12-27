@@ -11,7 +11,7 @@
 
 use super::types::Id;
 use anyhow::{anyhow, Result};
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -197,7 +197,7 @@ impl ProductQuantizer {
     /// K-means clustering for a set of subvectors
     fn kmeans(&self, vectors: &[Vec<f32>], k: usize) -> Result<Vec<Vec<f32>>> {
         let dim = vectors[0].len();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Initialize centroids randomly from data
         let mut centroids: Vec<Vec<f32>> = vectors.choose_multiple(&mut rng, k).cloned().collect();

@@ -726,7 +726,7 @@ mod tests {
 
     fn generate_embeddings(n: usize, dim: usize) -> HashMap<String, Vec<f32>> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         (0..n)
             .map(|i| {

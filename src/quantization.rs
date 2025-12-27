@@ -430,7 +430,7 @@ mod tests {
 
     fn generate_random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         (0..n)
             .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())
@@ -1026,7 +1026,7 @@ pub struct QuantizationComparison {
 }
 
 /// Run comparison of all quantization methods
-pub fn compare_quantizers(vectors: &[Vec<f32>], test_queries: &[Vec<f32>], k: usize) -> Vec<QuantizationComparison> {
+pub fn compare_quantizers(vectors: &[Vec<f32>], _test_queries: &[Vec<f32>], _k: usize) -> Vec<QuantizationComparison> {
     let mut results = Vec::new();
 
     // SQ8
@@ -1078,7 +1078,7 @@ pub fn compare_quantizers(vectors: &[Vec<f32>], test_queries: &[Vec<f32>], k: us
     }
 
     // Binary
-    if let Ok(binary) = BinaryQuantizer::train(vectors) {
+    if let Ok(_binary) = BinaryQuantizer::train(vectors) {
         results.push(QuantizationComparison {
             method: "Binary (1-bit)".to_string(),
             bits_per_dimension: 1.0,
@@ -1149,7 +1149,7 @@ mod ultra_low_bit_tests {
 
     fn generate_random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..n)
             .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())
             .collect()

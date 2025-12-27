@@ -112,7 +112,7 @@ unsafe fn euclidean_distance_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
+unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut sum = _mm_setzero_ps();
     let mut i = 0;
@@ -143,7 +143,7 @@ unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
     }
 
     result.sqrt()
-}
+}}
 
 /// ARM NEON implementation (processes 4 floats at once)
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
@@ -261,7 +261,7 @@ unsafe fn dot_product_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 {
+unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut sum = _mm_setzero_ps();
     let mut i = 0;
@@ -287,7 +287,7 @@ unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 {
     }
 
     result
-}
+}}
 
 /// Calculate vector magnitude (L2 norm) using SIMD
 #[inline]
@@ -391,7 +391,7 @@ unsafe fn manhattan_distance_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
+unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
     let len = a.len();
     let mut sum = _mm_setzero_ps();
     let mut i = 0;
@@ -424,7 +424,7 @@ unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
     }
 
     result
-}
+}}
 
 /// ARM NEON implementation for Manhattan distance (processes 4 floats at once)
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]

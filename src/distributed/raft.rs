@@ -546,9 +546,9 @@ impl RaftNode {
     /// Get random election timeout
     fn random_election_timeout(&self) -> Duration {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let timeout_ms = rng
-            .gen_range(self.config.election_timeout_min_ms..=self.config.election_timeout_max_ms);
+            .random_range(self.config.election_timeout_min_ms..=self.config.election_timeout_max_ms);
         Duration::from_millis(timeout_ms)
     }
 

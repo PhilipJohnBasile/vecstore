@@ -33,7 +33,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::Result;
 
 /// Ranking configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

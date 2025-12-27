@@ -37,8 +37,8 @@
 //! collection.search_with_filter(&query, "score > 0.9")?;
 //! ```
 
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLock};
+use std::collections::HashMap;
+use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 

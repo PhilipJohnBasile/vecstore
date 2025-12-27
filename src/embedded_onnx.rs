@@ -30,8 +30,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
-use std::path::Path;
+use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{VecStoreError, Result};

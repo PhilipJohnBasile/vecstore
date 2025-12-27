@@ -434,7 +434,7 @@ impl WasmHnsw {
 
     /// Randomly select layer for new node
     fn random_layer(&self) -> usize {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let r: f32 = rng.random();
         (-r.ln() * self.ml).floor() as usize
     }
@@ -630,7 +630,7 @@ mod tests {
         let mut index = WasmHnsw::with_params(128, Distance::Cosine, 16, 200);
 
         // Insert 1000 random vectors
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         for i in 0..1000 {
             let vector: Vec<f32> = (0..128).map(|_| rng.random::<f32>()).collect();
             index.insert(format!("v{}", i), vector).unwrap();

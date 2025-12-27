@@ -33,7 +33,7 @@
 //! let explored = index.explore("doc1", 0.3, 20)?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
 use std::sync::RwLock;
 

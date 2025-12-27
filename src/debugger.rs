@@ -32,7 +32,6 @@
 
 use anyhow::{Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 // ============================================================================
 // CONFIGURATION
@@ -939,7 +938,7 @@ mod tests {
 
     fn generate_random_embedding(dim: usize) -> Vec<f32> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect()
     }
 

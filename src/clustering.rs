@@ -221,8 +221,8 @@ impl KMeansClustering {
     /// Initialize centroids using k-means++ algorithm
     fn initialize_centroids_plus_plus(&self, vectors: &[Vec<f32>]) -> Vec<Vec<f32>> {
         let mut centroids = Vec::with_capacity(self.config.k);
-        let mut rng = rand::thread_rng();
-        use rand::seq::SliceRandom;
+        let mut rng = rand::rng();
+        use rand::seq::IndexedRandom;
 
         // Choose first centroid randomly
         centroids.push(vectors.choose(&mut rng).unwrap().clone());
@@ -321,7 +321,7 @@ impl KMeansClustering {
             let same_cluster: Vec<usize> = labels
                 .iter()
                 .enumerate()
-                .filter(|(_, &l)| l == own_cluster)
+                .filter(|(_, l)| **l == own_cluster)
                 .map(|(idx, _)| idx)
                 .collect();
 
@@ -346,7 +346,7 @@ impl KMeansClustering {
                 let other_cluster: Vec<usize> = labels
                     .iter()
                     .enumerate()
-                    .filter(|(_, &l)| l == cluster)
+                    .filter(|(_, l)| **l == cluster)
                     .map(|(idx, _)| idx)
                     .collect();
 

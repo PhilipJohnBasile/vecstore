@@ -110,7 +110,7 @@ impl IsolationForest {
 
         // Select random feature and split value
         let dim = vectors[0].len();
-        let feature = rng.gen_range(0..dim);
+        let feature = rng.random_range(0..dim);
 
         let min_val = indices
             .iter()
@@ -127,7 +127,7 @@ impl IsolationForest {
             };
         }
 
-        let split_value = rng.gen_range(min_val..max_val);
+        let split_value = rng.random_range(min_val..max_val);
 
         // Partition indices
         let mut left_indices = Vec::new();

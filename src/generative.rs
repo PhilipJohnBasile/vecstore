@@ -38,7 +38,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::Result;
 
 /// LLM provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -510,7 +510,7 @@ impl GenerativeSearch {
     }
 
     /// Call the LLM (placeholder)
-    fn call_llm(&self, prompt: &str) -> Result<String> {
+    fn call_llm(&self, _prompt: &str) -> Result<String> {
         // In production, this would make actual API calls
         // For now, return a placeholder response
         Ok(format!(

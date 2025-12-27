@@ -298,7 +298,7 @@ impl BayesianOptimizer {
             .unwrap_or_else(|| self.random_sample());
 
         // Perturb around best point with some exploration
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut candidate = best.clone();
 
         for (i, &(low, high)) in self.bounds.iter().enumerate() {
@@ -312,7 +312,7 @@ impl BayesianOptimizer {
 
     /// Random sample within bounds
     fn random_sample(&self) -> Vec<f64> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         self.bounds
             .iter()
             .map(|&(low, high)| rng.random::<f64>() * (high - low) + low)
@@ -515,7 +515,7 @@ impl AutoTuner {
     }
 
     /// Record a query for continuous adaptation
-    pub fn record_query(&mut self, latency: std::time::Duration) {
+    pub fn record_query(&mut self, _latency: std::time::Duration) {
         self.query_count += 1;
     }
 
@@ -644,7 +644,7 @@ impl RecallEstimator {
         F: FnMut(&[f32], usize) -> Result<Vec<String>>,
         G: FnMut(&[f32], usize) -> Result<Vec<String>>,
     {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let mut total_recall = 0.0;
         let mut sample_count = 0;
 

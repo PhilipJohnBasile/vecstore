@@ -28,7 +28,7 @@
 //! ```
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
@@ -642,7 +642,7 @@ impl QueryExplainer {
         query_vector: &[f32],
         k: usize,
         filter: Option<&str>,
-        options: &ExplainOptions,
+        _options: &ExplainOptions,
     ) -> ExplainResult {
         let start = Instant::now();
 
@@ -771,7 +771,7 @@ impl QueryExplainer {
         query_vector: &[f32],
         query_text: &str,
         k: usize,
-        options: &ExplainOptions,
+        _options: &ExplainOptions,
     ) -> ExplainResult {
         let start = Instant::now();
 

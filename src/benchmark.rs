@@ -352,7 +352,7 @@ impl Benchmarker {
 
     /// Generate random test data
     fn generate_data(&self) -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let vectors: Vec<Vec<f32>> = (0..self.config.num_vectors)
             .map(|_| {

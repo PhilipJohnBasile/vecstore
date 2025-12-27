@@ -30,7 +30,7 @@
 //! let recommendations = engine.recommend(request)?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BinaryHeap};
+use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 

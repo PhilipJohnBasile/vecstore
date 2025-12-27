@@ -970,7 +970,7 @@ mod tests {
 
     fn generate_random_vector(dim: usize) -> Vec<f32> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         (0..dim).map(|_| rng.random::<f32>()).collect()
     }
 

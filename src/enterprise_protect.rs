@@ -35,7 +35,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -453,7 +453,7 @@ impl BackupManager {
     }
 
     /// Restore from backup
-    pub fn restore(&self, backup_id: &str, encrypted_data: &[u8]) -> Result<Vec<u8>> {
+    pub fn restore(&self, _backup_id: &str, encrypted_data: &[u8]) -> Result<Vec<u8>> {
         // Decrypt
         let decrypted = if self.config.encrypt {
             if let Some(enc) = &self.encryption {
@@ -545,7 +545,7 @@ pub enum ComplianceFramework {
     HIPAA,
     GDPR,
     CCPA,
-    PCI_DSS,
+    PciDss,
     ISO27001,
 }
 
@@ -600,7 +600,7 @@ impl ComplianceChecker {
                 ComplianceFramework::HIPAA => self.check_hipaa(config),
                 ComplianceFramework::GDPR => self.check_gdpr(config),
                 ComplianceFramework::CCPA => self.check_ccpa(config),
-                ComplianceFramework::PCI_DSS => self.check_pci_dss(config),
+                ComplianceFramework::PciDss => self.check_pci_dss(config),
                 ComplianceFramework::ISO27001 => self.check_iso27001(config),
             }
         }
@@ -709,7 +709,7 @@ impl ComplianceChecker {
         });
     }
 
-    fn check_ccpa(&mut self, config: &EnterpriseConfig) {
+    fn check_ccpa(&mut self, _config: &EnterpriseConfig) {
         self.checks.push(ComplianceCheck {
             framework: ComplianceFramework::CCPA,
             name: "Consumer Data Access".to_string(),
@@ -721,7 +721,7 @@ impl ComplianceChecker {
 
     fn check_pci_dss(&mut self, config: &EnterpriseConfig) {
         self.checks.push(ComplianceCheck {
-            framework: ComplianceFramework::PCI_DSS,
+            framework: ComplianceFramework::PciDss,
             name: "Strong Encryption".to_string(),
             status: if config.encryption_enabled {
                 ComplianceStatus::Passed

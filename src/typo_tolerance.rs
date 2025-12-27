@@ -28,7 +28,6 @@
 use std::collections::{HashMap, HashSet, BTreeMap};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
 
 /// Typo tolerance configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

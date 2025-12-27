@@ -243,7 +243,7 @@ impl RaBitQ {
         let mut rng = if let Some(seed) = self.config.seed {
             rand::rngs::StdRng::seed_from_u64(seed)
         } else {
-            rand::rngs::StdRng::from_entropy()
+            rand::rngs::StdRng::from_os_rng()
         };
 
         let mut matrix: Vec<Vec<f32>> = Vec::with_capacity(dim);
@@ -290,7 +290,7 @@ impl RaBitQ {
         let mut code = BinaryCode::new(dim);
 
         // Center and normalize
-        let mut centered: Vec<f32> = vector.iter()
+        let centered: Vec<f32> = vector.iter()
             .zip(self.mean.iter())
             .zip(self.std.iter())
             .map(|((&v, &m), &s)| (v - m) / s)

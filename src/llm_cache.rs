@@ -37,12 +37,11 @@
 //! assert_eq!(response1, response2); // Same response from cache
 //! ```
 
-use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::Result;
 
 /// Cache configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

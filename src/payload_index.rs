@@ -244,7 +244,7 @@ impl BTreeIndex {
     pub fn lt(&self, value: f64) -> HashSet<String> {
         let value = OrderedFloat(value);
         let mut result = HashSet::new();
-        for (k, docs) in self.index.range(..value) {
+        for (_k, docs) in self.index.range(..value) {
             result.extend(docs.clone());
         }
         result
@@ -779,7 +779,7 @@ impl PayloadIndexManager {
                 }
                 Ok(result)
             }
-            Filter::Not(inner) => {
+            Filter::Not(_inner) => {
                 // Would need all document IDs to compute NOT
                 // For now, return empty (would need enhancement)
                 Err(VecStoreError::InvalidInput(
