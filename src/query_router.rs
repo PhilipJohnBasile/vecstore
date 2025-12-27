@@ -293,16 +293,32 @@ impl QueryRouter {
         let node_id = node.id.clone();
         let node = Arc::new(node);
 
-        self.nodes.write().unwrap().insert(node_id.clone(), node);
-        self.hash_ring.write().unwrap().add_node(&node_id);
+        let mut nodes_guard = self.nodes.write().map_err(|_| {
+            VecStoreError::Internal("Failed to acquire nodes write lock".into())
+        })?;
+        nodes_guard.insert(node_id.clone(), node);
+        drop(nodes_guard);
+
+        let mut hash_ring_guard = self.hash_ring.write().map_err(|_| {
+            VecStoreError::Internal("Failed to acquire hash_ring write lock".into())
+        })?;
+        hash_ring_guard.add_node(&node_id);
 
         Ok(())
     }
 
     /// Deregister a replica node
     pub fn deregister_node(&self, node_id: &str) -> Result<()> {
-        self.nodes.write().unwrap().remove(node_id);
-        self.hash_ring.write().unwrap().remove_node(node_id);
+        let mut nodes_guard = self.nodes.write().map_err(|_| {
+            VecStoreError::Internal("Failed to acquire nodes write lock".into())
+        })?;
+        nodes_guard.remove(node_id);
+        drop(nodes_guard);
+
+        let mut hash_ring_guard = self.hash_ring.write().map_err(|_| {
+            VecStoreError::Internal("Failed to acquire hash_ring write lock".into())
+        })?;
+        hash_ring_guard.remove_node(node_id);
         Ok(())
     }
 
@@ -310,7 +326,9 @@ impl QueryRouter {
     pub fn route(&self, query: &QueryCharacteristics) -> Result<RoutingDecision> {
         self.metrics.requests_total.fetch_add(1, Ordering::Relaxed);
 
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read().map_err(|_| {
+            VecStoreError::Internal("Failed to acquire nodes read lock".into())
+        })?;
         let available: Vec<_> = nodes.values()
             .filter(|n| self.is_available(n))
             .cloned()
@@ -341,15 +359,17 @@ impl QueryRouter {
         // Build fallback list
         let fallbacks = self.build_fallbacks(&selected, &available);
 
-        let state = selected.state.read().unwrap();
-        let estimated_latency = if !state.latencies.is_empty() {
-            let avg: Duration = state.latencies.iter().sum::<Duration>()
-                / state.latencies.len() as u32;
-            Some(avg)
+        let estimated_latency = if let Ok(state) = selected.state.read() {
+            if !state.latencies.is_empty() {
+                let avg: Duration = state.latencies.iter().sum::<Duration>()
+                    / state.latencies.len() as u32;
+                Some(avg)
+            } else {
+                None
+            }
         } else {
             None
         };
-        drop(state);
 
         Ok(RoutingDecision {
             node_id: selected.id.clone(),

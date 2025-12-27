@@ -328,22 +328,26 @@ impl RaftNode {
     where
         F: Fn(&[u8]) -> Vec<u8> + Send + Sync + 'static,
     {
-        *self.apply_callback.write().unwrap() = Some(Box::new(callback));
+        let Ok(mut guard) = self.apply_callback.write() else { return; };
+        *guard = Some(Box::new(callback));
     }
 
     /// Get current term
     pub fn current_term(&self) -> u64 {
-        self.persistent.read().unwrap().current_term
+        let Ok(guard) = self.persistent.read() else { return 0; };
+        guard.current_term
     }
 
     /// Get current state
     pub fn current_state(&self) -> RaftState {
-        *self.state.read().unwrap()
+        let Ok(guard) = self.state.read() else { return RaftState::Follower; };
+        *guard
     }
 
     /// Get leader ID
     pub fn leader(&self) -> Option<String> {
-        self.leader_id.read().unwrap().clone()
+        let Ok(guard) = self.leader_id.read() else { return None; };
+        guard.clone()
     }
 
     /// Check if this node is leader

@@ -581,19 +581,25 @@ impl ObjectStoreBackend {
 
         // Update cache if write-through
         if self.config.write_through_cache {
-            let mut cache = self.memory_cache.write().unwrap();
+            let mut cache = self.memory_cache.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire memory cache write lock".to_string())
+            })?;
             cache.put(id.to_string(), data, obj_meta.clone());
         }
 
         // Update metadata index
         {
-            let mut index = self.metadata_index.write().unwrap();
+            let mut index = self.metadata_index.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire metadata index write lock".to_string())
+            })?;
             index.insert(id.to_string(), obj_meta);
         }
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire stats write lock".to_string())
+            })?;
             stats.write_ops += 1;
             stats.total_latency_ms += start.elapsed().as_secs_f64() * 1000.0;
             stats.operation_count += 1;
@@ -608,15 +614,21 @@ impl ObjectStoreBackend {
 
         // Track access
         {
-            let mut tracker = self.access_tracker.write().unwrap();
+            let mut tracker = self.access_tracker.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire access tracker write lock".to_string())
+            })?;
             tracker.record(id);
         }
 
         // Try cache first
         if self.config.read_through_cache {
-            let mut cache = self.memory_cache.write().unwrap();
+            let mut cache = self.memory_cache.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire memory cache write lock".to_string())
+            })?;
             if let Some(entry) = cache.get(id) {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire stats write lock".to_string())
+                })?;
                 stats.read_ops += 1;
                 stats.cache_hits += 1;
                 stats.total_latency_ms += start.elapsed().as_secs_f64() * 1000.0;
@@ -632,7 +644,10 @@ impl ObjectStoreBackend {
         if let Some(data) = data {
             // Update cache
             if self.config.read_through_cache {
-                let meta = self.metadata_index.read().unwrap().get(id).cloned().unwrap_or_else(|| {
+                let index_guard = self.metadata_index.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire metadata index read lock".to_string())
+                })?;
+                let meta = index_guard.get(id).cloned().unwrap_or_else(|| {
                     ObjectMetadata {
                         key: id.to_string(),
                         size_bytes: data.len() as u64,
@@ -643,14 +658,19 @@ impl ObjectStoreBackend {
                         custom: HashMap::new(),
                     }
                 });
+                drop(index_guard);
 
-                let mut cache = self.memory_cache.write().unwrap();
+                let mut cache = self.memory_cache.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire memory cache write lock".to_string())
+                })?;
                 cache.put(id.to_string(), data.clone(), meta);
             }
 
             // Update stats
             {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire stats write lock".to_string())
+                })?;
                 stats.read_ops += 1;
                 stats.cache_misses += 1;
                 stats.total_latency_ms += start.elapsed().as_secs_f64() * 1000.0;
@@ -667,13 +687,17 @@ impl ObjectStoreBackend {
     pub fn delete(&self, id: &str) -> Result<bool> {
         // Invalidate cache
         {
-            let mut cache = self.memory_cache.write().unwrap();
+            let mut cache = self.memory_cache.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire memory cache write lock".to_string())
+            })?;
             cache.invalidate(id);
         }
 
         // Remove from metadata index
         {
-            let mut index = self.metadata_index.write().unwrap();
+            let mut index = self.metadata_index.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire metadata index write lock".to_string())
+            })?;
             index.remove(id);
         }
 
@@ -711,16 +735,22 @@ impl ObjectStoreBackend {
     pub fn pre_warm(&self, strategy: &PreWarmStrategy, count: usize) -> Result<usize> {
         let ids_to_warm: Vec<String> = match strategy {
             PreWarmStrategy::MostRecent => {
-                let tracker = self.access_tracker.read().unwrap();
+                let tracker = self.access_tracker.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                })?;
                 tracker.most_recent(count).into_iter().map(|s| s.to_string()).collect()
             }
             PreWarmStrategy::MostFrequent => {
-                let tracker = self.access_tracker.read().unwrap();
+                let tracker = self.access_tracker.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                })?;
                 tracker.most_frequent(count).into_iter().map(|(s, _)| s.to_string()).collect()
             }
             PreWarmStrategy::Predictive => {
                 // Use frequency as a simple predictor
-                let tracker = self.access_tracker.read().unwrap();
+                let tracker = self.access_tracker.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                })?;
                 tracker.most_frequent(count).into_iter().map(|(s, _)| s.to_string()).collect()
             }
             PreWarmStrategy::Explicit { ids } => {
@@ -740,9 +770,40 @@ impl ObjectStoreBackend {
 
     /// Get statistics
     pub fn stats(&self) -> ObjectStoreStats {
-        let stats = self.stats.read().unwrap();
-        let cache_stats = self.memory_cache.read().unwrap().stats();
-        let index = self.metadata_index.read().unwrap();
+        let Ok(stats) = self.stats.read() else {
+            return ObjectStoreStats {
+                total_objects: 0,
+                total_size_bytes: 0,
+                read_ops: 0,
+                write_ops: 0,
+                cache_hit_rate: 0.0,
+                avg_latency_ms: 0.0,
+                cache_stats: vec![],
+            };
+        };
+        let Ok(cache_guard) = self.memory_cache.read() else {
+            return ObjectStoreStats {
+                total_objects: 0,
+                total_size_bytes: 0,
+                read_ops: stats.read_ops,
+                write_ops: stats.write_ops,
+                cache_hit_rate: 0.0,
+                avg_latency_ms: 0.0,
+                cache_stats: vec![],
+            };
+        };
+        let cache_stats = cache_guard.stats();
+        let Ok(index) = self.metadata_index.read() else {
+            return ObjectStoreStats {
+                total_objects: 0,
+                total_size_bytes: 0,
+                read_ops: stats.read_ops,
+                write_ops: stats.write_ops,
+                cache_hit_rate: 0.0,
+                avg_latency_ms: 0.0,
+                cache_stats: vec![cache_stats],
+            };
+        };
 
         let total_size: u64 = index.values().map(|m| m.size_bytes).sum();
         let total_ops = stats.cache_hits + stats.cache_misses;
@@ -771,7 +832,9 @@ impl ObjectStoreBackend {
 
     /// List objects with prefix
     pub fn list(&self, prefix: &str, limit: usize) -> Result<Vec<ObjectMetadata>> {
-        let index = self.metadata_index.read().unwrap();
+        let index = self.metadata_index.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire metadata index read lock".to_string())
+        })?;
 
         let results: Vec<ObjectMetadata> = index
             .iter()
@@ -851,28 +914,38 @@ impl ObjectStoreBackend {
     fn write_to_backend(&self, key: &str, data: &[u8]) -> Result<()> {
         match &self.config.provider {
             StorageProvider::Local { path: _ } => {
-                let mut storage = self.local_storage.write().unwrap();
+                let mut storage = self.local_storage.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
             }
             StorageProvider::S3 { .. } => {
                 // In production: use aws-sdk-s3
-                let mut storage = self.local_storage.write().unwrap();
+                let mut storage = self.local_storage.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
             }
             StorageProvider::GCS { .. } => {
-                let mut storage = self.local_storage.write().unwrap();
+                let mut storage = self.local_storage.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
             }
             StorageProvider::AzureBlob { .. } => {
-                let mut storage = self.local_storage.write().unwrap();
+                let mut storage = self.local_storage.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
             }
             StorageProvider::MinIO { .. } => {
-                let mut storage = self.local_storage.write().unwrap();
+                let mut storage = self.local_storage.write().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
             }
@@ -886,14 +959,18 @@ impl ObjectStoreBackend {
             StorageProvider::GCS { .. } |
             StorageProvider::AzureBlob { .. } |
             StorageProvider::MinIO { .. } => {
-                let storage = self.local_storage.read().unwrap();
+                let storage = self.local_storage.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire local storage read lock".to_string())
+                })?;
                 Ok(storage.get(key).cloned())
             }
         }
     }
 
     fn delete_from_backend(&self, key: &str) -> Result<bool> {
-        let mut storage = self.local_storage.write().unwrap();
+        let mut storage = self.local_storage.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+        })?;
         Ok(storage.remove(key).is_some())
     }
 }
@@ -987,7 +1064,9 @@ impl TieredStorageManager {
         // New data goes to hot tier
         self.hot_tier.put(id, vector, metadata)?;
 
-        let mut mapping = self.tier_mapping.write().unwrap();
+        let mut mapping = self.tier_mapping.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire tier mapping write lock".to_string())
+        })?;
         mapping.insert(id.to_string(), StorageTier::Hot);
 
         Ok(())
@@ -1023,7 +1102,9 @@ impl TieredStorageManager {
 
     /// Get current tier for an object
     pub fn get_tier(&self, id: &str) -> Option<StorageTier> {
-        let mapping = self.tier_mapping.read().unwrap();
+        let Ok(mapping) = self.tier_mapping.read() else {
+            return None;
+        };
         mapping.get(id).cloned()
     }
 
@@ -1048,7 +1129,7 @@ pub struct TieredStorageStats {
 fn unix_timestamp() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or(Duration::ZERO)
         .as_secs() as i64
 }
 

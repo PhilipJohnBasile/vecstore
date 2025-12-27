@@ -8,7 +8,18 @@ use crate::store::{Metadata, Neighbor, Query, VecStore};
 use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, PoisonError, RwLock};
+
+/// Helper trait to convert PoisonError to anyhow::Error
+trait LockResultExt<T> {
+    fn map_lock_err(self) -> Result<T>;
+}
+
+impl<T> LockResultExt<T> for std::result::Result<T, PoisonError<T>> {
+    fn map_lock_err(self) -> Result<T> {
+        self.map_err(|e| anyhow!("Lock poisoned: {}", e))
+    }
+}
 
 /// Multi-tenant namespace manager
 pub struct NamespaceManager {
@@ -68,8 +79,8 @@ impl NamespaceManager {
                     // Load VecStore
                     let store = VecStore::open(&ns_path)?;
 
-                    let mut namespaces = self.namespaces.write().unwrap();
-                    let mut stores = self.stores.write().unwrap();
+                    let mut namespaces = self.namespaces.write().map_lock_err()?;
+                    let mut stores = self.stores.write().map_lock_err()?;
 
                     namespaces.insert(ns_id.clone(), namespace);
                     stores.insert(ns_id.clone(), store);
@@ -89,7 +100,7 @@ impl NamespaceManager {
         name: String,
         quotas: Option<NamespaceQuotas>,
     ) -> Result<()> {
-        let namespaces = self.namespaces.read().unwrap();
+        let namespaces = self.namespaces.read().map_lock_err()?;
         if namespaces.contains_key(&id) {
             return Err(anyhow!("Namespace already exists: {}", id));
         }
@@ -110,8 +121,8 @@ impl NamespaceManager {
         // Create VecStore for this namespace
         let store = VecStore::open(&ns_path)?;
 
-        let mut namespaces = self.namespaces.write().unwrap();
-        let mut stores = self.stores.write().unwrap();
+        let mut namespaces = self.namespaces.write().map_lock_err()?;
+        let mut stores = self.stores.write().map_lock_err()?;
 
         namespaces.insert(id.clone(), namespace);
         stores.insert(id, store);
@@ -121,7 +132,7 @@ impl NamespaceManager {
 
     /// Get namespace metadata
     pub fn get_namespace(&self, id: &NamespaceId) -> Result<Namespace> {
-        let namespaces = self.namespaces.read().unwrap();
+        let namespaces = self.namespaces.read().map_lock_err()?;
         namespaces
             .get(id)
             .cloned()
@@ -130,7 +141,9 @@ impl NamespaceManager {
 
     /// List all namespaces
     pub fn list_namespaces(&self) -> Vec<Namespace> {
-        let namespaces = self.namespaces.read().unwrap();
+        let Ok(namespaces) = self.namespaces.read() else {
+            return Vec::new();
+        };
         namespaces.values().cloned().collect()
     }
 

@@ -218,7 +218,8 @@ impl BackpressureController {
 
     /// Check if should accept more records
     pub fn should_accept(&self) -> bool {
-        let state = *self.state.read().unwrap();
+        let Ok(state_guard) = self.state.read() else { return false; };
+        let state = *state_guard;
 
         match state {
             BackpressureState::CircuitOpen => false,
@@ -239,8 +240,7 @@ impl BackpressureController {
         self.received.fetch_add(1, Ordering::Relaxed);
         self.buffer_size.fetch_add(1, Ordering::Relaxed);
 
-        {
-            let mut starts = self.processing_starts.write().unwrap();
+        if let Ok(mut starts) = self.processing_starts.write() {
             starts.push_back(Instant::now());
             while starts.len() > 1000 {
                 starts.pop_front();
@@ -258,7 +258,9 @@ impl BackpressureController {
             self.buffer_size.store(0, Ordering::Relaxed);
         }
 
-        *self.last_processed.write().unwrap() = Instant::now();
+        if let Ok(mut last) = self.last_processed.write() {
+            *last = Instant::now();
+        }
         self.circuit_breaker.record_success();
         self.update_state();
     }
@@ -290,7 +292,7 @@ impl BackpressureController {
 
     /// Commit checkpoint
     pub fn commit_checkpoint(&self, offsets: HashMap<u32, u64>) {
-        let mut checkpoint = self.checkpoint.write().unwrap();
+        let Ok(mut checkpoint) = self.checkpoint.write() else { return; };
         checkpoint.offsets = offsets;
         checkpoint.timestamp = unix_timestamp();
         checkpoint.pending_txns.clear();
@@ -298,7 +300,14 @@ impl BackpressureController {
 
     /// Get current checkpoint
     pub fn get_checkpoint(&self) -> Checkpoint {
-        self.checkpoint.read().unwrap().clone()
+        let Ok(checkpoint) = self.checkpoint.read() else {
+            return Checkpoint {
+                offsets: HashMap::new(),
+                timestamp: unix_timestamp(),
+                pending_txns: Vec::new(),
+            };
+        };
+        checkpoint.clone()
     }
 
     /// Get lag metrics
@@ -318,28 +327,34 @@ impl BackpressureController {
             f64::INFINITY
         };
 
+        let partition_lag = self.partition_offsets.read()
+            .map(|guard| guard.clone())
+            .unwrap_or_default();
+
         LagMetrics {
             pending_records: pending,
             lag_seconds,
             processing_rate,
             estimated_catchup_seconds: estimated_catchup,
-            partition_lag: self.partition_offsets.read().unwrap().clone(),
+            partition_lag,
         }
     }
 
     /// Get current state
     pub fn get_state(&self) -> BackpressureState {
-        *self.state.read().unwrap()
+        let Ok(state) = self.state.read() else { return BackpressureState::Normal; };
+        *state
     }
 
     /// Get statistics
     pub fn get_stats(&self) -> StreamStats {
+        let dlq_size = self.dlq.read().map(|guard| guard.len()).unwrap_or(0);
         StreamStats {
             received: self.received.load(Ordering::Relaxed),
             processed: self.processed.load(Ordering::Relaxed),
             failed: self.failed.load(Ordering::Relaxed),
             pending: self.buffer_size.load(Ordering::Relaxed),
-            dlq_size: self.dlq.read().unwrap().len(),
+            dlq_size,
             circuit_trips: self.circuit_trips.load(Ordering::Relaxed),
             state: self.get_state(),
         }
@@ -347,20 +362,22 @@ impl BackpressureController {
 
     /// Get DLQ records
     pub fn get_dlq_records(&self, limit: usize) -> Vec<DeadLetterRecord> {
-        let dlq = self.dlq.read().unwrap();
+        let Ok(dlq) = self.dlq.read() else { return Vec::new(); };
         dlq.iter().take(limit).cloned().collect()
     }
 
     /// Retry DLQ record
     pub fn retry_dlq_record(&self, record_id: &str) -> Option<DeadLetterRecord> {
-        let mut dlq = self.dlq.write().unwrap();
+        let mut dlq = self.dlq.write().ok()?;
         let pos = dlq.iter().position(|r| r.record_id == record_id)?;
-        Some(dlq.remove(pos).unwrap())
+        dlq.remove(pos)
     }
 
     /// Clear DLQ
     pub fn clear_dlq(&self) {
-        self.dlq.write().unwrap().clear();
+        if let Ok(mut dlq) = self.dlq.write() {
+            dlq.clear();
+        }
     }
 
     fn buffer_fill_ratio(&self) -> f64 {
@@ -369,12 +386,12 @@ impl BackpressureController {
     }
 
     fn calculate_processing_rate(&self) -> f64 {
-        let starts = self.processing_starts.read().unwrap();
+        let Ok(starts) = self.processing_starts.read() else { return 0.0; };
         if starts.len() < 2 {
             return 0.0;
         }
 
-        let oldest = starts.front().unwrap();
+        let Some(oldest) = starts.front() else { return 0.0; };
         let elapsed = oldest.elapsed().as_secs_f64();
 
         if elapsed > 0.0 {
@@ -385,7 +402,7 @@ impl BackpressureController {
     }
 
     fn update_state(&self) {
-        let mut state = self.state.write().unwrap();
+        let Ok(mut state) = self.state.write() else { return; };
 
         // Check circuit breaker
         if self.circuit_breaker.is_open() {
@@ -424,7 +441,7 @@ impl BackpressureController {
     }
 
     fn add_to_dlq<T: Serialize>(&self, record: &StreamRecord<T>, error: &str) {
-        let mut dlq = self.dlq.write().unwrap();
+        let Ok(mut dlq) = self.dlq.write() else { return; };
 
         // Evict oldest if full
         while dlq.len() >= self.config.dlq_max_size {

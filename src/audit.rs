@@ -155,42 +155,56 @@ impl AuditEntry {
     }
 
     /// Set severity
+    #[inline]
+    #[must_use]
     pub fn with_severity(mut self, severity: AuditSeverity) -> Self {
         self.severity = severity;
         self
     }
 
     /// Set outcome
+    #[inline]
+    #[must_use]
     pub fn with_outcome(mut self, outcome: AuditOutcome) -> Self {
         self.outcome = outcome;
         self
     }
 
     /// Set resource
+    #[inline]
+    #[must_use]
     pub fn with_resource(mut self, resource: impl Into<String>) -> Self {
         self.resource = Some(resource.into());
         self
     }
 
     /// Set details
+    #[inline]
+    #[must_use]
     pub fn with_details(mut self, details: impl Into<String>) -> Self {
         self.details = Some(details.into());
         self
     }
 
     /// Set user ID
+    #[inline]
+    #[must_use]
     pub fn with_user(mut self, user_id: impl Into<String>) -> Self {
         self.metadata.user_id = Some(user_id.into());
         self
     }
 
     /// Set IP address
+    #[inline]
+    #[must_use]
     pub fn with_ip(mut self, ip: impl Into<String>) -> Self {
         self.metadata.ip_address = Some(ip.into());
         self
     }
 
     /// Set duration
+    #[inline]
+    #[must_use]
     pub fn with_duration(mut self, duration_ms: u64) -> Self {
         self.duration_ms = Some(duration_ms);
         self

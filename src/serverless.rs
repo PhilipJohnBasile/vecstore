@@ -161,7 +161,7 @@ impl Autoscaler {
 
     /// Record current QPS
     pub fn record_qps(&self, qps: f64) {
-        let mut history = self.qps_history.write().unwrap();
+        let Ok(mut history) = self.qps_history.write() else { return; };
         let now = Instant::now();
 
         // Keep last 5 minutes of data
@@ -170,12 +170,11 @@ impl Autoscaler {
 
         // Update hourly pattern for predictive scaling
         if self.config.predictive_scaling {
-            let hour = (std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() / 3600 % 24) as usize;
+            let Ok(duration) = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH) else { return; };
+            let hour = (duration.as_secs() / 3600 % 24) as usize;
 
-            let mut patterns = self.hourly_patterns.write().unwrap();
+            let Ok(mut patterns) = self.hourly_patterns.write() else { return; };
             // Exponential moving average
             patterns[hour] = patterns[hour] * 0.9 + qps * 0.1;
         }
@@ -183,7 +182,7 @@ impl Autoscaler {
 
     /// Get average QPS over last N seconds
     fn avg_qps(&self, seconds: u64) -> f64 {
-        let history = self.qps_history.read().unwrap();
+        let Ok(history) = self.qps_history.read() else { return 0.0; };
         let now = Instant::now();
         let cutoff = Duration::from_secs(seconds);
 
@@ -205,12 +204,11 @@ impl Autoscaler {
             return self.avg_qps(60);
         }
 
-        let next_hour = ((std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() / 3600 + 1) % 24) as usize;
+        let Ok(duration) = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH) else { return self.avg_qps(60); };
+        let next_hour = ((duration.as_secs() / 3600 + 1) % 24) as usize;
 
-        let patterns = self.hourly_patterns.read().unwrap();
+        let Ok(patterns) = self.hourly_patterns.read() else { return self.avg_qps(60); };
         patterns[next_hour]
     }
 
@@ -236,7 +234,7 @@ impl Autoscaler {
             ScalingDecision::ScaleUp(desired - current_replicas)
         } else if desired < current_replicas {
             // Check scale down delay
-            let last_scale = self.last_scale_down.read().unwrap();
+            let Ok(last_scale) = self.last_scale_down.read() else { return ScalingDecision::NoChange; };
             if let Some(last) = *last_scale {
                 if last.elapsed() < Duration::from_secs(self.config.scale_down_delay_secs) {
                     return ScalingDecision::NoChange;

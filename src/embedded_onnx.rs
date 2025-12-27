@@ -212,7 +212,7 @@ impl EmbeddingModel {
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write()?;
             stats.total_embeddings += texts.len() as u64;
             let latency = start.elapsed().as_millis() as f64;
             stats.avg_latency_ms = (stats.avg_latency_ms + latency) / 2.0;
@@ -282,7 +282,8 @@ impl EmbeddingModel {
 
     /// Get statistics
     pub fn stats(&self) -> ModelStats {
-        self.stats.read().unwrap().clone()
+        let Ok(guard) = self.stats.read() else { return ModelStats::default(); };
+        guard.clone()
     }
 }
 
@@ -354,7 +355,7 @@ impl EmbeddedStore {
     ) -> Result<()> {
         // Check cache first
         let embedding = if self.config.enable_cache {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read()?;
             cache.get(text).cloned()
         } else {
             None
@@ -367,7 +368,7 @@ impl EmbeddedStore {
 
                 // Update cache
                 if self.config.enable_cache {
-                    let mut cache = self.cache.write().unwrap();
+                    let mut cache = self.cache.write()?;
                     if cache.len() < self.config.max_cache_size {
                         cache.insert(text.to_string(), e.clone());
                     }
@@ -378,16 +379,16 @@ impl EmbeddedStore {
         };
 
         // Store vector
-        self.vectors.write().unwrap().insert(id.to_string(), embedding);
+        self.vectors.write()?.insert(id.to_string(), embedding);
 
         // Store text
         if self.config.store_text {
-            self.texts.write().unwrap().insert(id.to_string(), text.to_string());
+            self.texts.write()?.insert(id.to_string(), text.to_string());
         }
 
         // Store metadata
         if let Some(meta) = metadata {
-            self.metadata.write().unwrap().insert(id.to_string(), meta);
+            self.metadata.write()?.insert(id.to_string(), meta);
         }
 
         Ok(())
@@ -407,10 +408,10 @@ impl EmbeddedStore {
             });
         }
 
-        self.vectors.write().unwrap().insert(id.to_string(), vector);
+        self.vectors.write()?.insert(id.to_string(), vector);
 
         if let Some(meta) = metadata {
-            self.metadata.write().unwrap().insert(id.to_string(), meta);
+            self.metadata.write()?.insert(id.to_string(), meta);
         }
 
         Ok(())
@@ -424,9 +425,9 @@ impl EmbeddedStore {
         let texts: Vec<String> = items.iter().map(|(_, text, _)| text.to_string()).collect();
         let embeddings = self.model.embed_batch(&texts)?;
 
-        let mut vectors = self.vectors.write().unwrap();
-        let mut stored_texts = self.texts.write().unwrap();
-        let mut metadata = self.metadata.write().unwrap();
+        let mut vectors = self.vectors.write()?;
+        let mut stored_texts = self.texts.write()?;
+        let mut metadata = self.metadata.write()?;
 
         for ((id, text, meta), embedding) in items.into_iter().zip(embeddings) {
             vectors.insert(id.to_string(), embedding);
@@ -445,9 +446,16 @@ impl EmbeddedStore {
 
     /// Delete by ID
     pub fn delete(&self, id: &str) -> bool {
-        let removed = self.vectors.write().unwrap().remove(id).is_some();
-        self.texts.write().unwrap().remove(id);
-        self.metadata.write().unwrap().remove(id);
+        let Ok(mut vectors) = self.vectors.write() else { return false; };
+        let removed = vectors.remove(id).is_some();
+        drop(vectors);
+
+        if let Ok(mut texts) = self.texts.write() {
+            texts.remove(id);
+        }
+        if let Ok(mut metadata) = self.metadata.write() {
+            metadata.remove(id);
+        }
         removed
     }
 
@@ -466,9 +474,9 @@ impl EmbeddedStore {
             });
         }
 
-        let vectors = self.vectors.read().unwrap();
-        let texts = self.texts.read().unwrap();
-        let metadata = self.metadata.read().unwrap();
+        let vectors = self.vectors.read()?;
+        let texts = self.texts.read()?;
+        let metadata = self.metadata.read()?;
 
         let mut results: Vec<_> = vectors.iter()
             .map(|(id, vec)| {
@@ -490,10 +498,10 @@ impl EmbeddedStore {
 
     /// Get by ID
     pub fn get(&self, id: &str) -> Option<(Vec<f32>, Option<String>, Option<serde_json::Value>)> {
-        let vectors = self.vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else { return None; };
         vectors.get(id).map(|v| {
-            let text = self.texts.read().unwrap().get(id).cloned();
-            let meta = self.metadata.read().unwrap().get(id).cloned();
+            let text = self.texts.read().ok().and_then(|t| t.get(id).cloned());
+            let meta = self.metadata.read().ok().and_then(|m| m.get(id).cloned());
             (v.clone(), text, meta)
         })
     }
@@ -505,27 +513,34 @@ impl EmbeddedStore {
 
     /// Get count
     pub fn len(&self) -> usize {
-        self.vectors.read().unwrap().len()
+        let Ok(guard) = self.vectors.read() else { return 0; };
+        guard.len()
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        self.vectors.read().unwrap().is_empty()
+        let Ok(guard) = self.vectors.read() else { return true; };
+        guard.is_empty()
     }
 
     /// Get statistics
     pub fn stats(&self) -> StoreStats {
+        let vector_count = self.vectors.read().ok().map_or(0, |g| g.len());
+        let text_count = self.texts.read().ok().map_or(0, |g| g.len());
+        let cache_size = self.cache.read().ok().map_or(0, |g| g.len());
         StoreStats {
-            vector_count: self.vectors.read().unwrap().len(),
-            text_count: self.texts.read().unwrap().len(),
-            cache_size: self.cache.read().unwrap().len(),
+            vector_count,
+            text_count,
+            cache_size,
             model_stats: self.model.stats(),
         }
     }
 
     /// Clear cache
     pub fn clear_cache(&self) {
-        self.cache.write().unwrap().clear();
+        if let Ok(mut cache) = self.cache.write() {
+            cache.clear();
+        }
     }
 }
 

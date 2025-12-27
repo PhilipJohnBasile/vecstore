@@ -588,26 +588,22 @@ impl PayloadIndexManager {
         match index_type {
             IndexType::Hash | IndexType::Keyword => {
                 self.hash_indexes
-                    .write()
-                    .unwrap()
+                    .write()?
                     .insert(field.to_string(), HashIndex::new(field));
             }
             IndexType::BTree => {
                 self.btree_indexes
-                    .write()
-                    .unwrap()
+                    .write()?
                     .insert(field.to_string(), BTreeIndex::new(field));
             }
             IndexType::Geo => {
                 self.geo_indexes
-                    .write()
-                    .unwrap()
+                    .write()?
                     .insert(field.to_string(), GeoIndex::new(field, 0.1));
             }
             IndexType::FullText => {
                 self.fulltext_indexes
-                    .write()
-                    .unwrap()
+                    .write()?
                     .insert(field.to_string(), FullTextIndex::new(field));
             }
         }
@@ -617,10 +613,18 @@ impl PayloadIndexManager {
     /// Drop an index
     pub fn drop_index(&self, field: &str) -> bool {
         let mut removed = false;
-        removed |= self.hash_indexes.write().unwrap().remove(field).is_some();
-        removed |= self.btree_indexes.write().unwrap().remove(field).is_some();
-        removed |= self.geo_indexes.write().unwrap().remove(field).is_some();
-        removed |= self.fulltext_indexes.write().unwrap().remove(field).is_some();
+        if let Ok(mut guard) = self.hash_indexes.write() {
+            removed |= guard.remove(field).is_some();
+        }
+        if let Ok(mut guard) = self.btree_indexes.write() {
+            removed |= guard.remove(field).is_some();
+        }
+        if let Ok(mut guard) = self.geo_indexes.write() {
+            removed |= guard.remove(field).is_some();
+        }
+        if let Ok(mut guard) = self.fulltext_indexes.write() {
+            removed |= guard.remove(field).is_some();
+        }
         removed
     }
 
@@ -629,14 +633,14 @@ impl PayloadIndexManager {
         if let serde_json::Value::Object(map) = payload {
             for (field, value) in map {
                 // Hash index
-                if let Some(idx) = self.hash_indexes.write().unwrap().get_mut(field) {
+                if let Some(idx) = self.hash_indexes.write()?.get_mut(field) {
                     if let Some(s) = value.as_str() {
                         idx.insert(doc_id, s);
                     }
                 }
 
                 // B-tree index
-                if let Some(idx) = self.btree_indexes.write().unwrap().get_mut(field) {
+                if let Some(idx) = self.btree_indexes.write()?.get_mut(field) {
                     if let Some(n) = value.as_f64() {
                         idx.insert(doc_id, n);
                     } else if let Some(n) = value.as_i64() {
@@ -645,7 +649,7 @@ impl PayloadIndexManager {
                 }
 
                 // Geo index
-                if let Some(idx) = self.geo_indexes.write().unwrap().get_mut(field) {
+                if let Some(idx) = self.geo_indexes.write()?.get_mut(field) {
                     if let serde_json::Value::Object(geo) = value {
                         if let (Some(lat), Some(lon)) = (
                             geo.get("lat").and_then(|v| v.as_f64()),
@@ -657,7 +661,7 @@ impl PayloadIndexManager {
                 }
 
                 // Full-text index
-                if let Some(idx) = self.fulltext_indexes.write().unwrap().get_mut(field) {
+                if let Some(idx) = self.fulltext_indexes.write()?.get_mut(field) {
                     if let Some(s) = value.as_str() {
                         idx.insert(doc_id, s);
                     }
@@ -669,17 +673,25 @@ impl PayloadIndexManager {
 
     /// Remove document from all indexes
     pub fn remove_document(&self, doc_id: &str) {
-        for idx in self.hash_indexes.write().unwrap().values_mut() {
-            idx.remove(doc_id);
+        if let Ok(mut guard) = self.hash_indexes.write() {
+            for idx in guard.values_mut() {
+                idx.remove(doc_id);
+            }
         }
-        for idx in self.btree_indexes.write().unwrap().values_mut() {
-            idx.remove(doc_id);
+        if let Ok(mut guard) = self.btree_indexes.write() {
+            for idx in guard.values_mut() {
+                idx.remove(doc_id);
+            }
         }
-        for idx in self.geo_indexes.write().unwrap().values_mut() {
-            idx.remove(doc_id);
+        if let Ok(mut guard) = self.geo_indexes.write() {
+            for idx in guard.values_mut() {
+                idx.remove(doc_id);
+            }
         }
-        for idx in self.fulltext_indexes.write().unwrap().values_mut() {
-            idx.remove(doc_id);
+        if let Ok(mut guard) = self.fulltext_indexes.write() {
+            for idx in guard.values_mut() {
+                idx.remove(doc_id);
+            }
         }
     }
 
@@ -691,7 +703,8 @@ impl PayloadIndexManager {
     fn evaluate_filter(&self, filter: &Filter) -> Result<HashSet<String>> {
         match filter {
             Filter::Eq { field, value } => {
-                if let Some(idx) = self.hash_indexes.read().unwrap().get(field) {
+                let guard = self.hash_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.get(value))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -701,7 +714,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::In { field, values } => {
-                if let Some(idx) = self.hash_indexes.read().unwrap().get(field) {
+                let guard = self.hash_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.get_any(values))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -711,7 +725,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::Range { field, min, max } => {
-                if let Some(idx) = self.btree_indexes.read().unwrap().get(field) {
+                let guard = self.btree_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.range(*min, *max))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -721,7 +736,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::Gt { field, value } => {
-                if let Some(idx) = self.btree_indexes.read().unwrap().get(field) {
+                let guard = self.btree_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.gt(*value))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -731,7 +747,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::Lt { field, value } => {
-                if let Some(idx) = self.btree_indexes.read().unwrap().get(field) {
+                let guard = self.btree_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.lt(*value))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -741,7 +758,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::GeoRadius { field, center, radius_km } => {
-                if let Some(idx) = self.geo_indexes.read().unwrap().get(field) {
+                let guard = self.geo_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     let results = idx.within_radius(center, *radius_km);
                     Ok(results.into_iter().map(|(id, _)| id).collect())
                 } else {
@@ -752,7 +770,8 @@ impl PayloadIndexManager {
                 }
             }
             Filter::FullText { field, query } => {
-                if let Some(idx) = self.fulltext_indexes.read().unwrap().get(field) {
+                let guard = self.fulltext_indexes.read()?;
+                if let Some(idx) = guard.get(field) {
                     Ok(idx.search_all(query))
                 } else {
                     Err(VecStoreError::InvalidInput(format!(
@@ -793,17 +812,25 @@ impl PayloadIndexManager {
     pub fn stats(&self) -> Vec<IndexStats> {
         let mut stats = Vec::new();
 
-        for idx in self.hash_indexes.read().unwrap().values() {
-            stats.push(idx.stats());
+        if let Ok(guard) = self.hash_indexes.read() {
+            for idx in guard.values() {
+                stats.push(idx.stats());
+            }
         }
-        for idx in self.btree_indexes.read().unwrap().values() {
-            stats.push(idx.stats());
+        if let Ok(guard) = self.btree_indexes.read() {
+            for idx in guard.values() {
+                stats.push(idx.stats());
+            }
         }
-        for idx in self.geo_indexes.read().unwrap().values() {
-            stats.push(idx.stats());
+        if let Ok(guard) = self.geo_indexes.read() {
+            for idx in guard.values() {
+                stats.push(idx.stats());
+            }
         }
-        for idx in self.fulltext_indexes.read().unwrap().values() {
-            stats.push(idx.stats());
+        if let Ok(guard) = self.fulltext_indexes.read() {
+            for idx in guard.values() {
+                stats.push(idx.stats());
+            }
         }
 
         stats

@@ -165,6 +165,7 @@ impl MatryoshkaEmbedding {
     }
 
     /// Get embedding at specific dimension
+    #[inline]
     pub fn at_dimension(&self, dim: usize) -> Option<&Vec<f32>> {
         // First try exact match
         if let Some(emb) = self.truncated.get(&dim) {
@@ -188,6 +189,7 @@ impl MatryoshkaEmbedding {
     }
 
     /// Get best available embedding
+    #[inline]
     pub fn best_available(&self) -> Option<&Vec<f32>> {
         if let Some(ref full) = self.full {
             return Some(full);
@@ -200,6 +202,7 @@ impl MatryoshkaEmbedding {
     }
 
     /// Get smallest available embedding
+    #[inline]
     pub fn smallest(&self) -> Option<&Vec<f32>> {
         self.truncated
             .iter()

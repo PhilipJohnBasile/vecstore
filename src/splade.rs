@@ -128,6 +128,7 @@ impl SparseVector {
     }
 
     /// Compute dot product with another sparse vector
+    #[inline]
     pub fn dot(&self, other: &SparseVector) -> f32 {
         let mut score = 0.0;
 
@@ -149,11 +150,13 @@ impl SparseVector {
     }
 
     /// Get the L1 norm (sum of absolute values)
+    #[inline]
     pub fn l1_norm(&self) -> f32 {
         self.weights.iter().map(|w| w.abs()).sum()
     }
 
     /// Get the L2 norm
+    #[inline]
     pub fn l2_norm(&self) -> f32 {
         self.weights.iter().map(|w| w * w).sum::<f32>().sqrt()
     }
@@ -198,6 +201,7 @@ impl SparseVector {
     }
 
     /// Get sparsity ratio (fraction of zero elements)
+    #[inline]
     pub fn sparsity(&self) -> f32 {
         1.0 - (self.indices.len() as f32 / self.dim as f32)
     }

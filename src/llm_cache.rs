@@ -98,24 +98,32 @@ impl CacheConfig {
     }
 
     /// Set similarity threshold
+    #[inline]
+    #[must_use]
     pub fn with_similarity_threshold(mut self, threshold: f32) -> Self {
         self.similarity_threshold = threshold.clamp(0.0, 1.0);
         self
     }
 
     /// Set TTL in seconds
+    #[inline]
+    #[must_use]
     pub fn with_ttl_seconds(mut self, seconds: u64) -> Self {
         self.ttl_seconds = seconds;
         self
     }
 
     /// Set maximum cache size
+    #[inline]
+    #[must_use]
     pub fn with_max_size(mut self, size: usize) -> Self {
         self.max_size = size;
         self
     }
 
     /// Enable disk persistence
+    #[inline]
+    #[must_use]
     pub fn with_persistence(mut self, path: impl Into<String>) -> Self {
         self.persist_to_disk = true;
         self.cache_path = Some(path.into());

@@ -312,8 +312,12 @@ impl LineageTracker {
 
         // Handle derived sources
         if let VectorSource::Derived { ref parent_ids, .. } = source {
-            let mut forward = self.forward_deps.write().unwrap();
-            let mut backward = self.backward_deps.write().unwrap();
+            let Ok(mut forward) = self.forward_deps.write() else {
+                return Err(VecStoreError::Internal("Failed to acquire forward_deps write lock".to_string()));
+            };
+            let Ok(mut backward) = self.backward_deps.write() else {
+                return Err(VecStoreError::Internal("Failed to acquire backward_deps write lock".to_string()));
+            };
 
             for parent_id in parent_ids {
                 forward.entry(parent_id.clone())
@@ -324,7 +328,10 @@ impl LineageTracker {
             backward.insert(vector_id.clone(), parent_ids.iter().cloned().collect());
         }
 
-        self.records.write().unwrap().insert(vector_id, record);
+        let Ok(mut records) = self.records.write() else {
+            return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+        };
+        records.insert(vector_id, record);
 
         use std::sync::atomic::Ordering;
         self.metrics.records_created.fetch_add(1, Ordering::Relaxed);
@@ -342,7 +349,9 @@ impl LineageTracker {
 
         // Update input records
         {
-            let mut records = self.records.write().unwrap();
+            let Ok(mut records) = self.records.write() else {
+                return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+            };
             for input_id in &transformation.inputs {
                 if let Some(record) = records.get_mut(input_id) {
                     record.transformations.push(transform_id.clone());
@@ -353,8 +362,12 @@ impl LineageTracker {
 
         // Track dependencies
         {
-            let mut forward = self.forward_deps.write().unwrap();
-            let mut backward = self.backward_deps.write().unwrap();
+            let Ok(mut forward) = self.forward_deps.write() else {
+                return Err(VecStoreError::Internal("Failed to acquire forward_deps write lock".to_string()));
+            };
+            let Ok(mut backward) = self.backward_deps.write() else {
+                return Err(VecStoreError::Internal("Failed to acquire backward_deps write lock".to_string()));
+            };
 
             for output_id in &transformation.outputs {
                 backward.insert(
@@ -370,7 +383,10 @@ impl LineageTracker {
             }
         }
 
-        self.transformations.write().unwrap().insert(transform_id, transformation);
+        let Ok(mut transformations) = self.transformations.write() else {
+            return Err(VecStoreError::Internal("Failed to acquire transformations write lock".to_string()));
+        };
+        transformations.insert(transform_id, transformation);
 
         use std::sync::atomic::Ordering;
         self.metrics.transformations_recorded.fetch_add(1, Ordering::Relaxed);
@@ -398,7 +414,9 @@ impl LineageTracker {
             query_id,
         };
 
-        let mut log = self.access_log.write().unwrap();
+        let Ok(mut log) = self.access_log.write() else {
+            return Err(VecStoreError::Internal("Failed to acquire access_log write lock".to_string()));
+        };
         log.push_back(record);
 
         // Limit log size
@@ -414,7 +432,10 @@ impl LineageTracker {
         use std::sync::atomic::Ordering;
         self.metrics.lineage_queries.fetch_add(1, Ordering::Relaxed);
 
-        self.records.read().unwrap().get(vector_id).cloned()
+        let Ok(records) = self.records.read() else {
+            return None;
+        };
+        records.get(vector_id).cloned()
     }
 
     /// Get full ancestry (all ancestors up to max_depth)
@@ -424,7 +445,9 @@ impl LineageTracker {
         let mut queue = VecDeque::new();
         queue.push_back(vector_id.clone());
 
-        let backward = self.backward_deps.read().unwrap();
+        let Ok(backward) = self.backward_deps.read() else {
+            return ancestors;
+        };
 
         while let Some(current) = queue.pop_front() {
             if visited.contains(&current) {
@@ -452,7 +475,9 @@ impl LineageTracker {
         let mut queue = VecDeque::new();
         queue.push_back(vector_id.clone());
 
-        let forward = self.forward_deps.read().unwrap();
+        let Ok(forward) = self.forward_deps.read() else {
+            return descendants;
+        };
 
         while let Some(current) = queue.pop_front() {
             if visited.contains(&current) {
@@ -480,25 +505,26 @@ impl LineageTracker {
 
         let descendants = self.get_descendants(vector_id);
 
-        let records = self.records.read().unwrap();
         let mut affected_collections: HashSet<String> = HashSet::new();
         let mut affected_by_type: HashMap<String, usize> = HashMap::new();
 
-        for desc in &descendants {
-            affected_collections.insert(desc.collection.clone());
+        if let Ok(records) = self.records.read() {
+            for desc in &descendants {
+                affected_collections.insert(desc.collection.clone());
 
-            if let Some(record) = records.get(desc) {
-                let source_type = match &record.source {
-                    VectorSource::DirectInsert { .. } => "direct",
-                    VectorSource::FileImport { .. } => "file_import",
-                    VectorSource::TextEmbedding { .. } => "text_embedding",
-                    VectorSource::ImageEmbedding { .. } => "image_embedding",
-                    VectorSource::Derived { .. } => "derived",
-                    VectorSource::Migration { .. } => "migration",
-                    VectorSource::Replication { .. } => "replication",
-                    VectorSource::Unknown => "unknown",
-                };
-                *affected_by_type.entry(source_type.to_string()).or_insert(0) += 1;
+                if let Some(record) = records.get(desc) {
+                    let source_type = match &record.source {
+                        VectorSource::DirectInsert { .. } => "direct",
+                        VectorSource::FileImport { .. } => "file_import",
+                        VectorSource::TextEmbedding { .. } => "text_embedding",
+                        VectorSource::ImageEmbedding { .. } => "image_embedding",
+                        VectorSource::Derived { .. } => "derived",
+                        VectorSource::Migration { .. } => "migration",
+                        VectorSource::Replication { .. } => "replication",
+                        VectorSource::Unknown => "unknown",
+                    };
+                    *affected_by_type.entry(source_type.to_string()).or_insert(0) += 1;
+                }
             }
         }
 
@@ -513,7 +539,9 @@ impl LineageTracker {
 
     /// Find vectors by source type
     pub fn find_by_source(&self, source_type: &str) -> Vec<VectorId> {
-        let records = self.records.read().unwrap();
+        let Ok(records) = self.records.read() else {
+            return Vec::new();
+        };
         records.iter()
             .filter(|(_, record)| {
                 let record_type = match &record.source {
@@ -534,7 +562,9 @@ impl LineageTracker {
 
     /// Find vectors by tag
     pub fn find_by_tag(&self, tag: &str) -> Vec<VectorId> {
-        let records = self.records.read().unwrap();
+        let Ok(records) = self.records.read() else {
+            return Vec::new();
+        };
         records.iter()
             .filter(|(_, record)| record.tags.contains(tag))
             .map(|(id, _)| id.clone())
@@ -543,7 +573,9 @@ impl LineageTracker {
 
     /// Add tag to vector
     pub fn add_tag(&self, vector_id: &VectorId, tag: &str) -> Result<()> {
-        let mut records = self.records.write().unwrap();
+        let Ok(mut records) = self.records.write() else {
+            return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+        };
         if let Some(record) = records.get_mut(vector_id) {
             record.tags.insert(tag.to_string());
             record.modified_at = current_timestamp();
@@ -555,8 +587,12 @@ impl LineageTracker {
 
     /// Get transformation history for a vector
     pub fn get_transformation_history(&self, vector_id: &VectorId) -> Vec<Transformation> {
-        let records = self.records.read().unwrap();
-        let transformations = self.transformations.read().unwrap();
+        let Ok(records) = self.records.read() else {
+            return Vec::new();
+        };
+        let Ok(transformations) = self.transformations.read() else {
+            return Vec::new();
+        };
 
         if let Some(record) = records.get(vector_id) {
             record.transformations.iter()
@@ -577,9 +613,18 @@ impl LineageTracker {
         let mut queue = VecDeque::new();
         queue.push_back((root_id.clone(), 0));
 
-        let backward = self.backward_deps.read().unwrap();
-        let forward = self.forward_deps.read().unwrap();
-        let records = self.records.read().unwrap();
+        let Ok(backward) = self.backward_deps.read() else {
+            dot.push_str("}\n");
+            return dot;
+        };
+        let Ok(forward) = self.forward_deps.read() else {
+            dot.push_str("}\n");
+            return dot;
+        };
+        let Ok(records) = self.records.read() else {
+            dot.push_str("}\n");
+            return dot;
+        };
 
         while let Some((current, current_depth)) = queue.pop_front() {
             if visited.contains(&current) || current_depth > depth {
@@ -637,27 +682,51 @@ impl LineageTracker {
     pub fn get_stats(&self) -> LineageStats {
         use std::sync::atomic::Ordering;
 
-        let records = self.records.read().unwrap();
-        let transformations = self.transformations.read().unwrap();
-
-        let mut source_counts: HashMap<String, usize> = HashMap::new();
-        for record in records.values() {
-            let source_type = match &record.source {
-                VectorSource::DirectInsert { .. } => "direct",
-                VectorSource::FileImport { .. } => "file_import",
-                VectorSource::TextEmbedding { .. } => "text_embedding",
-                VectorSource::ImageEmbedding { .. } => "image_embedding",
-                VectorSource::Derived { .. } => "derived",
-                VectorSource::Migration { .. } => "migration",
-                VectorSource::Replication { .. } => "replication",
-                VectorSource::Unknown => "unknown",
+        let (total_records, total_transformations, source_counts) = {
+            let Ok(records) = self.records.read() else {
+                return LineageStats {
+                    total_records: 0,
+                    total_transformations: 0,
+                    records_by_source: HashMap::new(),
+                    records_created: self.metrics.records_created.load(Ordering::Relaxed),
+                    transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
+                    lineage_queries: self.metrics.lineage_queries.load(Ordering::Relaxed),
+                    impact_analyses: self.metrics.impact_analyses.load(Ordering::Relaxed),
+                };
             };
-            *source_counts.entry(source_type.to_string()).or_insert(0) += 1;
-        }
+            let Ok(transformations) = self.transformations.read() else {
+                return LineageStats {
+                    total_records: records.len(),
+                    total_transformations: 0,
+                    records_by_source: HashMap::new(),
+                    records_created: self.metrics.records_created.load(Ordering::Relaxed),
+                    transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
+                    lineage_queries: self.metrics.lineage_queries.load(Ordering::Relaxed),
+                    impact_analyses: self.metrics.impact_analyses.load(Ordering::Relaxed),
+                };
+            };
+
+            let mut source_counts: HashMap<String, usize> = HashMap::new();
+            for record in records.values() {
+                let source_type = match &record.source {
+                    VectorSource::DirectInsert { .. } => "direct",
+                    VectorSource::FileImport { .. } => "file_import",
+                    VectorSource::TextEmbedding { .. } => "text_embedding",
+                    VectorSource::ImageEmbedding { .. } => "image_embedding",
+                    VectorSource::Derived { .. } => "derived",
+                    VectorSource::Migration { .. } => "migration",
+                    VectorSource::Replication { .. } => "replication",
+                    VectorSource::Unknown => "unknown",
+                };
+                *source_counts.entry(source_type.to_string()).or_insert(0) += 1;
+            }
+
+            (records.len(), transformations.len(), source_counts)
+        };
 
         LineageStats {
-            total_records: records.len(),
-            total_transformations: transformations.len(),
+            total_records,
+            total_transformations,
             records_by_source: source_counts,
             records_created: self.metrics.records_created.load(Ordering::Relaxed),
             transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
@@ -670,7 +739,9 @@ impl LineageTracker {
     pub fn cleanup(&self) -> usize {
         let cutoff = current_timestamp() - (self.config.retention_days as u64 * 24 * 60 * 60 * 1000);
 
-        let mut records = self.records.write().unwrap();
+        let Ok(mut records) = self.records.write() else {
+            return 0;
+        };
         let initial_count = records.len();
 
         records.retain(|_, record| record.created_at > cutoff);
@@ -705,7 +776,7 @@ pub struct LineageStats {
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_millis() as u64
 }
 

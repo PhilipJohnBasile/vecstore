@@ -482,13 +482,15 @@ impl DynamicCollection {
     pub fn insert(&self, doc: JsonValue) -> Result<String> {
         // Validate against schema
         {
-            let schema = self.schema.read().unwrap();
+            let schema = self.schema.read()
+                .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             schema.validate(&doc)?;
         }
 
         // Extract ID
         let id = {
-            let schema = self.schema.read().unwrap();
+            let schema = self.schema.read()
+                .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             doc.get(&schema.primary_key)
                 .and_then(|v| v.as_str())
                 .map(String::from)
@@ -497,14 +499,17 @@ impl DynamicCollection {
 
         // Extract vector
         let vector = {
-            let schema = self.schema.read().unwrap();
+            let schema = self.schema.read()
+                .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             schema.extract_vector(&doc)
         };
 
         // Discover dynamic fields
         if let JsonValue::Object(map) = &doc {
-            let schema = self.schema.read().unwrap();
-            let mut dynamic = self.dynamic_fields.write().unwrap();
+            let schema = self.schema.read()
+                .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
+            let mut dynamic = self.dynamic_fields.write()
+                .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?;
 
             for (key, value) in map {
                 if !schema.fields.contains_key(key) {
@@ -522,11 +527,15 @@ impl DynamicCollection {
         }
 
         // Store document
-        self.documents.write().unwrap().insert(id.clone(), doc);
+        self.documents.write()
+            .map_err(|_| VecStoreError::Internal("Documents lock poisoned".to_string()))?
+            .insert(id.clone(), doc);
 
         // Store vector
         if let Some(vec) = vector {
-            self.vectors.write().unwrap().insert(id.clone(), vec);
+            self.vectors.write()
+                .map_err(|_| VecStoreError::Internal("Vectors lock poisoned".to_string()))?
+                .insert(id.clone(), vec);
         }
 
         Ok(id)
@@ -534,28 +543,37 @@ impl DynamicCollection {
 
     /// Get document by ID
     pub fn get(&self, id: &str) -> Option<JsonValue> {
-        self.documents.read().unwrap().get(id).cloned()
+        let Ok(documents) = self.documents.read() else { return None; };
+        documents.get(id).cloned()
     }
 
     /// Delete document
     pub fn delete(&self, id: &str) -> bool {
-        let doc_removed = self.documents.write().unwrap().remove(id).is_some();
-        self.vectors.write().unwrap().remove(id);
+        let Ok(mut documents) = self.documents.write() else { return false; };
+        let doc_removed = documents.remove(id).is_some();
+        drop(documents); // Release lock before acquiring next
+        if let Ok(mut vectors) = self.vectors.write() {
+            vectors.remove(id);
+        }
         doc_removed
     }
 
     /// Add a new field to schema
     pub fn add_field(&self, field: FieldDef) -> Result<()> {
         let change = SchemaChange::FieldAdded { field };
-        let new_schema = self.evolution.write().unwrap().apply(change)?;
-        *self.schema.write().unwrap() = new_schema;
+        let new_schema = self.evolution.write()
+            .map_err(|_| VecStoreError::Internal("Evolution lock poisoned".to_string()))?
+            .apply(change)?;
+        *self.schema.write()
+            .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))? = new_schema;
         Ok(())
     }
 
     /// Promote dynamic field to schema
     pub fn promote_field(&self, name: &str) -> Result<()> {
         let field_type = {
-            let dynamic = self.dynamic_fields.read().unwrap();
+            let dynamic = self.dynamic_fields.read()
+                .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?;
             dynamic.get(name).cloned()
                 .ok_or_else(|| VecStoreError::NotFound(format!("Dynamic field: {}", name)))?
         };
@@ -564,15 +582,19 @@ impl DynamicCollection {
         self.add_field(field)?;
 
         // Remove from dynamic fields
-        self.dynamic_fields.write().unwrap().remove(name);
+        self.dynamic_fields.write()
+            .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?
+            .remove(name);
 
         Ok(())
     }
 
     /// Search with filter
     pub fn search(&self, query: &[f32], top_k: usize, filter: Option<&str>) -> Result<Vec<SearchResult>> {
-        let vectors = self.vectors.read().unwrap();
-        let documents = self.documents.read().unwrap();
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::Internal("Vectors lock poisoned".to_string()))?;
+        let documents = self.documents.read()
+            .map_err(|_| VecStoreError::Internal("Documents lock poisoned".to_string()))?;
 
         let mut results: Vec<_> = vectors.iter()
             .filter_map(|(id, vec)| {
@@ -653,21 +675,42 @@ impl DynamicCollection {
 
     /// Get current schema
     pub fn schema(&self) -> Schema {
-        self.schema.read().unwrap().clone()
+        let Ok(schema) = self.schema.read() else {
+            // Return a minimal default schema if lock is poisoned
+            return Schema {
+                version: 0,
+                fields: HashMap::new(),
+                primary_key: "id".to_string(),
+                vector_field: None,
+                dimension: None,
+                allow_dynamic: false,
+                created_at: 0,
+                modified_at: 0,
+            };
+        };
+        schema.clone()
     }
 
     /// Get discovered dynamic fields
     pub fn dynamic_fields(&self) -> HashMap<String, FieldType> {
-        self.dynamic_fields.read().unwrap().clone()
+        let Ok(dynamic_fields) = self.dynamic_fields.read() else {
+            return HashMap::new();
+        };
+        dynamic_fields.clone()
     }
 
     /// Get collection stats
     pub fn stats(&self) -> CollectionStats {
+        let document_count = self.documents.read().map(|d| d.len()).unwrap_or(0);
+        let vector_count = self.vectors.read().map(|v| v.len()).unwrap_or(0);
+        let schema_version = self.schema.read().map(|s| s.version).unwrap_or(0);
+        let dynamic_field_count = self.dynamic_fields.read().map(|d| d.len()).unwrap_or(0);
+
         CollectionStats {
-            document_count: self.documents.read().unwrap().len(),
-            vector_count: self.vectors.read().unwrap().len(),
-            schema_version: self.schema.read().unwrap().version,
-            dynamic_field_count: self.dynamic_fields.read().unwrap().len(),
+            document_count,
+            vector_count,
+            schema_version,
+            dynamic_field_count,
         }
     }
 }
@@ -707,7 +750,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 fn unix_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_secs()
 }
 

@@ -1051,21 +1051,29 @@ impl AnomalyDetectorBuilder {
         }
     }
 
+    #[inline]
+    #[must_use]
     pub fn method(mut self, method: DetectionMethod) -> Self {
         self.config.method = method;
         self
     }
 
+    #[inline]
+    #[must_use]
     pub fn contamination(mut self, contamination: f64) -> Self {
         self.config.contamination = contamination;
         self
     }
 
+    #[inline]
+    #[must_use]
     pub fn sensitivity(mut self, sensitivity: f64) -> Self {
         self.config.sensitivity = sensitivity;
         self
     }
 
+    #[inline]
+    #[must_use]
     pub fn alert_threshold(mut self, threshold: f64) -> Self {
         self.config.alert_threshold = threshold;
         self
