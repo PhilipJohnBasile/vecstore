@@ -87,11 +87,9 @@
 #[cfg(feature = "async")]
 pub mod raft;
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
-use std::time::{Duration, Instant};
 
 #[cfg(feature = "async")]
 use tokio::sync::RwLock;

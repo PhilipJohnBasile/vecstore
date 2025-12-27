@@ -487,7 +487,7 @@ impl ProtocolAdapter {
             UniversalRequest::Query {
                 vector,
                 top_k,
-                filter,
+                filter: _,
                 include_metadata,
             } => {
                 let query = Query {
@@ -527,7 +527,7 @@ impl ProtocolAdapter {
                 })
             }
 
-            UniversalRequest::Fetch { ids } => {
+            UniversalRequest::Fetch { ids: _ } => {
                 // TODO: Implement fetch - requires get_by_id method on VecStore
                 Ok(UniversalResponse::Fetch {
                     vectors: HashMap::new(),
@@ -575,7 +575,7 @@ impl ProtocolAdapter {
     /// Format response for Qdrant
     fn format_qdrant(&self, response: UniversalResponse) -> Result<String> {
         let formatted = match response {
-            UniversalResponse::Upsert { upserted_count } => {
+            UniversalResponse::Upsert { upserted_count: _ } => {
                 serde_json::json!({
                     "result": {
                         "operation_id": 0,

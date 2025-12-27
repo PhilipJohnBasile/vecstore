@@ -166,7 +166,7 @@ impl BTreeIndex {
                 }
             }
             ">" => {
-                for (k, ids) in self.tree.range((
+                for (_k, ids) in self.tree.range((
                     std::ops::Bound::Excluded(value.clone()),
                     std::ops::Bound::Unbounded,
                 )) {
@@ -174,7 +174,7 @@ impl BTreeIndex {
                 }
             }
             ">=" => {
-                for (k, ids) in self.tree.range((
+                for (_k, ids) in self.tree.range((
                     std::ops::Bound::Included(value.clone()),
                     std::ops::Bound::Unbounded,
                 )) {
@@ -182,7 +182,7 @@ impl BTreeIndex {
                 }
             }
             "<" => {
-                for (k, ids) in self.tree.range((
+                for (_k, ids) in self.tree.range((
                     std::ops::Bound::Unbounded,
                     std::ops::Bound::Excluded(value.clone()),
                 )) {
@@ -190,7 +190,7 @@ impl BTreeIndex {
                 }
             }
             "<=" => {
-                for (k, ids) in self.tree.range((
+                for (_k, ids) in self.tree.range((
                     std::ops::Bound::Unbounded,
                     std::ops::Bound::Included(value.clone()),
                 )) {
@@ -672,7 +672,7 @@ mod tests {
         )?;
 
         // Insert metadata
-        let mut metadata = serde_json::Map::new();
+        let mut metadata = std::collections::HashMap::new();
         metadata.insert("price".to_string(), serde_json::json!(100));
         metadata.insert("category".to_string(), serde_json::json!("tech"));
 
@@ -716,7 +716,7 @@ mod tests {
             },
         )?;
 
-        let mut metadata = serde_json::Map::new();
+        let mut metadata = std::collections::HashMap::new();
         metadata.insert("price".to_string(), serde_json::json!(100));
 
         manager.insert(&metadata, "id1".to_string())?;

@@ -91,6 +91,7 @@ impl Recommendation {
 /// Item with feature vector
 #[derive(Debug, Clone)]
 struct Item {
+    #[allow(dead_code)]
     id: String,
     vector: Vec<f32>,
     metadata: Metadata,

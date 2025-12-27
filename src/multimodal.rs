@@ -474,7 +474,7 @@ impl MultiModalIndex {
         &self,
         query_embeddings: &HashMap<Modality, Vec<f32>>,
         strategy: &MultiModalFusion,
-        target_modality: Modality,
+        _target_modality: Modality,
     ) -> Result<Vec<f32>> {
         if query_embeddings.len() == 1 {
             // Single modality query - return as-is (may need projection)

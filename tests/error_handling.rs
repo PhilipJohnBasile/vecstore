@@ -227,7 +227,7 @@ fn test_save_to_readonly_location() {
     // This is a basic test that saving can handle errors
 
     let temp_dir = tempfile::tempdir().unwrap();
-    let store = VecStore::open(temp_dir.path()).unwrap();
+    let mut store = VecStore::open(temp_dir.path()).unwrap();
 
     // Save should work on a valid temp directory
     let result = store.save();

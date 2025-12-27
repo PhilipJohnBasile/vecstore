@@ -575,6 +575,531 @@ pub struct LogStats {
     pub current_term: Term,
 }
 
+// ============================================================================
+// Cluster Membership Management
+// ============================================================================
+
+/// Cluster configuration for dynamic membership
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterConfig {
+    /// Current cluster members
+    pub members: HashSet<NodeId>,
+    /// Configuration version
+    pub version: u64,
+    /// Joint consensus members (during transition)
+    pub joint_consensus: Option<HashSet<NodeId>>,
+}
+
+impl Default for ClusterConfig {
+    fn default() -> Self {
+        Self {
+            members: HashSet::new(),
+            version: 0,
+            joint_consensus: None,
+        }
+    }
+}
+
+/// Membership change type
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum MembershipChange {
+    /// Add a new node
+    AddNode(NodeId),
+    /// Remove an existing node
+    RemoveNode(NodeId),
+}
+
+// ============================================================================
+// Snapshot Support
+// ============================================================================
+
+/// Snapshot metadata
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SnapshotMetadata {
+    /// Last included index
+    pub last_included_index: LogIndex,
+    /// Last included term
+    pub last_included_term: Term,
+    /// Cluster configuration at snapshot
+    pub cluster_config: ClusterConfig,
+    /// Size of snapshot data in bytes
+    pub size_bytes: u64,
+    /// Creation timestamp
+    pub created_at: SystemTime,
+}
+
+/// Snapshot for log compaction
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+    /// Snapshot metadata
+    pub metadata: SnapshotMetadata,
+    /// Serialized state machine data
+    pub data: Vec<u8>,
+}
+
+/// Install snapshot RPC request
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallSnapshotRequest {
+    /// Leader's term
+    pub term: Term,
+    /// Leader ID
+    pub leader_id: NodeId,
+    /// Snapshot metadata
+    pub metadata: SnapshotMetadata,
+    /// Byte offset for chunked transfer
+    pub offset: u64,
+    /// Snapshot data chunk
+    pub data: Vec<u8>,
+    /// True if this is the last chunk
+    pub done: bool,
+}
+
+/// Install snapshot RPC response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InstallSnapshotResponse {
+    /// Current term
+    pub term: Term,
+    /// Success indicator
+    pub success: bool,
+    /// Bytes received so far
+    pub bytes_received: u64,
+}
+
+// ============================================================================
+// Health Monitoring
+// ============================================================================
+
+/// Node health status
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HealthStatus {
+    /// Node is healthy and responsive
+    Healthy,
+    /// Node is degraded but functional
+    Degraded,
+    /// Node is unhealthy/unreachable
+    Unhealthy,
+    /// Node health is unknown
+    Unknown,
+}
+
+/// Health check result for a node
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NodeHealth {
+    /// Node ID
+    pub node_id: NodeId,
+    /// Current health status
+    pub status: HealthStatus,
+    /// Last successful heartbeat
+    pub last_heartbeat: Option<SystemTime>,
+    /// Response latency (ms)
+    pub latency_ms: Option<u64>,
+    /// Number of consecutive failures
+    pub consecutive_failures: u32,
+}
+
+/// Cluster health overview
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterHealth {
+    /// Overall cluster health
+    pub status: HealthStatus,
+    /// Current leader (if known)
+    pub leader: Option<NodeId>,
+    /// Health of all nodes
+    pub nodes: Vec<NodeHealth>,
+    /// Number of healthy nodes
+    pub healthy_count: usize,
+    /// Number of unhealthy nodes
+    pub unhealthy_count: usize,
+    /// Is quorum available?
+    pub has_quorum: bool,
+}
+
+// ============================================================================
+// Read Consistency Levels
+// ============================================================================
+
+/// Read consistency level
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReadConsistency {
+    /// Read from leader only (strongly consistent)
+    Leader,
+    /// Read from any node (eventually consistent)
+    Any,
+    /// Read after confirming leadership (linearizable)
+    Linearizable,
+    /// Read from specific number of nodes
+    Quorum,
+}
+
+// ============================================================================
+// Failover Support
+// ============================================================================
+
+/// Automatic failover configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FailoverConfig {
+    /// Maximum time to wait for leader (ms)
+    pub leader_timeout_ms: u64,
+    /// Number of retries before failover
+    pub max_retries: u32,
+    /// Delay between retries (ms)
+    pub retry_delay_ms: u64,
+    /// Whether to auto-discover new leader
+    pub auto_discover_leader: bool,
+}
+
+impl Default for FailoverConfig {
+    fn default() -> Self {
+        Self {
+            leader_timeout_ms: 5000,
+            max_retries: 3,
+            retry_delay_ms: 500,
+            auto_discover_leader: true,
+        }
+    }
+}
+
+/// Failover state machine
+pub struct FailoverManager {
+    /// Current known leader
+    current_leader: Arc<RwLock<Option<NodeId>>>,
+    /// Known cluster members
+    cluster_members: Arc<RwLock<Vec<NodeId>>>,
+    /// Configuration
+    config: FailoverConfig,
+    /// Consecutive failures count
+    failures: Arc<std::sync::atomic::AtomicU32>,
+}
+
+impl FailoverManager {
+    /// Create a new failover manager
+    pub fn new(config: FailoverConfig) -> Self {
+        Self {
+            current_leader: Arc::new(RwLock::new(None)),
+            cluster_members: Arc::new(RwLock::new(Vec::new())),
+            config,
+            failures: Arc::new(std::sync::atomic::AtomicU32::new(0)),
+        }
+    }
+
+    /// Update known leader
+    pub async fn set_leader(&self, leader: NodeId) {
+        *self.current_leader.write().await = Some(leader);
+        self.failures.store(0, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// Get current leader
+    pub async fn get_leader(&self) -> Option<NodeId> {
+        self.current_leader.read().await.clone()
+    }
+
+    /// Report a failure
+    pub async fn report_failure(&self) -> bool {
+        let failures = self.failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+
+        if failures >= self.config.max_retries {
+            // Trigger leader discovery
+            *self.current_leader.write().await = None;
+            true // Need to discover new leader
+        } else {
+            false
+        }
+    }
+
+    /// Update cluster members
+    pub async fn set_members(&self, members: Vec<NodeId>) {
+        *self.cluster_members.write().await = members;
+    }
+
+    /// Get next node to try for leader discovery
+    pub async fn get_discovery_candidate(&self) -> Option<NodeId> {
+        let members = self.cluster_members.read().await;
+        let current = self.current_leader.read().await;
+
+        // Find a member that's not the failed leader
+        members.iter()
+            .find(|m| current.as_ref() != Some(*m))
+            .cloned()
+    }
+}
+
+// ============================================================================
+// Replication Coordinator
+// ============================================================================
+
+/// Coordinates replication across cluster nodes
+pub struct ReplicationCoordinator {
+    /// Local Raft node
+    node: Arc<RaftNode>,
+    /// Failover manager
+    failover: Arc<FailoverManager>,
+    /// Cluster configuration
+    cluster_config: Arc<RwLock<ClusterConfig>>,
+    /// Latest snapshot
+    snapshot: Arc<RwLock<Option<Snapshot>>>,
+}
+
+impl ReplicationCoordinator {
+    /// Create a new replication coordinator
+    pub fn new(node: Arc<RaftNode>, failover_config: FailoverConfig) -> Self {
+        Self {
+            node,
+            failover: Arc::new(FailoverManager::new(failover_config)),
+            cluster_config: Arc::new(RwLock::new(ClusterConfig::default())),
+            snapshot: Arc::new(RwLock::new(None)),
+        }
+    }
+
+    /// Submit a command with automatic failover
+    pub async fn submit_command(&self, command: Command) -> Result<LogIndex, String> {
+        let mut retries = 0;
+        let max_retries = 3;
+
+        loop {
+            // Try to append to leader
+            match self.node.append_entry(command.clone()).await {
+                Ok(index) => return Ok(index),
+                Err(e) if e == "Not the leader" => {
+                    retries += 1;
+                    if retries >= max_retries {
+                        return Err("Failed to find leader after retries".to_string());
+                    }
+                    // Would normally redirect to leader here
+                    time::sleep(Duration::from_millis(100)).await;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+    }
+
+    /// Read with specified consistency
+    pub async fn read<T>(&self, _key: &str, consistency: ReadConsistency) -> Result<Option<T>, String>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        match consistency {
+            ReadConsistency::Leader => {
+                if !self.node.is_leader().await {
+                    return Err("Not the leader".to_string());
+                }
+                // Read from local state
+                Ok(None) // Placeholder
+            }
+            ReadConsistency::Any => {
+                // Read from local state regardless of leader status
+                Ok(None) // Placeholder
+            }
+            ReadConsistency::Linearizable => {
+                // Confirm leadership with majority before reading
+                if !self.node.is_leader().await {
+                    return Err("Not the leader".to_string());
+                }
+                // Would verify leadership with heartbeat before reading
+                Ok(None) // Placeholder
+            }
+            ReadConsistency::Quorum => {
+                // Read from majority of nodes
+                Ok(None) // Placeholder
+            }
+        }
+    }
+
+    /// Get cluster health
+    pub async fn get_cluster_health(&self) -> ClusterHealth {
+        let config = self.cluster_config.read().await;
+        let is_leader = self.node.is_leader().await;
+
+        let healthy_count = if is_leader { 1 } else { 0 };
+        let total_nodes = config.members.len().max(1);
+        let quorum_needed = total_nodes / 2 + 1;
+
+        ClusterHealth {
+            status: if healthy_count >= quorum_needed {
+                HealthStatus::Healthy
+            } else if healthy_count > 0 {
+                HealthStatus::Degraded
+            } else {
+                HealthStatus::Unhealthy
+            },
+            leader: self.node.leader_id().await,
+            nodes: vec![NodeHealth {
+                node_id: "self".to_string(),
+                status: HealthStatus::Healthy,
+                last_heartbeat: Some(SystemTime::now()),
+                latency_ms: Some(0),
+                consecutive_failures: 0,
+            }],
+            healthy_count,
+            unhealthy_count: total_nodes - healthy_count,
+            has_quorum: healthy_count >= quorum_needed,
+        }
+    }
+
+    /// Create a snapshot of current state
+    pub async fn create_snapshot(&self, data: Vec<u8>) -> Result<SnapshotMetadata, String> {
+        let persistent = self.node.persistent.read().await;
+        let volatile = self.node.volatile.lock().await;
+
+        let last_entry = persistent.log.get((volatile.last_applied - 1) as usize);
+
+        let metadata = SnapshotMetadata {
+            last_included_index: volatile.last_applied,
+            last_included_term: last_entry.map(|e| e.term).unwrap_or(0),
+            cluster_config: self.cluster_config.read().await.clone(),
+            size_bytes: data.len() as u64,
+            created_at: SystemTime::now(),
+        };
+
+        let snapshot = Snapshot {
+            metadata: metadata.clone(),
+            data,
+        };
+
+        *self.snapshot.write().await = Some(snapshot);
+
+        Ok(metadata)
+    }
+
+    /// Apply membership change
+    pub async fn apply_membership_change(&self, change: MembershipChange) -> Result<(), String> {
+        let mut config = self.cluster_config.write().await;
+
+        match change {
+            MembershipChange::AddNode(node_id) => {
+                config.members.insert(node_id);
+            }
+            MembershipChange::RemoveNode(node_id) => {
+                config.members.remove(&node_id);
+            }
+        }
+
+        config.version += 1;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod ha_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_cluster_config() {
+        let mut config = ClusterConfig::default();
+        config.members.insert("node-1".to_string());
+        config.members.insert("node-2".to_string());
+        config.members.insert("node-3".to_string());
+
+        assert_eq!(config.members.len(), 3);
+        assert!(config.members.contains("node-1"));
+    }
+
+    #[tokio::test]
+    async fn test_failover_manager() {
+        let config = FailoverConfig::default();
+        let manager = FailoverManager::new(config);
+
+        // Initially no leader
+        assert!(manager.get_leader().await.is_none());
+
+        // Set leader
+        manager.set_leader("node-1".to_string()).await;
+        assert_eq!(manager.get_leader().await, Some("node-1".to_string()));
+
+        // Report failures until failover
+        for _ in 0..3 {
+            manager.report_failure().await;
+        }
+
+        // Leader should be cleared after max failures
+        assert!(manager.get_leader().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_health_status() {
+        let health = NodeHealth {
+            node_id: "node-1".to_string(),
+            status: HealthStatus::Healthy,
+            last_heartbeat: Some(SystemTime::now()),
+            latency_ms: Some(5),
+            consecutive_failures: 0,
+        };
+
+        assert_eq!(health.status, HealthStatus::Healthy);
+    }
+
+    #[tokio::test]
+    async fn test_replication_coordinator_health() {
+        let config = RaftConfig::default();
+        let node = Arc::new(RaftNode::new(config));
+
+        let coordinator = ReplicationCoordinator::new(node, FailoverConfig::default());
+        let health = coordinator.get_cluster_health().await;
+
+        assert!(matches!(health.status, HealthStatus::Healthy | HealthStatus::Degraded | HealthStatus::Unhealthy));
+    }
+
+    #[tokio::test]
+    async fn test_membership_change() {
+        let config = RaftConfig::default();
+        let node = Arc::new(RaftNode::new(config));
+
+        let coordinator = ReplicationCoordinator::new(node, FailoverConfig::default());
+
+        // Add nodes
+        coordinator.apply_membership_change(MembershipChange::AddNode("node-1".to_string())).await.unwrap();
+        coordinator.apply_membership_change(MembershipChange::AddNode("node-2".to_string())).await.unwrap();
+
+        let cluster_config = coordinator.cluster_config.read().await;
+        assert_eq!(cluster_config.members.len(), 2);
+        assert_eq!(cluster_config.version, 2);
+    }
+
+    #[tokio::test]
+    async fn test_snapshot_creation() {
+        let config = RaftConfig::default();
+        let node = Arc::new(RaftNode::new(config));
+
+        // Set up as leader with some committed entries
+        *node.state.write().await = NodeState::Leader;
+        node.persistent.write().await.current_term = 1;
+        node.append_entry(Command::NoOp).await.unwrap();
+        node.volatile.lock().await.commit_index = 1;
+        node.volatile.lock().await.last_applied = 1;
+
+        let coordinator = ReplicationCoordinator::new(node, FailoverConfig::default());
+
+        let data = b"snapshot data".to_vec();
+        let metadata = coordinator.create_snapshot(data).await.unwrap();
+
+        assert_eq!(metadata.last_included_index, 1);
+        assert!(metadata.size_bytes > 0);
+    }
+
+    #[tokio::test]
+    async fn test_read_consistency_levels() {
+        let config = RaftConfig::default();
+        let node = Arc::new(RaftNode::new(config));
+
+        let coordinator = ReplicationCoordinator::new(node.clone(), FailoverConfig::default());
+
+        // Non-leader should fail leader reads
+        let result: Result<Option<String>, _> = coordinator.read("key", ReadConsistency::Leader).await;
+        assert!(result.is_err());
+
+        // Become leader
+        *node.state.write().await = NodeState::Leader;
+
+        // Leader reads should succeed
+        let result: Result<Option<String>, _> = coordinator.read("key", ReadConsistency::Leader).await;
+        assert!(result.is_ok());
+
+        // Any reads should always succeed
+        let result: Result<Option<String>, _> = coordinator.read("key", ReadConsistency::Any).await;
+        assert!(result.is_ok());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,6 +7,7 @@
 //! - Performance comparison with/without indexes
 
 use anyhow::Result;
+use std::collections::HashMap;
 use std::time::Instant;
 use vecstore::metadata_index::{IndexConfig, IndexType, MetadataIndexManager};
 
@@ -66,7 +67,7 @@ fn main() -> Result<()> {
     let start = Instant::now();
 
     for i in 0..1000 {
-        let mut metadata = serde_json::Map::new();
+        let mut metadata: HashMap<String, serde_json::Value> = HashMap::new();
         metadata.insert(
             "price".to_string(),
             serde_json::json!(10.0 + (i % 100) as f64 * 5.0),

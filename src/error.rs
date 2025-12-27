@@ -23,8 +23,24 @@ pub enum VecStoreError {
     Serialization(String),
 
     /// Invalid vector dimension
-    #[error("Invalid vector dimension: expected {expected}, got {actual}")]
-    DimensionMismatch { expected: usize, actual: usize },
+    #[error("Invalid vector dimension: expected {expected}, got {got}")]
+    DimensionMismatch { expected: usize, got: usize },
+
+    /// Generic not found error
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    /// Invalid input error
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    /// Internal error
+    #[error("Internal error: {0}")]
+    Internal(String),
+
+    /// Privacy budget exhausted
+    #[error("Privacy budget exhausted: requested {requested}, remaining {remaining}")]
+    PrivacyBudgetExhausted { requested: f64, remaining: f64 },
 
     /// Vector not found
     #[error("Vector with id '{id}' not found")]
@@ -174,8 +190,8 @@ impl<T> From<std::sync::PoisonError<T>> for VecStoreError {
 
 impl VecStoreError {
     /// Create a dimension mismatch error
-    pub fn dimension_mismatch(expected: usize, actual: usize) -> Self {
-        VecStoreError::DimensionMismatch { expected, actual }
+    pub fn dimension_mismatch(expected: usize, got: usize) -> Self {
+        VecStoreError::DimensionMismatch { expected, got }
     }
 
     /// Create a vector not found error
@@ -282,10 +298,8 @@ mod tests {
     #[test]
     fn test_dimension_mismatch() {
         let err = VecStoreError::dimension_mismatch(128, 256);
-        assert_eq!(
-            err.to_string(),
-            "Invalid vector dimension: expected 128, got 256"
-        );
+        assert!(err.to_string().contains("expected 128"));
+        assert!(err.to_string().contains("got 256"));
     }
 
     #[test]

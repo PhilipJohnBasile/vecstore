@@ -54,7 +54,6 @@
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::store::ProductQuantizer;
 use crate::vectors::KMeans;

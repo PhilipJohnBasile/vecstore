@@ -25,7 +25,7 @@ pub enum QuantizerState {
     Product(ProductQuantizer),
 }
 
-const SCHEMA_VERSION: u32 = 4; // Incremented for binary vectors format (storage optimization)
+const SCHEMA_VERSION: u32 = 5; // Use JSON for records (bincode incompatible with serde_json::Value)
 
 type LoadResult = (
     HashMap<Id, Record>,
@@ -135,8 +135,8 @@ impl DiskLayout {
             &self.manifest_path(),
             &serde_json::to_vec_pretty(&manifest)?,
         )?;
-        // Use bincode for records (more compact than JSON, ~25% smaller for vector data)
-        self.atomic_write(&self.vectors_path(), &bincode::serialize(&state.records)?)?;
+        // Use JSON for records (bincode is incompatible with serde_json::Value in Metadata)
+        self.atomic_write(&self.vectors_path(), &serde_json::to_vec(&state.records)?)?;
         self.atomic_write(
             &self.meta_path(),
             &bincode::serialize(&(state.id_to_idx, state.idx_to_id, state.next_idx))?,
@@ -160,26 +160,25 @@ impl DiskLayout {
         let manifest: Manifest =
             serde_json::from_slice(&manifest_data).context("Failed to parse manifest")?;
 
-        // Support schema versions 1, 2, 3, and 4 (backward compatibility)
-        if manifest.schema_version != SCHEMA_VERSION
-            && manifest.schema_version != 3
-            && manifest.schema_version != 2
-            && manifest.schema_version != 1
-        {
+        // Support schema versions 1, 2, 3, 4, and 5 (backward compatibility)
+        if manifest.schema_version > SCHEMA_VERSION {
             return Err(anyhow::anyhow!(
-                "Unsupported schema version: {}. Expected 1, 2, 3, or {}",
+                "Unsupported schema version: {}. Maximum supported: {}",
                 manifest.schema_version,
                 SCHEMA_VERSION
             ));
         }
 
-        // Load records - schema 4+ uses bincode, earlier versions use JSON
+        // Load records - schema 5+ and 1-3 use JSON, schema 4 used bincode (deprecated)
         let records_data = fs::read(self.vectors_path()).context("Failed to read vectors")?;
-        let records_vec: Vec<Record> = if manifest.schema_version >= 4 {
-            // Binary format (bincode) - more compact
-            bincode::deserialize(&records_data).context("Failed to deserialize vectors (bincode)")?
+        let records_vec: Vec<Record> = if manifest.schema_version == 4 {
+            // Legacy binary format (bincode) - only schema 4
+            // Note: This may fail if records contain serde_json::Value
+            bincode::deserialize(&records_data)
+                .or_else(|_| serde_json::from_slice(&records_data))
+                .context("Failed to deserialize vectors")?
         } else {
-            // JSON format for backward compatibility with older versions
+            // JSON format for schema versions 1, 2, 3, and 5+
             serde_json::from_slice(&records_data).context("Failed to deserialize vectors (JSON)")?
         };
 

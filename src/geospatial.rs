@@ -277,6 +277,7 @@ impl GeoIndex {
     }
 
     /// Get neighboring cells for a cell ID
+    #[allow(dead_code)]
     fn get_neighboring_cells(&self, center_cell: u64) -> Vec<u64> {
         // Simplified - return center and approximate neighbors
         // Real S2 would use proper neighbor finding algorithms

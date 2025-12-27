@@ -34,13 +34,14 @@ anyhow = "1"
 thiserror = "2"
 rayon = "1"
 rand = "0.8"  # Keep 0.8 for compatibility
+rand_distr = "0.4"  # Statistical distributions for privacy module
 regex = "1"
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
 chrono = "0.4"
 directories = "6"
-tokio = { version = "1", features = ["rt", "sync"], optional = true }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"], optional = true }
 futures = { version = "0.3", optional = true }
 pyo3 = { version = "0.24.1", features = ["extension-module"], optional = true }
 ort = { version = "1.16", optional = true }
@@ -48,7 +49,7 @@ tokenizers = { version = "0.22", optional = true, default-features = false, feat
 ndarray = { version = "0.16", optional = true }
 ureq = { version = "3.1", optional = true, default-features = false, features = ["native-tls"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls", "blocking"] }
-async-trait = { version = "0.1", optional = true }
+async-trait = "0.1"  # Required for object storage trait
 wasm-bindgen = { version = "0.2", optional = true }
 wasm-bindgen-futures = { version = "0.4", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
@@ -71,6 +72,7 @@ wgpu = { version = "22", optional = true }  # Cross-platform GPU (WebGPU)
 memmap2 = "0.9"
 tempfile = "3"
 ordered-float = { version = "5", features = ["serde"] }
+flate2 = "1"  # Compression for object storage tier
 
 # Enable getrandom for WASM (required by rand)
 getrandom = { version = "0.2", features = ["js"] }
@@ -110,17 +112,14 @@ python = ["pyo3"]
 embeddings = ["ort", "tokenizers", "ndarray", "ureq"]
 openai-embeddings = [
     "reqwest",
-    "async-trait",
     "tokio/full",
 ]
 cloud-embeddings = [
     "reqwest",
-    "async-trait",
     "tokio/full",
 ]
 ollama = [
     "reqwest",
-    "async-trait",
     "tokio/full",
 ]
 candle-embeddings = [

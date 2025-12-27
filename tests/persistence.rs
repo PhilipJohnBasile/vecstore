@@ -97,7 +97,7 @@ fn test_empty_store_persistence() {
 
     // Save empty store
     {
-        let store = VecStore::open(path).unwrap();
+        let mut store = VecStore::open(path).unwrap();
         assert_eq!(store.count(), 0);
         store.save().unwrap();
     }

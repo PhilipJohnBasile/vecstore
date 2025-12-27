@@ -34,7 +34,7 @@
 //! ```
 
 use crate::store::{Metadata, VecStore};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::File;
@@ -300,6 +300,7 @@ impl QdrantMigration {
 
 /// ChromaDB format migration
 pub struct ChromaDBMigration {
+    #[allow(dead_code)]
     config: MigrationConfig,
 }
 

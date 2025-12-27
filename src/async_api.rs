@@ -108,7 +108,7 @@ impl AsyncVecStore {
     pub async fn save(&self) -> Result<()> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let mut store = inner.write().unwrap();
             store.save()
         })
         .await?

@@ -31,12 +31,12 @@ fn main() -> Result<()> {
         index_mgr.create_index("price", btree_config)?;
 
         // Create metadata and insert into indexes
-        let mut meta1 = serde_json::Map::new();
+        let mut meta1: HashMap<String, serde_json::Value> = HashMap::new();
         meta1.insert("category".to_string(), serde_json::json!("tech"));
         meta1.insert("price".to_string(), serde_json::json!(99));
         index_mgr.insert(&meta1, "doc1".to_string())?;
 
-        let mut meta2 = serde_json::Map::new();
+        let mut meta2: HashMap<String, serde_json::Value> = HashMap::new();
         meta2.insert("category".to_string(), serde_json::json!("science"));
         meta2.insert("price".to_string(), serde_json::json!(149));
         index_mgr.insert(&meta2, "doc2".to_string())?;

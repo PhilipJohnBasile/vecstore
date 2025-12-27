@@ -3,7 +3,6 @@
 //! Provides real-time monitoring of vector operations with configurable alerts
 //! for data quality, performance, storage, and index health.
 
-use crate::error::{Result, VecStoreError};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, SystemTime};

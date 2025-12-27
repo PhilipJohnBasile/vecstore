@@ -2,7 +2,7 @@
 //!
 //! This module provides:
 //! - Prometheus metrics for query latency, throughput, cache hit rate
-//! - OpenTelemetry integration for distributed tracing
+//! - Optional integration with the `prometheus` crate for embedded HTTP endpoints
 //! - Performance counters for operations
 //!
 //! ## Usage
@@ -25,6 +25,21 @@
 //! println!("Cache hit rate: {:.2}%", snapshot.cache_hit_rate * 100.0);
 //! # Ok(())
 //! # }
+//! ```
+//!
+//! ## Prometheus Integration (Optional)
+//!
+//! When the `prometheus` feature is enabled (via server mode), you can expose metrics
+//! at an HTTP endpoint for Prometheus scraping:
+//!
+//! ```ignore
+//! use vecstore::metrics::PrometheusMetrics;
+//!
+//! let prom = PrometheusMetrics::new();
+//! prom.record_query("vector_search", 0.005, 10);
+//!
+//! // Expose at /metrics endpoint
+//! let metrics_text = prom.encode()?;
 //! ```
 
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -496,5 +511,400 @@ mod tests {
         let snapshot = metrics.snapshot();
         assert_eq!(snapshot.hnsw_comparisons, 300);
         assert_eq!(snapshot.hnsw_node_visits, 125);
+    }
+}
+
+// ============================================================================
+// Embedded Metrics Registry
+// ============================================================================
+
+/// A simple embedded metrics registry for applications that want
+/// Prometheus-compatible metrics without running a full server.
+///
+/// This allows embedding vecstore in applications while still
+/// exposing metrics via a simple HTTP endpoint or pushgateway.
+#[derive(Clone)]
+pub struct EmbeddedMetrics {
+    inner: Arc<EmbeddedMetricsInner>,
+}
+
+struct EmbeddedMetricsInner {
+    /// Core metrics
+    core: Metrics,
+
+    /// Latency histogram buckets (in milliseconds)
+    latency_buckets: Vec<f64>,
+
+    /// Latency counts per bucket
+    latency_bucket_counts: Vec<AtomicU64>,
+
+    /// Quantization metrics
+    quantized_vectors: AtomicU64,
+    quantization_bits: AtomicU64,
+
+    /// Memory metrics
+    estimated_memory_bytes: AtomicU64,
+
+    /// Index-specific metrics
+    hnsw_layers: AtomicU64,
+    hnsw_connections_per_layer: AtomicU64,
+
+    /// Custom labels for this instance
+    labels: std::sync::RwLock<std::collections::HashMap<String, String>>,
+}
+
+impl EmbeddedMetrics {
+    /// Create a new embedded metrics registry
+    pub fn new() -> Self {
+        Self::with_buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0])
+    }
+
+    /// Create with custom latency buckets (in milliseconds)
+    pub fn with_buckets(buckets: Vec<f64>) -> Self {
+        let bucket_counts: Vec<AtomicU64> = buckets.iter().map(|_| AtomicU64::new(0)).collect();
+
+        Self {
+            inner: Arc::new(EmbeddedMetricsInner {
+                core: Metrics::new(MetricsConfig::default()),
+                latency_buckets: buckets,
+                latency_bucket_counts: bucket_counts,
+                quantized_vectors: AtomicU64::new(0),
+                quantization_bits: AtomicU64::new(0),
+                estimated_memory_bytes: AtomicU64::new(0),
+                hnsw_layers: AtomicU64::new(0),
+                hnsw_connections_per_layer: AtomicU64::new(0),
+                labels: std::sync::RwLock::new(std::collections::HashMap::new()),
+            }),
+        }
+    }
+
+    /// Add a custom label to all metrics
+    pub fn add_label(&self, key: impl Into<String>, value: impl Into<String>) {
+        if let Ok(mut labels) = self.inner.labels.write() {
+            labels.insert(key.into(), value.into());
+        }
+    }
+
+    /// Record a query with latency in milliseconds
+    pub fn record_query_ms(&self, latency_ms: f64, cache_hit: bool) {
+        self.inner.core.record_query(
+            Duration::from_micros((latency_ms * 1000.0) as u64),
+            cache_hit,
+        );
+
+        // Update histogram
+        for (i, &bucket) in self.inner.latency_buckets.iter().enumerate() {
+            if latency_ms <= bucket {
+                self.inner.latency_bucket_counts[i].fetch_add(1, Ordering::Relaxed);
+                break;
+            }
+        }
+    }
+
+    /// Record HNSW stats
+    pub fn record_hnsw_stats(&self, comparisons: u64, node_visits: u64) {
+        self.inner.core.record_hnsw_stats(comparisons, node_visits);
+    }
+
+    /// Set the estimated memory usage
+    pub fn set_memory_bytes(&self, bytes: u64) {
+        self.inner.estimated_memory_bytes.store(bytes, Ordering::Relaxed);
+    }
+
+    /// Set HNSW index stats
+    pub fn set_hnsw_stats(&self, layers: u64, connections_per_layer: u64) {
+        self.inner.hnsw_layers.store(layers, Ordering::Relaxed);
+        self.inner.hnsw_connections_per_layer.store(connections_per_layer, Ordering::Relaxed);
+    }
+
+    /// Set quantization stats
+    pub fn set_quantization_stats(&self, quantized_count: u64, bits: u64) {
+        self.inner.quantized_vectors.store(quantized_count, Ordering::Relaxed);
+        self.inner.quantization_bits.store(bits, Ordering::Relaxed);
+    }
+
+    /// Record insert/update/delete
+    pub fn record_insert(&self) {
+        self.inner.core.record_insert();
+    }
+
+    pub fn record_update(&self) {
+        self.inner.core.record_update();
+    }
+
+    pub fn record_delete(&self) {
+        self.inner.core.record_delete();
+    }
+
+    /// Get the core snapshot
+    pub fn snapshot(&self) -> MetricsSnapshot {
+        self.inner.core.snapshot()
+    }
+
+    /// Export metrics in Prometheus text format with histograms
+    pub fn export_prometheus(&self) -> String {
+        let snapshot = self.inner.core.snapshot();
+        let labels = self.inner.labels.read().ok();
+        let label_str = if let Some(ref l) = labels {
+            if l.is_empty() {
+                String::new()
+            } else {
+                let pairs: Vec<String> = l.iter()
+                    .map(|(k, v)| format!("{}=\"{}\"", k, v))
+                    .collect();
+                format!("{{{}}}", pairs.join(","))
+            }
+        } else {
+            String::new()
+        };
+
+        let mut output = String::new();
+
+        // Core counters
+        output.push_str(&format!(
+            "# HELP vecstore_queries_total Total number of queries executed\n\
+             # TYPE vecstore_queries_total counter\n\
+             vecstore_queries_total{} {}\n\n",
+            label_str, snapshot.total_queries
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_query_errors_total Total number of query errors\n\
+             # TYPE vecstore_query_errors_total counter\n\
+             vecstore_query_errors_total{} {}\n\n",
+            label_str, snapshot.query_errors
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_inserts_total Total insert operations\n\
+             # TYPE vecstore_inserts_total counter\n\
+             vecstore_inserts_total{} {}\n\n",
+            label_str, snapshot.total_inserts
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_updates_total Total update operations\n\
+             # TYPE vecstore_updates_total counter\n\
+             vecstore_updates_total{} {}\n\n",
+            label_str, snapshot.total_updates
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_deletes_total Total delete operations\n\
+             # TYPE vecstore_deletes_total counter\n\
+             vecstore_deletes_total{} {}\n\n",
+            label_str, snapshot.total_deletes
+        ));
+
+        // Latency histogram
+        output.push_str("# HELP vecstore_query_latency_ms Query latency in milliseconds\n");
+        output.push_str("# TYPE vecstore_query_latency_ms histogram\n");
+
+        let mut cumulative = 0u64;
+        for (i, &bucket) in self.inner.latency_buckets.iter().enumerate() {
+            cumulative += self.inner.latency_bucket_counts[i].load(Ordering::Relaxed);
+            let bucket_label = if label_str.is_empty() {
+                format!("{{le=\"{}\"}}", bucket)
+            } else {
+                let label_inner = label_str.trim_matches(|c| c == '{' || c == '}');
+                format!("{{le=\"{}\",{}}}", bucket, label_inner)
+            };
+            output.push_str(&format!(
+                "vecstore_query_latency_ms_bucket{} {}\n",
+                bucket_label, cumulative
+            ));
+        }
+
+        let inf_label = if label_str.is_empty() {
+            "{le=\"+Inf\"}".to_string()
+        } else {
+            let label_inner = label_str.trim_matches(|c| c == '{' || c == '}');
+            format!("{{le=\"+Inf\",{}}}", label_inner)
+        };
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_bucket{} {}\n",
+            inf_label, snapshot.total_queries
+        ));
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_sum{} {:.2}\n",
+            label_str, snapshot.avg_query_latency_micros * snapshot.total_queries as f64 / 1000.0
+        ));
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_count{} {}\n\n",
+            label_str, snapshot.total_queries
+        ));
+
+        // Cache metrics
+        output.push_str(&format!(
+            "# HELP vecstore_cache_hit_rate Cache hit rate (0.0 to 1.0)\n\
+             # TYPE vecstore_cache_hit_rate gauge\n\
+             vecstore_cache_hit_rate{} {:.4}\n\n",
+            label_str, snapshot.cache_hit_rate
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_cache_hits_total Total cache hits\n\
+             # TYPE vecstore_cache_hits_total counter\n\
+             vecstore_cache_hits_total{} {}\n\n",
+            label_str, snapshot.cache_hits
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_cache_misses_total Total cache misses\n\
+             # TYPE vecstore_cache_misses_total counter\n\
+             vecstore_cache_misses_total{} {}\n\n",
+            label_str, snapshot.cache_misses
+        ));
+
+        // Throughput
+        output.push_str(&format!(
+            "# HELP vecstore_queries_per_second Current query throughput\n\
+             # TYPE vecstore_queries_per_second gauge\n\
+             vecstore_queries_per_second{} {:.2}\n\n",
+            label_str, snapshot.queries_per_sec
+        ));
+
+        // HNSW metrics
+        output.push_str(&format!(
+            "# HELP vecstore_hnsw_comparisons_total Total HNSW distance comparisons\n\
+             # TYPE vecstore_hnsw_comparisons_total counter\n\
+             vecstore_hnsw_comparisons_total{} {}\n\n",
+            label_str, snapshot.hnsw_comparisons
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_hnsw_node_visits_total Total HNSW node visits\n\
+             # TYPE vecstore_hnsw_node_visits_total counter\n\
+             vecstore_hnsw_node_visits_total{} {}\n\n",
+            label_str, snapshot.hnsw_node_visits
+        ));
+
+        let layers = self.inner.hnsw_layers.load(Ordering::Relaxed);
+        let conns = self.inner.hnsw_connections_per_layer.load(Ordering::Relaxed);
+        output.push_str(&format!(
+            "# HELP vecstore_hnsw_layers Number of HNSW layers\n\
+             # TYPE vecstore_hnsw_layers gauge\n\
+             vecstore_hnsw_layers{} {}\n\n",
+            label_str, layers
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_hnsw_connections_per_layer Average connections per layer\n\
+             # TYPE vecstore_hnsw_connections_per_layer gauge\n\
+             vecstore_hnsw_connections_per_layer{} {}\n\n",
+            label_str, conns
+        ));
+
+        // Memory metrics
+        let memory = self.inner.estimated_memory_bytes.load(Ordering::Relaxed);
+        output.push_str(&format!(
+            "# HELP vecstore_memory_bytes Estimated memory usage in bytes\n\
+             # TYPE vecstore_memory_bytes gauge\n\
+             vecstore_memory_bytes{} {}\n\n",
+            label_str, memory
+        ));
+
+        // Quantization metrics
+        let quant_count = self.inner.quantized_vectors.load(Ordering::Relaxed);
+        let quant_bits = self.inner.quantization_bits.load(Ordering::Relaxed);
+        output.push_str(&format!(
+            "# HELP vecstore_quantized_vectors Number of quantized vectors\n\
+             # TYPE vecstore_quantized_vectors gauge\n\
+             vecstore_quantized_vectors{} {}\n\n",
+            label_str, quant_count
+        ));
+
+        output.push_str(&format!(
+            "# HELP vecstore_quantization_bits Bits used for quantization\n\
+             # TYPE vecstore_quantization_bits gauge\n\
+             vecstore_quantization_bits{} {}\n\n",
+            label_str, quant_bits
+        ));
+
+        // Uptime
+        output.push_str(&format!(
+            "# HELP vecstore_uptime_seconds Uptime in seconds\n\
+             # TYPE vecstore_uptime_seconds counter\n\
+             vecstore_uptime_seconds{} {:.2}\n",
+            label_str, snapshot.uptime_secs
+        ));
+
+        output
+    }
+
+    /// Reset all metrics
+    pub fn reset(&self) {
+        self.inner.core.reset();
+        for count in &self.inner.latency_bucket_counts {
+            count.store(0, Ordering::Relaxed);
+        }
+    }
+}
+
+impl Default for EmbeddedMetrics {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+mod embedded_tests {
+    use super::*;
+
+    #[test]
+    fn test_embedded_metrics() {
+        let metrics = EmbeddedMetrics::new();
+
+        metrics.record_query_ms(5.0, true);
+        metrics.record_query_ms(15.0, false);
+        metrics.record_insert();
+
+        let snapshot = metrics.snapshot();
+        assert_eq!(snapshot.total_queries, 2);
+        assert_eq!(snapshot.cache_hits, 1);
+        assert_eq!(snapshot.total_inserts, 1);
+    }
+
+    #[test]
+    fn test_prometheus_histogram() {
+        let metrics = EmbeddedMetrics::new();
+        metrics.add_label("instance", "test");
+
+        metrics.record_query_ms(3.0, true);
+        metrics.record_query_ms(50.0, true);
+        metrics.record_query_ms(200.0, false);
+
+        let output = metrics.export_prometheus();
+        assert!(output.contains("vecstore_query_latency_ms_bucket"));
+        assert!(output.contains("le=\"5\""));
+        assert!(output.contains("le=\"50\""));
+        assert!(output.contains("instance=\"test\""));
+    }
+
+    #[test]
+    fn test_custom_labels() {
+        let metrics = EmbeddedMetrics::new();
+        metrics.add_label("app", "myapp");
+        metrics.add_label("env", "production");
+
+        metrics.record_query_ms(10.0, true);
+
+        let output = metrics.export_prometheus();
+        assert!(output.contains("app=\"myapp\""));
+        assert!(output.contains("env=\"production\""));
+    }
+
+    #[test]
+    fn test_memory_and_quantization() {
+        let metrics = EmbeddedMetrics::new();
+        metrics.set_memory_bytes(1_000_000);
+        metrics.set_quantization_stats(5000, 8);
+        metrics.set_hnsw_stats(4, 16);
+
+        let output = metrics.export_prometheus();
+        assert!(output.contains("vecstore_memory_bytes 1000000"));
+        assert!(output.contains("vecstore_quantized_vectors 5000"));
+        assert!(output.contains("vecstore_quantization_bits 8"));
+        assert!(output.contains("vecstore_hnsw_layers 4"));
     }
 }

@@ -224,6 +224,7 @@ pub trait GpuOps: Send + Sync {
 /// Main GPU executor
 pub struct GpuExecutor {
     backend: Arc<dyn GpuOps>,
+    #[allow(dead_code)]
     config: GpuConfig,
 }
 
@@ -357,6 +358,7 @@ impl GpuExecutor {
 
 /// CPU backend using SIMD optimizations
 pub struct CpuBackend {
+    #[allow(dead_code)]
     config: GpuConfig,
 }
 
@@ -497,76 +499,112 @@ impl GpuOps for CpuBackend {
 #[cfg(feature = "cuda")]
 pub struct CudaBackend {
     config: GpuConfig,
-    // Would contain CUDA context, streams, etc.
+    executor: cuda_kernels::CudaKernelExecutor,
 }
 
 #[cfg(feature = "cuda")]
 impl CudaBackend {
     pub fn new(config: &GpuConfig) -> Result<Self> {
-        // In real implementation:
-        // - Initialize CUDA context
-        // - Query device properties
-        // - Allocate memory pools
-        // - Create streams
+        let executor = cuda_kernels::CudaKernelExecutor::new(config.device_id)?;
 
         Ok(Self {
             config: config.clone(),
+            executor,
         })
     }
 
     pub fn is_available() -> bool {
-        // In real implementation: Check for CUDA driver/runtime
-        false
+        cuda_kernels::CudaKernelExecutor::is_available()
     }
 }
 
 #[cfg(feature = "cuda")]
 impl GpuOps for CudaBackend {
     fn device_info(&self) -> GpuDeviceInfo {
-        // In real implementation: Query via cuDeviceGetProperties
+        let props = self.executor.device_properties().unwrap_or_else(|_| {
+            cuda_kernels::CudaDeviceProperties {
+                name: "Unknown CUDA Device".to_string(),
+                compute_capability: (7, 0),
+                total_memory_bytes: 0,
+                multiprocessor_count: 0,
+                max_threads_per_block: 1024,
+                max_shared_memory_per_block: 48 * 1024,
+            }
+        });
+
         GpuDeviceInfo {
             backend: GpuBackend::Cuda,
             device_id: self.config.device_id,
-            name: "NVIDIA GPU (CUDA)".to_string(),
-            total_memory_bytes: 8 * 1024 * 1024 * 1024, // Example: 8GB
-            available_memory_bytes: 6 * 1024 * 1024 * 1024,
-            compute_capability: (8, 0), // Example: Ampere
-            max_threads_per_block: 1024,
-            num_streaming_multiprocessors: 108,
+            name: props.name,
+            total_memory_bytes: props.total_memory_bytes,
+            available_memory_bytes: props.total_memory_bytes, // Approximation
+            compute_capability: (props.compute_capability.0 as u32, props.compute_capability.1 as u32),
+            max_threads_per_block: props.max_threads_per_block as usize,
+            num_streaming_multiprocessors: props.multiprocessor_count as usize,
         }
     }
 
     fn batch_euclidean_distance(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
-        // In real implementation:
-        // 1. Allocate GPU memory
-        // 2. Copy query and database to GPU
-        // 3. Launch CUDA kernel
-        // 4. Copy results back to CPU
+        if database.is_empty() {
+            return Ok(vec![]);
+        }
 
-        // Fallback for now
-        let cpu = CpuBackend::new(&self.config);
-        cpu.batch_euclidean_distance(query, database)
+        let vector_dim = query.len();
+        let num_vectors = database.len();
+
+        // Flatten database into contiguous array
+        let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
+
+        // Execute GPU kernel
+        self.executor.euclidean_distance(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn batch_cosine_similarity(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
-        let cpu = CpuBackend::new(&self.config);
-        cpu.batch_cosine_similarity(query, database)
+        if database.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let vector_dim = query.len();
+        let num_vectors = database.len();
+
+        let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
+
+        self.executor.cosine_similarity(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn batch_dot_product(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
-        let cpu = CpuBackend::new(&self.config);
-        cpu.batch_dot_product(query, database)
+        if database.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let vector_dim = query.len();
+        let num_vectors = database.len();
+
+        let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
+
+        self.executor.dot_product(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn matrix_multiply(&self, a: &[Vec<f32>], b: &[Vec<f32>]) -> Result<Vec<Vec<f32>>> {
-        // In real implementation: Use cuBLAS (sgemm)
+        // Fall back to CPU for matrix multiply (would need cuBLAS integration)
         let cpu = CpuBackend::new(&self.config);
         cpu.matrix_multiply(a, b)
     }
 
     fn batch_normalize(&self, vectors: &[Vec<f32>]) -> Result<Vec<Vec<f32>>> {
-        let cpu = CpuBackend::new(&self.config);
-        cpu.batch_normalize(vectors)
+        if vectors.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let vector_dim = vectors[0].len();
+        let num_vectors = vectors.len();
+
+        let flat_vectors: Vec<f32> = vectors.iter().flat_map(|v| v.iter().copied()).collect();
+
+        let normalized = self.executor.l2_normalize(&flat_vectors, num_vectors, vector_dim)?;
+
+        // Reshape back to Vec<Vec<f32>>
+        Ok(normalized.chunks(vector_dim).map(|c| c.to_vec()).collect())
     }
 
     fn knn_search(
@@ -575,9 +613,17 @@ impl GpuOps for CudaBackend {
         database: &[Vec<f32>],
         k: usize,
     ) -> Result<(Vec<usize>, Vec<f32>)> {
-        // In real implementation: GPU-accelerated k-NN
-        let cpu = CpuBackend::new(&self.config);
-        cpu.knn_search(query, database, k)
+        // Use GPU for distance computation, CPU for top-k selection
+        let distances = self.batch_euclidean_distance(query, database)?;
+
+        let mut indexed: Vec<(usize, f32)> = distances.into_iter().enumerate().collect();
+        indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        indexed.truncate(k);
+
+        let indices: Vec<usize> = indexed.iter().map(|(i, _)| *i).collect();
+        let dists: Vec<f32> = indexed.iter().map(|(_, d)| *d).collect();
+
+        Ok((indices, dists))
     }
 }
 

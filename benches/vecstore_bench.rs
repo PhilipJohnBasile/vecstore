@@ -147,7 +147,7 @@ fn bench_persistence(c: &mut Criterion) {
 
         // Benchmark save
         group.bench_with_input(BenchmarkId::new("save", size), size, |b, &size| {
-            let (_temp, store) = setup_store_with_data(size, 128);
+            let (_temp, mut store) = setup_store_with_data(size, 128);
             b.iter(|| {
                 black_box(store.save().unwrap());
             });
@@ -155,7 +155,7 @@ fn bench_persistence(c: &mut Criterion) {
 
         // Benchmark load
         group.bench_with_input(BenchmarkId::new("load", size), size, |b, &size| {
-            let (temp, store) = setup_store_with_data(size, 128);
+            let (temp, mut store) = setup_store_with_data(size, 128);
             store.save().unwrap();
             let path = temp.path();
 

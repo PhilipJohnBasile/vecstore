@@ -119,7 +119,7 @@ fn test_save_without_modifications() {
 
     // Load and save without changes
     {
-        let store = VecStore::open(path).unwrap();
+        let mut store = VecStore::open(path).unwrap();
         store.save().unwrap(); // Should work fine
     }
 
@@ -351,7 +351,7 @@ fn test_save_empty_then_populate() {
 
     // Save empty
     {
-        let store = VecStore::open(path).unwrap();
+        let mut store = VecStore::open(path).unwrap();
         store.save().unwrap();
     }
 

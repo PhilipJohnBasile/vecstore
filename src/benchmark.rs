@@ -679,8 +679,8 @@ impl Benchmarker {
     /// Benchmark concurrent operations
     fn benchmark_concurrent(
         &self,
-        vectors: &[Vec<f32>],
-        queries: &[Vec<f32>],
+        _vectors: &[Vec<f32>],
+        _queries: &[Vec<f32>],
     ) -> Result<ConcurrentResults> {
         // Single-threaded baseline
         let single_thread_qps = self.config.num_queries as f64 / 1.0; // Placeholder

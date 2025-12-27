@@ -50,8 +50,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// Profiler configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -342,6 +341,7 @@ pub struct ProfileSummary {
 mod tests {
     use super::*;
     use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn test_profiler_config_default() {

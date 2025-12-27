@@ -56,7 +56,6 @@
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 /// ScaNN configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -127,7 +126,7 @@ struct AnisotropicQuantizer {
 
 impl AnisotropicQuantizer {
     /// Train quantizer on sample data
-    fn train(vectors: &[Vec<f32>], bits: u8, dimensions_per_block: usize) -> Result<Self> {
+    fn train(vectors: &[Vec<f32>], bits: u8, _dimensions_per_block: usize) -> Result<Self> {
         if vectors.is_empty() {
             return Err(anyhow!("Need training vectors"));
         }

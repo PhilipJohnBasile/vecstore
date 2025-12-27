@@ -144,7 +144,7 @@ fn vecstore_should_require_minimum_dimension() {
 #[test]
 fn graph_visualizer_native_backend_should_error() {
     let temp_dir = tempdir().expect("tempdir");
-    let store = VecStore::open(temp_dir.path()).expect("store");
+    let mut store = VecStore::open(temp_dir.path()).expect("store");
 
     store
         .upsert("doc".to_string(), vec![1.0, 0.0], empty_metadata())

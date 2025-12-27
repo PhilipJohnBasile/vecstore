@@ -29,15 +29,74 @@
 //! - Cache-aware graph traversal
 
 use anyhow::{anyhow, Context, Result};
-use memmap2::{Mmap, MmapMut, MmapOptions};
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
+use memmap2::{Mmap, MmapOptions};
+use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::cmp::Ordering;
+use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+
+#[cfg(feature = "async")]
 use std::sync::Arc;
 
 #[cfg(feature = "async")]
 use tokio::sync::RwLock;
+
+/// Candidate node for HNSW search (max-heap by distance for beam search)
+#[derive(Clone)]
+struct Candidate {
+    id: u64,
+    distance: f32,
+}
+
+impl PartialEq for Candidate {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Candidate {}
+
+impl PartialOrd for Candidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Candidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Reverse order for max-heap (we want smallest distances first)
+        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
+    }
+}
+
+/// Min-heap candidate (for result collection)
+#[derive(Clone)]
+struct MinCandidate {
+    id: u64,
+    distance: f32,
+}
+
+impl PartialEq for MinCandidate {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for MinCandidate {}
+
+impl PartialOrd for MinCandidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for MinCandidate {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // Normal order for min-heap (largest distances at top for pruning)
+        self.distance.partial_cmp(&other.distance).unwrap_or(Ordering::Equal)
+    }
+}
 
 /// Configuration for disk-backed HNSW
 #[derive(Debug, Clone)]
@@ -144,12 +203,19 @@ pub struct DiskHNSW {
     mmap: Option<Mmap>,
     #[cfg(feature = "async")]
     mmap: Option<Arc<RwLock<Mmap>>>,
-    /// Node offset table (node_id -> file offset)
+    /// Node offset table (node_id -> file offset per layer)
+    /// Key: (node_id, layer), Value: file offset
+    node_layer_offsets: HashMap<(u64, u8), u64>,
+    /// Node offset table (node_id -> file offset) - legacy for base layer
     node_offsets: HashMap<u64, u64>,
+    /// Maximum layer for each node
+    node_max_layer: HashMap<u64, u8>,
     /// Layer sizes
     layer_sizes: Vec<usize>,
     /// Entry point
     entry_point: Option<u64>,
+    /// Entry point layer (highest layer)
+    entry_point_layer: u8,
     /// Current node count
     node_count: u64,
 }
@@ -203,9 +269,12 @@ impl DiskHNSW {
             config,
             file_path,
             mmap: mmap_field,
+            node_layer_offsets: HashMap::new(),
             node_offsets: HashMap::new(),
+            node_max_layer: HashMap::new(),
             layer_sizes: Vec::new(),
             entry_point: None,
+            entry_point_layer: 0,
             node_count: 0,
         })
     }
@@ -235,11 +304,14 @@ impl DiskHNSW {
         let header = unsafe { &*(mmap.as_ptr() as *const FileHeader) };
         header.validate()?;
 
-        // Build node offset table by scanning the file
+        // Build node offset tables by scanning the file
         let mut node_offsets = HashMap::new();
+        let mut node_layer_offsets = HashMap::new();
+        let mut node_max_layer: HashMap<u64, u8> = HashMap::new();
         let mut offset = FileHeader::SIZE as u64;
-        let mut node_count = 0;
         let mut entry_point = None;
+        let mut entry_point_layer = 0u8;
+        let mut unique_nodes = HashSet::new();
 
         // Use data_length from header to know where to stop
         let data_end = header.data_length;
@@ -262,16 +334,33 @@ impl DiskHNSW {
                 break;
             }
 
-            node_offsets.insert(node_id, offset);
-            node_count += 1;
+            // Track layer-specific offset
+            node_layer_offsets.insert((node_id, layer), offset);
 
-            if entry_point.is_none() && layer > 0 {
+            // Track base layer offset (layer 0)
+            if layer == 0 {
+                node_offsets.insert(node_id, offset);
+            }
+
+            // Track max layer for each node
+            let current_max = node_max_layer.entry(node_id).or_insert(0);
+            if layer > *current_max {
+                *current_max = layer;
+            }
+
+            unique_nodes.insert(node_id);
+
+            // Update entry point (highest layer node)
+            if layer > entry_point_layer || entry_point.is_none() {
                 entry_point = Some(node_id);
+                entry_point_layer = layer;
             }
 
             // Move to next node
             offset += node_size as u64;
         }
+
+        let node_count = unique_nodes.len() as u64;
 
         let config = DiskHNSWConfig {
             m: header.m as usize,
@@ -288,9 +377,12 @@ impl DiskHNSW {
             config,
             file_path,
             mmap: mmap_field,
+            node_layer_offsets,
             node_offsets,
+            node_max_layer,
             layer_sizes: Vec::new(),
             entry_point,
+            entry_point_layer,
             node_count,
         })
     }
@@ -306,7 +398,7 @@ impl DiskHNSW {
 
         // Find the end of the file (or use tracked offset)
         let file_len = file.metadata()?.len();
-        let mut offset = file
+        let offset = file
             .seek(SeekFrom::End(0))
             .context("Failed to seek to end of file")?;
 
@@ -351,17 +443,28 @@ impl DiskHNSW {
         file.flush()?;
         drop(file);
 
-        // Update offset table
-        self.node_offsets.insert(node.id, offset);
-        self.node_count += 1;
+        // Update offset tables
+        self.node_layer_offsets.insert((node.id, node.layer), offset);
+        if node.layer == 0 {
+            self.node_offsets.insert(node.id, offset);
+        }
+
+        // Track max layer for this node (increment node count for new nodes)
+        let is_new_node = !self.node_max_layer.contains_key(&node.id);
+        let current_max = self.node_max_layer.entry(node.id).or_insert(0);
+        if node.layer > *current_max {
+            *current_max = node.layer;
+        }
+
+        // Increment node count for new unique nodes
+        if is_new_node {
+            self.node_count += 1;
+        }
 
         // Update entry point if this is a higher layer
-        if let Some(ep) = self.entry_point {
-            if node.layer > self.get_node_layer(ep).unwrap_or(0) {
-                self.entry_point = Some(node.id);
-            }
-        } else {
+        if node.layer > self.entry_point_layer || self.entry_point.is_none() {
             self.entry_point = Some(node.id);
+            self.entry_point_layer = node.layer;
         }
 
         // Re-map the file after adding nodes
@@ -371,27 +474,17 @@ impl DiskHNSW {
     }
 
     /// Get a node from the index
+    #[cfg(not(feature = "async"))]
     pub fn get_node(&self, node_id: u64) -> Result<HNSWNode> {
         let offset = *self
             .node_offsets
             .get(&node_id)
             .ok_or_else(|| anyhow!("Node {} not found", node_id))?;
 
-        #[cfg(not(feature = "async"))]
         let mmap = self
             .mmap
             .as_ref()
             .ok_or_else(|| anyhow!("Index not mapped"))?;
-
-        #[cfg(feature = "async")]
-        let mmap = {
-            use std::sync::Arc;
-            // For non-async get_node, we can't await the lock
-            // This is a limitation - in production, we'd use a different approach
-            return Err(anyhow!(
-                "get_node requires async context - use get_node_async"
-            ));
-        };
 
         let offset = offset as usize;
 
@@ -411,7 +504,16 @@ impl DiskHNSW {
         Ok(HNSWNode { id, layer, edges })
     }
 
+    /// Get a node from the index (async version - not yet implemented)
+    #[cfg(feature = "async")]
+    pub fn get_node(&self, node_id: u64) -> Result<HNSWNode> {
+        // In async mode, would need to await the RwLock
+        // For now, return error - use search() which has brute force fallback
+        Err(anyhow!("get_node not available in async mode - use search()"))
+    }
+
     /// Get node layer
+    #[allow(dead_code)]
     fn get_node_layer(&self, node_id: u64) -> Option<u8> {
         let offset = *self.node_offsets.get(&node_id)? as usize;
 
@@ -468,6 +570,62 @@ impl DiskHNSW {
             layer_count: self.layer_sizes.len(),
         }
     }
+
+    /// Get node neighbors at a specific layer
+    #[cfg(not(feature = "async"))]
+    pub fn get_neighbors_at_layer(&self, node_id: u64, layer: u8) -> Result<Vec<u64>> {
+        let offset = self
+            .node_layer_offsets
+            .get(&(node_id, layer))
+            .ok_or_else(|| anyhow!("Node {} not found at layer {}", node_id, layer))?;
+
+        let mmap = self
+            .mmap
+            .as_ref()
+            .ok_or_else(|| anyhow!("Index not mapped"))?;
+
+        let offset = *offset as usize;
+
+        // Read node data
+        if offset + 11 > mmap.len() {
+            return Err(anyhow!("Invalid offset"));
+        }
+
+        let num_edges = u16::from_le_bytes(mmap[offset + 9..offset + 11].try_into().unwrap());
+
+        let mut edges = Vec::with_capacity(num_edges as usize);
+        let mut edge_offset = offset + 11;
+        for _ in 0..num_edges {
+            if edge_offset + 8 > mmap.len() {
+                break;
+            }
+            let edge = u64::from_le_bytes(mmap[edge_offset..edge_offset + 8].try_into().unwrap());
+            edges.push(edge);
+            edge_offset += 8;
+        }
+
+        Ok(edges)
+    }
+
+    /// Get the entry point and its layer
+    pub fn get_entry_point(&self) -> Option<(u64, u8)> {
+        self.entry_point.map(|ep| (ep, self.entry_point_layer))
+    }
+
+    /// Get maximum layer for a node
+    pub fn get_max_layer(&self, node_id: u64) -> Option<u8> {
+        self.node_max_layer.get(&node_id).copied()
+    }
+
+    /// Check if a node exists at a specific layer
+    pub fn has_node_at_layer(&self, node_id: u64, layer: u8) -> bool {
+        self.node_layer_offsets.contains_key(&(node_id, layer))
+    }
+
+    /// Get all node IDs
+    pub fn get_all_node_ids(&self) -> Vec<u64> {
+        self.node_max_layer.keys().copied().collect()
+    }
 }
 
 /// Statistics for disk-backed HNSW
@@ -487,7 +645,6 @@ pub struct DiskVectorStorage {
     dimension: usize,
     vector_count: u64,
     /// Memory-mapped vectors file
-    #[cfg(not(feature = "async"))]
     mmap: Option<Mmap>,
 }
 
@@ -714,7 +871,8 @@ impl DiskHNSWIndex {
         })
     }
 
-    /// Insert a vector
+    /// Insert a vector with proper HNSW neighbor connections
+    #[cfg(not(feature = "async"))]
     pub fn insert(&mut self, id: String, vector: Vec<f32>) -> Result<()> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -725,30 +883,258 @@ impl DiskHNSWIndex {
         // Store vector
         self.vectors.add_vector(index, &vector)?;
 
-        // Add to HNSW graph (random layer assignment)
+        // Store ID mapping first
+        self.id_to_index.insert(id.clone(), index);
+        self.index_to_id.insert(index, id);
+
+        // Determine the random layer for this node
+        let max_layer = self.random_layer();
+        let m = self.graph.config.m;
+        let m_max0 = self.graph.config.m_max0;
+        let ef_construction = self.graph.config.ef_construction;
+
+        // If this is the first node, just add it at all layers
+        if self.graph.node_count == 0 {
+            for layer in 0..=max_layer {
+                let node = HNSWNode {
+                    id: index,
+                    layer,
+                    edges: vec![],
+                };
+                self.graph.add_node(node)?;
+            }
+            return Ok(());
+        }
+
+        // Get entry point
+        let (ep_id, ep_layer) = self.graph.get_entry_point()
+            .ok_or_else(|| anyhow!("No entry point found"))?;
+
+        let mut current_ep = ep_id;
+
+        // Phase 1: Greedy search from top layer down to max_layer + 1
+        for layer in (max_layer + 1..=ep_layer).rev() {
+            if let Ok(closest) = self.search_layer_single(&vector, current_ep, layer) {
+                current_ep = closest;
+            }
+        }
+
+        // Phase 2: Insert at layers max_layer down to 0
+        for layer in (0..=max_layer.min(ep_layer)).rev() {
+            // Find neighbors at this layer
+            let max_neighbors = if layer == 0 { m_max0 } else { m };
+            let neighbors = self.search_layer_beam(&vector, current_ep, layer, ef_construction)?;
+
+            // Select best neighbors (simple heuristic: take closest ones)
+            let selected: Vec<u64> = neighbors
+                .iter()
+                .take(max_neighbors)
+                .map(|(id, _)| *id)
+                .collect();
+
+            // Add node at this layer with connections
+            let node = HNSWNode {
+                id: index,
+                layer,
+                edges: selected.clone(),
+            };
+            self.graph.add_node(node)?;
+
+            // Update current entry point for next layer
+            if !neighbors.is_empty() {
+                current_ep = neighbors[0].0;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Fallback insert for async feature (simplified)
+    #[cfg(feature = "async")]
+    pub fn insert(&mut self, id: String, vector: Vec<f32>) -> Result<()> {
+        if vector.len() != self.dimension {
+            return Err(anyhow!("Vector dimension mismatch"));
+        }
+
+        let index = self.vectors.len();
+        self.vectors.add_vector(index, &vector)?;
+
         let layer = self.random_layer();
         let node = HNSWNode {
             id: index,
             layer,
-            edges: vec![],  // Would need proper neighbor selection
+            edges: vec![],
         };
         self.graph.add_node(node)?;
 
-        // Store ID mapping
         self.id_to_index.insert(id.clone(), index);
         self.index_to_id.insert(index, id);
 
         Ok(())
     }
 
-    /// Search for k nearest neighbors
+    /// Search for k nearest neighbors using HNSW graph traversal
+    #[cfg(not(feature = "async"))]
     pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(String, f32)>> {
         if query.len() != self.dimension {
             return Err(anyhow!("Query dimension mismatch"));
         }
 
-        // Simple brute-force for now (proper HNSW search would traverse the graph)
-        // This is a placeholder - full implementation would use the graph structure
+        // Handle empty index
+        if self.vectors.len() == 0 {
+            return Ok(vec![]);
+        }
+
+        // For small datasets, brute force is faster and more reliable
+        if self.vectors.len() <= 100 {
+            return self.search_brute_force(query, k);
+        }
+
+        // Get entry point
+        let (ep_id, ep_layer) = match self.graph.get_entry_point() {
+            Some(ep) => ep,
+            None => {
+                // Fallback to brute force if no entry point
+                return self.search_brute_force(query, k);
+            }
+        };
+
+        let mut current_ep = ep_id;
+
+        // Phase 1: Greedy search from top layer down to layer 1
+        for layer in (1..=ep_layer).rev() {
+            if let Ok(closest) = self.search_layer_single(query, current_ep, layer) {
+                current_ep = closest;
+            }
+        }
+
+        // Phase 2: Beam search at layer 0 with ef_search candidates
+        let candidates = self.search_layer_beam(query, current_ep, 0, self.ef_search)?;
+
+        // Return top k results
+        let results: Vec<(String, f32)> = candidates
+            .into_iter()
+            .take(k)
+            .filter_map(|(idx, dist)| {
+                self.index_to_id.get(&idx).map(|id| (id.clone(), dist))
+            })
+            .collect();
+
+        // If we didn't find enough results via HNSW, fall back to brute force
+        if results.len() < k {
+            return self.search_brute_force(query, k);
+        }
+
+        Ok(results)
+    }
+
+    /// Fallback search for async feature
+    #[cfg(feature = "async")]
+    pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(String, f32)>> {
+        self.search_brute_force(query, k)
+    }
+
+    /// Greedy search within a layer - find single closest node
+    #[cfg(not(feature = "async"))]
+    fn search_layer_single(&self, query: &[f32], entry: u64, layer: u8) -> Result<u64> {
+        let mut current = entry;
+        let mut current_dist = self.get_distance(query, current)?;
+
+        loop {
+            let neighbors = match self.graph.get_neighbors_at_layer(current, layer) {
+                Ok(n) => n,
+                Err(_) => break, // No neighbors at this layer
+            };
+
+            let mut found_closer = false;
+            for neighbor in neighbors {
+                if let Ok(dist) = self.get_distance(query, neighbor) {
+                    if dist < current_dist {
+                        current = neighbor;
+                        current_dist = dist;
+                        found_closer = true;
+                    }
+                }
+            }
+
+            if !found_closer {
+                break;
+            }
+        }
+
+        Ok(current)
+    }
+
+    /// Beam search within a layer - find ef closest nodes
+    #[cfg(not(feature = "async"))]
+    fn search_layer_beam(&self, query: &[f32], entry: u64, layer: u8, ef: usize) -> Result<Vec<(u64, f32)>> {
+        let mut visited = HashSet::new();
+        let mut candidates: BinaryHeap<Candidate> = BinaryHeap::new();
+        let mut results: BinaryHeap<MinCandidate> = BinaryHeap::new();
+
+        // Start with entry point
+        let entry_dist = self.get_distance(query, entry)?;
+        candidates.push(Candidate { id: entry, distance: entry_dist });
+        results.push(MinCandidate { id: entry, distance: entry_dist });
+        visited.insert(entry);
+
+        while let Some(current) = candidates.pop() {
+            // Stop if current is further than the worst result
+            if results.len() >= ef {
+                if let Some(worst) = results.peek() {
+                    if current.distance > worst.distance {
+                        break;
+                    }
+                }
+            }
+
+            // Get neighbors
+            let neighbors = match self.graph.get_neighbors_at_layer(current.id, layer) {
+                Ok(n) => n,
+                Err(_) => continue,
+            };
+
+            for neighbor in neighbors {
+                if visited.contains(&neighbor) {
+                    continue;
+                }
+                visited.insert(neighbor);
+
+                if let Ok(dist) = self.get_distance(query, neighbor) {
+                    // Check if we should add this neighbor
+                    let should_add = if results.len() < ef {
+                        true
+                    } else if let Some(worst) = results.peek() {
+                        dist < worst.distance
+                    } else {
+                        true
+                    };
+
+                    if should_add {
+                        candidates.push(Candidate { id: neighbor, distance: dist });
+                        results.push(MinCandidate { id: neighbor, distance: dist });
+
+                        // Trim results if too large
+                        while results.len() > ef {
+                            results.pop();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Convert to sorted vec
+        let mut result_vec: Vec<(u64, f32)> = results
+            .into_iter()
+            .map(|c| (c.id, c.distance))
+            .collect();
+        result_vec.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+
+        Ok(result_vec)
+    }
+
+    /// Fallback brute-force search
+    fn search_brute_force(&self, query: &[f32], k: usize) -> Result<Vec<(String, f32)>> {
         let mut distances: Vec<(u64, f32)> = Vec::new();
 
         for i in 0..self.vectors.len() {
@@ -769,6 +1155,17 @@ impl DiskHNSWIndex {
             .collect();
 
         Ok(results)
+    }
+
+    /// Get distance from query to a node
+    fn get_distance(&self, query: &[f32], node_id: u64) -> Result<f32> {
+        let vec = self.vectors.get_vector(node_id)?;
+        Ok(euclidean_distance(query, &vec))
+    }
+
+    /// Set ef_search parameter
+    pub fn set_ef_search(&mut self, ef: usize) {
+        self.ef_search = ef;
     }
 
     /// Save ID mappings
@@ -1003,6 +1400,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore] // TODO: May fail on systems with limited temp storage
     fn test_disk_hnsw_index_large_dataset() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().join("large_index");

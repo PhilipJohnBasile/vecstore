@@ -149,6 +149,7 @@
 //! - **Clustering and classification**
 
 pub mod autotuning;
+pub mod backup;
 pub mod cache;
 pub mod compression;
 pub mod error;
@@ -200,17 +201,24 @@ pub mod anomaly;
 pub mod audit;
 pub mod benchmark;
 pub mod bulk_migration;
+pub mod cdc;
 pub mod clustering;
 pub mod collection;
+pub mod columnar;
 pub mod deduplication;
 pub mod dim_reduction;
+pub mod diskann;
 pub mod distributed;
+pub mod explainable;
 pub mod geospatial;
 pub mod gpu;
 pub mod graph_rag;
+pub mod graph_vector;
 pub mod health;
 pub mod ivf_pq;
 pub mod langchain;
+pub mod learned_index;
+pub mod lineage;
 pub mod lsh;
 pub mod metadata_index;
 pub mod migration;
@@ -220,6 +228,7 @@ pub mod multimodal;
 pub mod namespace;
 pub mod namespace_manager;
 pub mod partitioning;
+pub mod privacy;
 pub mod profiler;
 pub mod protocol;
 pub mod quantization;
@@ -232,11 +241,21 @@ pub mod reranking;
 pub mod scann;
 pub mod splade;
 pub mod telemetry;
+pub mod temporal;
 pub mod text_splitter;
 pub mod timeseries;
 pub mod tokenizer;
 pub mod validation;
 pub mod versioning;
+
+// 2026 Innovation Features
+pub mod agent;
+pub mod auto_tune;
+pub mod debugger;
+pub mod embedding_vcs;
+pub mod matryoshka;
+pub mod object_storage;
+pub mod pq;
 
 #[cfg(feature = "async")]
 pub mod kafka_connector;
@@ -415,8 +434,8 @@ pub use monitoring::{
 
 // Export rate limiting types
 pub use rate_limit::{
-    MultiTierRateLimiter, RateLimitAlgorithm, RateLimitConfig, RateLimitResult, RateLimitScope,
-    RateLimiter,
+    KeyedRateLimiter, MultiTierRateLimiter, RateLimitAlgorithm, RateLimitConfig, RateLimitResult,
+    RateLimitScope, RateLimiter,
 };
 
 // Export audit logging types

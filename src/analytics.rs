@@ -34,7 +34,6 @@
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::simd::cosine_similarity_simd;
 
@@ -456,7 +455,7 @@ impl VectorAnalytics {
             magnitudes.iter().map(|m| (m - mean).powi(2)).sum::<f32>() / magnitudes.len() as f32;
         let std_dev = variance.sqrt();
 
-        let threshold = mean + self.config.outlier_threshold * std_dev;
+        let _threshold = mean + self.config.outlier_threshold * std_dev;
 
         let mut outlier_indices = Vec::new();
         let mut outlier_scores = Vec::new();
@@ -535,7 +534,7 @@ impl VectorAnalytics {
     }
 
     /// Compute Hopkins statistic (simplified)
-    fn compute_hopkins_statistic(&self, vectors: &[Vec<f32>]) -> f32 {
+    fn compute_hopkins_statistic(&self, _vectors: &[Vec<f32>]) -> f32 {
         // Simplified Hopkins - actual implementation would use random sampling
         // This is a placeholder that returns a reasonable value
         0.5

@@ -3,8 +3,6 @@
 //! This module provides CUDA kernel implementations for distance calculations
 //! and other vector operations.
 
-use anyhow::{anyhow, Result};
-use std::sync::Arc;
 
 /// CUDA kernel source for Euclidean distance
 pub const EUCLIDEAN_DISTANCE_KERNEL: &str = r#"
@@ -168,28 +166,229 @@ extern "C" __global__ void top_k_kernel(
 }
 "#;
 
-/// CUDA kernel executor
+/// CUDA kernel executor using cudarc
 #[cfg(feature = "cuda")]
 pub struct CudaKernelExecutor {
-    device_id: i32,
-    // Would hold cudarc context in real implementation
-    _phantom: std::marker::PhantomData<()>,
+    device: std::sync::Arc<cudarc::driver::CudaDevice>,
+    euclidean_kernel: cudarc::driver::CudaFunction,
+    cosine_kernel: cudarc::driver::CudaFunction,
+    dot_kernel: cudarc::driver::CudaFunction,
 }
 
 #[cfg(feature = "cuda")]
 impl CudaKernelExecutor {
+    /// PTX code for distance kernels (pre-compiled for portability)
+    const DISTANCE_PTX: &'static str = r#"
+.version 7.0
+.target sm_70
+.address_size 64
+
+.visible .entry euclidean_distance_kernel(
+    .param .u64 query,
+    .param .u64 database,
+    .param .u64 distances,
+    .param .u32 num_vectors,
+    .param .u32 vector_dim
+) {
+    .reg .pred %p<2>;
+    .reg .f32 %f<8>;
+    .reg .b32 %r<10>;
+    .reg .b64 %rd<12>;
+
+    ld.param.u64 %rd1, [query];
+    ld.param.u64 %rd2, [database];
+    ld.param.u64 %rd3, [distances];
+    ld.param.u32 %r1, [num_vectors];
+    ld.param.u32 %r2, [vector_dim];
+
+    mov.u32 %r3, %ctaid.x;
+    mov.u32 %r4, %ntid.x;
+    mov.u32 %r5, %tid.x;
+    mad.lo.s32 %r6, %r3, %r4, %r5;
+
+    setp.ge.u32 %p1, %r6, %r1;
+    @%p1 bra END;
+
+    mov.f32 %f1, 0f00000000;
+    mov.u32 %r7, 0;
+LOOP:
+    setp.ge.u32 %p1, %r7, %r2;
+    @%p1 bra DONE;
+
+    mul.wide.u32 %rd4, %r7, 4;
+    add.u64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f2, [%rd5];
+
+    mul.lo.u32 %r8, %r6, %r2;
+    add.u32 %r9, %r8, %r7;
+    mul.wide.u32 %rd6, %r9, 4;
+    add.u64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f3, [%rd7];
+
+    sub.f32 %f4, %f2, %f3;
+    fma.rn.f32 %f1, %f4, %f4, %f1;
+
+    add.u32 %r7, %r7, 1;
+    bra LOOP;
+DONE:
+    sqrt.rn.f32 %f5, %f1;
+    mul.wide.u32 %rd8, %r6, 4;
+    add.u64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f5;
+END:
+    ret;
+}
+
+.visible .entry cosine_similarity_kernel(
+    .param .u64 query,
+    .param .u64 database,
+    .param .u64 similarities,
+    .param .u32 num_vectors,
+    .param .u32 vector_dim
+) {
+    .reg .pred %p<2>;
+    .reg .f32 %f<12>;
+    .reg .b32 %r<10>;
+    .reg .b64 %rd<12>;
+
+    ld.param.u64 %rd1, [query];
+    ld.param.u64 %rd2, [database];
+    ld.param.u64 %rd3, [similarities];
+    ld.param.u32 %r1, [num_vectors];
+    ld.param.u32 %r2, [vector_dim];
+
+    mov.u32 %r3, %ctaid.x;
+    mov.u32 %r4, %ntid.x;
+    mov.u32 %r5, %tid.x;
+    mad.lo.s32 %r6, %r3, %r4, %r5;
+
+    setp.ge.u32 %p1, %r6, %r1;
+    @%p1 bra END;
+
+    mov.f32 %f1, 0f00000000;
+    mov.f32 %f2, 0f00000000;
+    mov.f32 %f3, 0f00000000;
+    mov.u32 %r7, 0;
+LOOP:
+    setp.ge.u32 %p1, %r7, %r2;
+    @%p1 bra DONE;
+
+    mul.wide.u32 %rd4, %r7, 4;
+    add.u64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f4, [%rd5];
+
+    mul.lo.u32 %r8, %r6, %r2;
+    add.u32 %r9, %r8, %r7;
+    mul.wide.u32 %rd6, %r9, 4;
+    add.u64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f5, [%rd7];
+
+    fma.rn.f32 %f1, %f4, %f5, %f1;
+    fma.rn.f32 %f2, %f4, %f4, %f2;
+    fma.rn.f32 %f3, %f5, %f5, %f3;
+
+    add.u32 %r7, %r7, 1;
+    bra LOOP;
+DONE:
+    sqrt.rn.f32 %f6, %f2;
+    sqrt.rn.f32 %f7, %f3;
+    mul.f32 %f8, %f6, %f7;
+    add.f32 %f9, %f8, 0f3727C5AC;
+    div.rn.f32 %f10, %f1, %f9;
+
+    mul.wide.u32 %rd8, %r6, 4;
+    add.u64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f10;
+END:
+    ret;
+}
+
+.visible .entry dot_product_kernel(
+    .param .u64 query,
+    .param .u64 database,
+    .param .u64 products,
+    .param .u32 num_vectors,
+    .param .u32 vector_dim
+) {
+    .reg .pred %p<2>;
+    .reg .f32 %f<6>;
+    .reg .b32 %r<10>;
+    .reg .b64 %rd<12>;
+
+    ld.param.u64 %rd1, [query];
+    ld.param.u64 %rd2, [database];
+    ld.param.u64 %rd3, [products];
+    ld.param.u32 %r1, [num_vectors];
+    ld.param.u32 %r2, [vector_dim];
+
+    mov.u32 %r3, %ctaid.x;
+    mov.u32 %r4, %ntid.x;
+    mov.u32 %r5, %tid.x;
+    mad.lo.s32 %r6, %r3, %r4, %r5;
+
+    setp.ge.u32 %p1, %r6, %r1;
+    @%p1 bra END;
+
+    mov.f32 %f1, 0f00000000;
+    mov.u32 %r7, 0;
+LOOP:
+    setp.ge.u32 %p1, %r7, %r2;
+    @%p1 bra DONE;
+
+    mul.wide.u32 %rd4, %r7, 4;
+    add.u64 %rd5, %rd1, %rd4;
+    ld.global.f32 %f2, [%rd5];
+
+    mul.lo.u32 %r8, %r6, %r2;
+    add.u32 %r9, %r8, %r7;
+    mul.wide.u32 %rd6, %r9, 4;
+    add.u64 %rd7, %rd2, %rd6;
+    ld.global.f32 %f3, [%rd7];
+
+    fma.rn.f32 %f1, %f2, %f3, %f1;
+
+    add.u32 %r7, %r7, 1;
+    bra LOOP;
+DONE:
+    mul.wide.u32 %rd8, %r6, 4;
+    add.u64 %rd9, %rd3, %rd8;
+    st.global.f32 [%rd9], %f1;
+END:
+    ret;
+}
+"#;
+
     /// Create a new CUDA kernel executor
-    pub fn new(device_id: i32) -> Result<Self> {
-        // In real implementation:
-        // 1. Initialize CUDA runtime
-        // 2. Select device
-        // 3. Create CUDA context
-        // 4. Compile kernels to PTX
-        // 5. Load kernels
+    pub fn new(device_id: usize) -> Result<Self> {
+        use cudarc::driver::CudaDevice;
+
+        let device = CudaDevice::new(device_id)
+            .map_err(|e| anyhow!("Failed to initialize CUDA device {}: {}", device_id, e))?;
+
+        // Load PTX module
+        device.load_ptx(
+            cudarc::nvrtc::Ptx::from_src(Self::DISTANCE_PTX),
+            "distance_kernels",
+            &["euclidean_distance_kernel", "cosine_similarity_kernel", "dot_product_kernel"],
+        ).map_err(|e| anyhow!("Failed to load PTX: {}", e))?;
+
+        let euclidean_kernel = device
+            .get_func("distance_kernels", "euclidean_distance_kernel")
+            .ok_or_else(|| anyhow!("Failed to get euclidean kernel"))?;
+
+        let cosine_kernel = device
+            .get_func("distance_kernels", "cosine_similarity_kernel")
+            .ok_or_else(|| anyhow!("Failed to get cosine kernel"))?;
+
+        let dot_kernel = device
+            .get_func("distance_kernels", "dot_product_kernel")
+            .ok_or_else(|| anyhow!("Failed to get dot product kernel"))?;
 
         Ok(Self {
-            device_id,
-            _phantom: std::marker::PhantomData,
+            device,
+            euclidean_kernel,
+            cosine_kernel,
+            dot_kernel,
         })
     }
 
@@ -201,19 +400,41 @@ impl CudaKernelExecutor {
         num_vectors: usize,
         vector_dim: usize,
     ) -> Result<Vec<f32>> {
-        // Real implementation would:
-        // 1. Allocate device memory
-        // 2. Copy query and database to device
-        // 3. Launch kernel with appropriate grid/block dimensions
-        // 4. Copy results back
-        // 5. Free device memory
+        use cudarc::driver::LaunchAsync;
+        use cudarc::driver::LaunchConfig;
 
-        // Calculate grid and block dimensions
-        let threads_per_block = 256;
-        let num_blocks = (num_vectors + threads_per_block - 1) / threads_per_block;
+        // Copy data to device
+        let query_dev = self.device.htod_sync_copy(query)
+            .map_err(|e| anyhow!("Failed to copy query to device: {}", e))?;
+        let database_dev = self.device.htod_sync_copy(database)
+            .map_err(|e| anyhow!("Failed to copy database to device: {}", e))?;
 
-        // Placeholder: Return zeros
-        Ok(vec![0.0; num_vectors])
+        // Allocate output buffer
+        let mut distances_dev = self.device.alloc_zeros::<f32>(num_vectors)
+            .map_err(|e| anyhow!("Failed to allocate output buffer: {}", e))?;
+
+        // Configure launch
+        let threads_per_block = 256u32;
+        let num_blocks = ((num_vectors as u32) + threads_per_block - 1) / threads_per_block;
+        let cfg = LaunchConfig {
+            block_dim: (threads_per_block, 1, 1),
+            grid_dim: (num_blocks, 1, 1),
+            shared_mem_bytes: 0,
+        };
+
+        // Launch kernel
+        unsafe {
+            self.euclidean_kernel.clone().launch(
+                cfg,
+                (&query_dev, &database_dev, &mut distances_dev, num_vectors as u32, vector_dim as u32),
+            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+        }
+
+        // Copy results back
+        let distances = self.device.dtoh_sync_copy(&distances_dev)
+            .map_err(|e| anyhow!("Failed to copy results from device: {}", e))?;
+
+        Ok(distances)
     }
 
     /// Execute cosine similarity kernel
@@ -224,11 +445,36 @@ impl CudaKernelExecutor {
         num_vectors: usize,
         vector_dim: usize,
     ) -> Result<Vec<f32>> {
-        let threads_per_block = 256;
-        let num_blocks = (num_vectors + threads_per_block - 1) / threads_per_block;
+        use cudarc::driver::LaunchAsync;
+        use cudarc::driver::LaunchConfig;
 
-        // Placeholder
-        Ok(vec![0.0; num_vectors])
+        let query_dev = self.device.htod_sync_copy(query)
+            .map_err(|e| anyhow!("Failed to copy query: {}", e))?;
+        let database_dev = self.device.htod_sync_copy(database)
+            .map_err(|e| anyhow!("Failed to copy database: {}", e))?;
+
+        let mut similarities_dev = self.device.alloc_zeros::<f32>(num_vectors)
+            .map_err(|e| anyhow!("Failed to allocate output: {}", e))?;
+
+        let threads_per_block = 256u32;
+        let num_blocks = ((num_vectors as u32) + threads_per_block - 1) / threads_per_block;
+        let cfg = LaunchConfig {
+            block_dim: (threads_per_block, 1, 1),
+            grid_dim: (num_blocks, 1, 1),
+            shared_mem_bytes: 0,
+        };
+
+        unsafe {
+            self.cosine_kernel.clone().launch(
+                cfg,
+                (&query_dev, &database_dev, &mut similarities_dev, num_vectors as u32, vector_dim as u32),
+            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+        }
+
+        let similarities = self.device.dtoh_sync_copy(&similarities_dev)
+            .map_err(|e| anyhow!("Failed to copy results: {}", e))?;
+
+        Ok(similarities)
     }
 
     /// Execute dot product kernel
@@ -239,11 +485,36 @@ impl CudaKernelExecutor {
         num_vectors: usize,
         vector_dim: usize,
     ) -> Result<Vec<f32>> {
-        let threads_per_block = 256;
-        let num_blocks = (num_vectors + threads_per_block - 1) / threads_per_block;
+        use cudarc::driver::LaunchAsync;
+        use cudarc::driver::LaunchConfig;
 
-        // Placeholder
-        Ok(vec![0.0; num_vectors])
+        let query_dev = self.device.htod_sync_copy(query)
+            .map_err(|e| anyhow!("Failed to copy query: {}", e))?;
+        let database_dev = self.device.htod_sync_copy(database)
+            .map_err(|e| anyhow!("Failed to copy database: {}", e))?;
+
+        let mut products_dev = self.device.alloc_zeros::<f32>(num_vectors)
+            .map_err(|e| anyhow!("Failed to allocate output: {}", e))?;
+
+        let threads_per_block = 256u32;
+        let num_blocks = ((num_vectors as u32) + threads_per_block - 1) / threads_per_block;
+        let cfg = LaunchConfig {
+            block_dim: (threads_per_block, 1, 1),
+            grid_dim: (num_blocks, 1, 1),
+            shared_mem_bytes: 0,
+        };
+
+        unsafe {
+            self.dot_kernel.clone().launch(
+                cfg,
+                (&query_dev, &database_dev, &mut products_dev, num_vectors as u32, vector_dim as u32),
+            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+        }
+
+        let products = self.device.dtoh_sync_copy(&products_dev)
+            .map_err(|e| anyhow!("Failed to copy results: {}", e))?;
+
+        Ok(products)
     }
 
     /// Execute L2 normalization kernel
@@ -253,23 +524,38 @@ impl CudaKernelExecutor {
         num_vectors: usize,
         vector_dim: usize,
     ) -> Result<Vec<f32>> {
-        let threads_per_block = 256;
-        let num_blocks = (num_vectors + threads_per_block - 1) / threads_per_block;
+        // For now, fall back to CPU for normalization
+        // Could add a dedicated kernel later
+        let mut result = Vec::with_capacity(vectors.len());
+        for i in 0..num_vectors {
+            let start = i * vector_dim;
+            let end = start + vector_dim;
+            let slice = &vectors[start..end];
 
-        // Placeholder
-        Ok(vectors.to_vec())
+            let norm: f32 = slice.iter().map(|x| x * x).sum::<f32>().sqrt();
+            for &v in slice {
+                result.push(v / (norm + 1e-8));
+            }
+        }
+        Ok(result)
     }
 
     /// Get device properties
     pub fn device_properties(&self) -> Result<CudaDeviceProperties> {
+        // cudarc doesn't expose all properties directly, use defaults
         Ok(CudaDeviceProperties {
-            name: format!("CUDA Device {}", self.device_id),
-            compute_capability: (7, 5),
-            total_memory_bytes: 8 * 1024 * 1024 * 1024, // 8GB
+            name: format!("CUDA Device"),
+            compute_capability: (7, 0),
+            total_memory_bytes: 8 * 1024 * 1024 * 1024,
             multiprocessor_count: 68,
             max_threads_per_block: 1024,
-            max_shared_memory_per_block: 48 * 1024, // 48KB
+            max_shared_memory_per_block: 48 * 1024,
         })
+    }
+
+    /// Check if CUDA is available
+    pub fn is_available() -> bool {
+        cudarc::driver::CudaDevice::new(0).is_ok()
     }
 }
 

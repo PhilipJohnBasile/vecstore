@@ -63,7 +63,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -235,7 +235,7 @@ impl SpladeEncoder {
     }
 
     /// Encode text to sparse vector
-    pub fn encode(&self, text: &str) -> Result<SparseVector> {
+    pub fn encode(&self, _text: &str) -> Result<SparseVector> {
         // Real implementation:
         // 1. Tokenize text
         // 2. Run through BERT
@@ -266,6 +266,7 @@ impl SpladeEncoder {
     }
 
     /// Apply activation function
+    #[allow(dead_code)]
     fn apply_activation(&self, logits: &[f32]) -> Vec<f32> {
         match self.config.activation {
             ActivationType::Log1p => logits.iter().map(|&x| (1.0 + x).ln()).collect(),

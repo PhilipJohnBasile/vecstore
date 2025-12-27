@@ -35,7 +35,7 @@
 //! ```
 
 use crate::store::{Metadata, Neighbor, Query, VecStore};
-use anyhow::{Context, Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

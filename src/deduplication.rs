@@ -154,7 +154,7 @@ impl Deduplicator {
             let mut group_scores = vec![1.0]; // Perfect match with itself
 
             // Compare with all other vectors
-            for (j, (id2, vec2)) in vectors.iter().enumerate().skip(i + 1) {
+            for (_j, (id2, vec2)) in vectors.iter().enumerate().skip(i + 1) {
                 if processed.contains(id2) {
                     continue;
                 }
@@ -227,7 +227,7 @@ impl Deduplicator {
         let mut removed_count = 0;
         let mut kept_count = 0;
 
-        for mut group in groups.iter() {
+        for group in groups.iter() {
             // Determine which ID to keep based on strategy
             let to_keep = match self.config.strategy {
                 DeduplicationStrategy::KeepFirst => &group.duplicates[0],
@@ -346,7 +346,7 @@ impl Deduplicator {
         }
     }
 
-    fn get_all_vectors(&self, store: &VecStore) -> Result<Vec<(String, Vec<f32>)>> {
+    fn get_all_vectors(&self, _store: &VecStore) -> Result<Vec<(String, Vec<f32>)>> {
         // Placeholder - in practice, this would iterate over store contents
         // For now, return empty vec as the actual implementation depends on VecStore internals
         Ok(vec![])

@@ -38,7 +38,6 @@
 use anyhow::Result;
 use rand::prelude::*;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 use crate::simd::euclidean_distance_simd;
 

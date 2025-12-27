@@ -1,6 +1,5 @@
 //! Metal Shader Executor for Apple Silicon
 
-use anyhow::{anyhow, Result};
 
 /// Metal shader source code
 pub const METAL_SHADER_SOURCE: &str = include_str!("metal_shaders.metal");

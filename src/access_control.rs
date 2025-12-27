@@ -281,6 +281,7 @@ pub struct AccessControl {
     policies: Vec<Policy>,
 
     /// Default effect when no policy matches
+    #[allow(dead_code)]
     default_effect: Effect,
 }
 

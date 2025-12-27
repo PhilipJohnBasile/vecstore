@@ -31,7 +31,6 @@
 use anyhow::{anyhow, Result};
 use regex::Regex;
 use serde_json::Value;
-use std::collections::HashSet;
 
 /// Advanced filter expression
 #[derive(Debug, Clone)]

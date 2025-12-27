@@ -1,484 +1,482 @@
-//! Rate Limiting and Throttling
+//! Rate Limiting for VecStore
 //!
-//! Provides protection against overload and abuse by limiting request rates
-//! using multiple algorithms (token bucket, sliding window, fixed window).
+//! This module provides rate limiting functionality to control throughput
+//! for queries and writes. Useful for:
+//!
+//! - Preventing resource exhaustion in multi-tenant environments
+//! - Ensuring fair resource allocation
+//! - Protecting against accidental DoS from clients
+//!
+//! ## Algorithms
+//!
+//! - **Token Bucket**: Allows bursts while maintaining average rate
+//! - **Sliding Window**: Precise rate limiting over a time window
+//! - **Leaky Bucket**: Smooths traffic to constant rate
+//!
+//! ## Usage
+//!
+//! ```no_run
+//! use vecstore::rate_limit::{RateLimiter, RateLimitConfig};
+//!
+//! # fn main() -> anyhow::Result<()> {
+//! // Create a rate limiter: 100 requests per second, burst of 20
+//! let limiter = RateLimiter::new(RateLimitConfig {
+//!     requests_per_second: 100.0,
+//!     burst_size: 20,
+//!     ..Default::default()
+//! });
+//!
+//! // Check if request is allowed
+//! if limiter.try_acquire() {
+//!     // Process request
+//! } else {
+//!     // Rate limited - return 429 or queue
+//! }
+//! # Ok(())
+//! # }
+//! ```
 
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
-/// Rate limit algorithm
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum RateLimitAlgorithm {
-    /// Token bucket algorithm - smooth rate limiting with burst support
-    TokenBucket,
-    /// Sliding window - more accurate but higher memory usage
-    SlidingWindow,
-    /// Fixed window - simple and efficient but can have edge case bursts
-    FixedWindow,
-}
-
-/// Rate limit scope
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub enum RateLimitScope {
-    /// Global limit across all requests
-    Global,
-    /// Per-user limit
-    PerUser,
-    /// Per-IP address limit
-    PerIP,
-    /// Per-API key limit
-    PerAPIKey,
-}
-
-/// Rate limit configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Configuration for rate limiting
+#[derive(Debug, Clone)]
 pub struct RateLimitConfig {
-    /// Maximum requests allowed
-    pub max_requests: u32,
+    /// Maximum requests per second (average rate)
+    pub requests_per_second: f64,
 
-    /// Time window for the limit
-    pub window: Duration,
+    /// Maximum burst size (tokens)
+    pub burst_size: usize,
 
     /// Algorithm to use
     pub algorithm: RateLimitAlgorithm,
 
-    /// Scope of the limit
-    pub scope: RateLimitScope,
+    /// Whether to enable rate limiting
+    pub enabled: bool,
 
-    /// Allow bursts (for token bucket)
-    pub allow_burst: bool,
-
-    /// Burst size (for token bucket)
-    pub burst_size: u32,
+    /// Optional separate limits for different operation types
+    pub operation_limits: HashMap<String, f64>,
 }
 
 impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
-            max_requests: 100,
-            window: Duration::from_secs(60),
+            requests_per_second: 1000.0,
+            burst_size: 100,
             algorithm: RateLimitAlgorithm::TokenBucket,
-            scope: RateLimitScope::Global,
-            allow_burst: true,
-            burst_size: 10,
+            enabled: true,
+            operation_limits: HashMap::new(),
         }
     }
 }
 
-impl RateLimitConfig {
-    /// Create a per-second rate limit
-    pub fn per_second(requests: u32) -> Self {
-        Self {
-            max_requests: requests,
-            window: Duration::from_secs(1),
-            ..Default::default()
-        }
-    }
-
-    /// Create a per-minute rate limit
-    pub fn per_minute(requests: u32) -> Self {
-        Self {
-            max_requests: requests,
-            window: Duration::from_secs(60),
-            ..Default::default()
-        }
-    }
-
-    /// Create a per-hour rate limit
-    pub fn per_hour(requests: u32) -> Self {
-        Self {
-            max_requests: requests,
-            window: Duration::from_secs(3600),
-            ..Default::default()
-        }
-    }
+/// Rate limiting algorithm
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RateLimitAlgorithm {
+    /// Token bucket - allows bursts, good for general use
+    TokenBucket,
+    /// Sliding window - more precise, higher memory usage
+    SlidingWindow,
+    /// Leaky bucket - smooths traffic to constant rate
+    LeakyBucket,
 }
 
-/// Rate limit result
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Result of a rate limit check
+#[derive(Debug, Clone)]
 pub struct RateLimitResult {
     /// Whether the request is allowed
     pub allowed: bool,
 
-    /// Remaining requests in the current window
-    pub remaining: u32,
+    /// Remaining tokens/requests in this window
+    pub remaining: usize,
 
-    /// Total limit
-    pub limit: u32,
-
-    /// Time until the window resets
+    /// Time until the limit resets (for retry-after header)
     pub reset_after: Duration,
 
-    /// Time to wait before retry (if rate limited)
-    pub retry_after: Option<Duration>,
+    /// Current rate (requests per second)
+    pub current_rate: f64,
 }
 
-/// Token bucket state
-#[derive(Debug, Clone)]
-struct TokenBucketState {
-    tokens: f64,
-    last_update: Instant,
-    capacity: u32,
-    refill_rate: f64, // tokens per second
-}
-
-impl TokenBucketState {
-    fn new(capacity: u32, refill_rate: f64) -> Self {
-        Self {
-            tokens: capacity as f64,
-            last_update: Instant::now(),
-            capacity,
-            refill_rate,
-        }
-    }
-
-    fn try_consume(&mut self, tokens: u32) -> bool {
-        self.refill();
-
-        if self.tokens >= tokens as f64 {
-            self.tokens -= tokens as f64;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn refill(&mut self) {
-        let now = Instant::now();
-        let elapsed = now.duration_since(self.last_update).as_secs_f64();
-        let new_tokens = elapsed * self.refill_rate;
-
-        self.tokens = (self.tokens + new_tokens).min(self.capacity as f64);
-        self.last_update = now;
-    }
-
-    fn remaining(&self) -> u32 {
-        self.tokens.floor() as u32
-    }
-
-    fn time_until_available(&self, tokens: u32) -> Duration {
-        if self.tokens >= tokens as f64 {
-            return Duration::from_secs(0);
-        }
-
-        let needed = tokens as f64 - self.tokens;
-        let secs = needed / self.refill_rate;
-        Duration::from_secs_f64(secs)
-    }
-}
-
-/// Sliding window state
-#[derive(Debug, Clone)]
-struct SlidingWindowState {
-    requests: Vec<Instant>,
-    window: Duration,
-    max_requests: u32,
-}
-
-impl SlidingWindowState {
-    fn new(window: Duration, max_requests: u32) -> Self {
-        Self {
-            requests: Vec::new(),
-            window,
-            max_requests,
-        }
-    }
-
-    fn try_record(&mut self) -> bool {
-        self.cleanup();
-
-        if self.requests.len() < self.max_requests as usize {
-            self.requests.push(Instant::now());
-            true
-        } else {
-            false
-        }
-    }
-
-    fn cleanup(&mut self) {
-        let now = Instant::now();
-        self.requests
-            .retain(|&time| now.duration_since(time) < self.window);
-    }
-
-    fn remaining(&self) -> u32 {
-        self.max_requests.saturating_sub(self.requests.len() as u32)
-    }
-
-    fn time_until_available(&self) -> Duration {
-        if self.requests.len() < self.max_requests as usize {
-            return Duration::from_secs(0);
-        }
-
-        if let Some(&oldest) = self.requests.first() {
-            let elapsed = Instant::now().duration_since(oldest);
-            self.window.saturating_sub(elapsed)
-        } else {
-            Duration::from_secs(0)
-        }
-    }
-}
-
-/// Fixed window state
-#[derive(Debug, Clone)]
-struct FixedWindowState {
-    count: u32,
-    window_start: Instant,
-    window: Duration,
-    max_requests: u32,
-}
-
-impl FixedWindowState {
-    fn new(window: Duration, max_requests: u32) -> Self {
-        Self {
-            count: 0,
-            window_start: Instant::now(),
-            window,
-            max_requests,
-        }
-    }
-
-    fn try_record(&mut self) -> bool {
-        self.maybe_reset();
-
-        if self.count < self.max_requests {
-            self.count += 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn maybe_reset(&mut self) {
-        let now = Instant::now();
-        if now.duration_since(self.window_start) >= self.window {
-            self.count = 0;
-            self.window_start = now;
-        }
-    }
-
-    fn remaining(&self) -> u32 {
-        self.max_requests.saturating_sub(self.count)
-    }
-
-    fn time_until_reset(&self) -> Duration {
-        let elapsed = Instant::now().duration_since(self.window_start);
-        self.window.saturating_sub(elapsed)
-    }
-}
-
-/// Rate limiter state for a single key
-#[derive(Debug, Clone)]
-enum LimiterState {
-    TokenBucket(TokenBucketState),
-    SlidingWindow(SlidingWindowState),
-    FixedWindow(FixedWindowState),
-}
-
-/// Rate limiter
+/// Thread-safe rate limiter
 pub struct RateLimiter {
+    inner: Arc<RateLimiterInner>,
+}
+
+struct RateLimiterInner {
     config: RateLimitConfig,
-    states: Arc<Mutex<HashMap<String, LimiterState>>>,
+    state: RwLock<RateLimiterState>,
+    total_allowed: AtomicU64,
+    total_denied: AtomicU64,
+}
+
+struct RateLimiterState {
+    /// Token bucket state
+    tokens: f64,
+    last_refill: Instant,
+
+    /// Sliding window state
+    window_requests: Vec<Instant>,
+
+    /// Leaky bucket state
+    queue_size: f64,
+    last_drain: Instant,
+
+    /// Per-operation limits
+    operation_states: HashMap<String, OperationState>,
+}
+
+struct OperationState {
+    tokens: f64,
+    last_refill: Instant,
 }
 
 impl RateLimiter {
-    /// Create a new rate limiter
+    /// Create a new rate limiter with the given configuration
     pub fn new(config: RateLimitConfig) -> Self {
-        Self {
-            config,
-            states: Arc::new(Mutex::new(HashMap::new())),
-        }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(RateLimitConfig::default())
-    }
-
-    /// Check if a request is allowed
-    pub fn check(&self, key: &str) -> RateLimitResult {
-        let mut states = self.states.lock().unwrap();
-
-        let state = states
-            .entry(key.to_string())
-            .or_insert_with(|| self.create_state());
-
-        let allowed = self.try_consume(state);
-        let remaining = self.get_remaining(state);
-        let reset_after = self.get_reset_time(state);
-
-        let retry_after = if !allowed {
-            Some(self.get_retry_time(state))
-        } else {
-            None
+        let state = RateLimiterState {
+            tokens: config.burst_size as f64,
+            last_refill: Instant::now(),
+            window_requests: Vec::new(),
+            queue_size: 0.0,
+            last_drain: Instant::now(),
+            operation_states: HashMap::new(),
         };
 
-        RateLimitResult {
-            allowed,
-            remaining,
-            limit: self.config.max_requests,
-            reset_after,
-            retry_after,
-        }
-    }
-
-    /// Record a request (always consumes, doesn't check limit)
-    pub fn record(&self, key: &str) {
-        let mut states = self.states.lock().unwrap();
-
-        let state = states
-            .entry(key.to_string())
-            .or_insert_with(|| self.create_state());
-
-        let _ = self.try_consume(state);
-    }
-
-    /// Reset limits for a specific key
-    pub fn reset(&self, key: &str) {
-        let mut states = self.states.lock().unwrap();
-        states.remove(key);
-    }
-
-    /// Reset all limits
-    pub fn reset_all(&self) {
-        let mut states = self.states.lock().unwrap();
-        states.clear();
-    }
-
-    /// Get remaining requests for a key
-    pub fn get_remaining_requests(&self, key: &str) -> u32 {
-        let states = self.states.lock().unwrap();
-
-        if let Some(state) = states.get(key) {
-            self.get_remaining(state)
-        } else {
-            self.config.max_requests
-        }
-    }
-
-    fn create_state(&self) -> LimiterState {
-        match self.config.algorithm {
-            RateLimitAlgorithm::TokenBucket => {
-                let capacity = if self.config.allow_burst {
-                    self.config.max_requests + self.config.burst_size
-                } else {
-                    self.config.max_requests
-                };
-                let refill_rate =
-                    self.config.max_requests as f64 / self.config.window.as_secs_f64();
-                LimiterState::TokenBucket(TokenBucketState::new(capacity, refill_rate))
-            }
-            RateLimitAlgorithm::SlidingWindow => LimiterState::SlidingWindow(
-                SlidingWindowState::new(self.config.window, self.config.max_requests),
-            ),
-            RateLimitAlgorithm::FixedWindow => LimiterState::FixedWindow(FixedWindowState::new(
-                self.config.window,
-                self.config.max_requests,
-            )),
-        }
-    }
-
-    fn try_consume(&self, state: &mut LimiterState) -> bool {
-        match state {
-            LimiterState::TokenBucket(s) => s.try_consume(1),
-            LimiterState::SlidingWindow(s) => s.try_record(),
-            LimiterState::FixedWindow(s) => s.try_record(),
-        }
-    }
-
-    fn get_remaining(&self, state: &LimiterState) -> u32 {
-        match state {
-            LimiterState::TokenBucket(s) => s.remaining(),
-            LimiterState::SlidingWindow(s) => s.remaining(),
-            LimiterState::FixedWindow(s) => s.remaining(),
-        }
-    }
-
-    fn get_reset_time(&self, state: &LimiterState) -> Duration {
-        match state {
-            LimiterState::TokenBucket(_) => self.config.window,
-            LimiterState::SlidingWindow(s) => s.time_until_available(),
-            LimiterState::FixedWindow(s) => s.time_until_reset(),
-        }
-    }
-
-    fn get_retry_time(&self, state: &LimiterState) -> Duration {
-        match state {
-            LimiterState::TokenBucket(s) => s.time_until_available(1),
-            LimiterState::SlidingWindow(s) => s.time_until_available(),
-            LimiterState::FixedWindow(s) => s.time_until_reset(),
-        }
-    }
-}
-
-/// Multi-tier rate limiter
-pub struct MultiTierRateLimiter {
-    limiters: Vec<(String, RateLimiter)>,
-}
-
-impl MultiTierRateLimiter {
-    /// Create a new multi-tier rate limiter
-    pub fn new() -> Self {
         Self {
-            limiters: Vec::new(),
+            inner: Arc::new(RateLimiterInner {
+                config,
+                state: RwLock::new(state),
+                total_allowed: AtomicU64::new(0),
+                total_denied: AtomicU64::new(0),
+            }),
         }
     }
 
-    /// Add a rate limiter tier
-    pub fn add_tier(&mut self, name: impl Into<String>, limiter: RateLimiter) {
-        self.limiters.push((name.into(), limiter));
+    /// Create a rate limiter with a simple rate (requests per second)
+    pub fn with_rate(requests_per_second: f64) -> Self {
+        Self::new(RateLimitConfig {
+            requests_per_second,
+            burst_size: (requests_per_second * 0.1).max(1.0) as usize,
+            ..Default::default()
+        })
     }
 
-    /// Check all tiers and return the most restrictive result
-    pub fn check(&self, key: &str) -> RateLimitResult {
-        let mut most_restrictive = RateLimitResult {
-            allowed: true,
-            remaining: u32::MAX,
-            limit: u32::MAX,
-            reset_after: Duration::from_secs(0),
-            retry_after: None,
-        };
+    /// Try to acquire a permit (non-blocking)
+    ///
+    /// Returns true if the request is allowed, false if rate limited
+    pub fn try_acquire(&self) -> bool {
+        self.try_acquire_result().allowed
+    }
 
-        for (_, limiter) in &self.limiters {
-            let result = limiter.check(key);
+    /// Try to acquire with detailed result
+    pub fn try_acquire_result(&self) -> RateLimitResult {
+        if !self.inner.config.enabled {
+            return RateLimitResult {
+                allowed: true,
+                remaining: self.inner.config.burst_size,
+                reset_after: Duration::ZERO,
+                current_rate: 0.0,
+            };
+        }
 
-            if !result.allowed {
-                most_restrictive.allowed = false;
-                if let Some(retry) = result.retry_after {
-                    if let Some(current_retry) = most_restrictive.retry_after {
-                        most_restrictive.retry_after = Some(retry.max(current_retry));
-                    } else {
-                        most_restrictive.retry_after = Some(retry);
-                    }
-                }
+        match self.inner.config.algorithm {
+            RateLimitAlgorithm::TokenBucket => self.token_bucket_acquire(),
+            RateLimitAlgorithm::SlidingWindow => self.sliding_window_acquire(),
+            RateLimitAlgorithm::LeakyBucket => self.leaky_bucket_acquire(),
+        }
+    }
+
+    /// Try to acquire for a specific operation type
+    pub fn try_acquire_for(&self, operation: &str) -> bool {
+        if !self.inner.config.enabled {
+            return true;
+        }
+
+        // Check if there's a specific limit for this operation
+        let rate = self.inner.config.operation_limits
+            .get(operation)
+            .copied()
+            .unwrap_or(self.inner.config.requests_per_second);
+
+        let mut state = self.inner.state.write().unwrap();
+        let now = Instant::now();
+
+        let op_state = state.operation_states
+            .entry(operation.to_string())
+            .or_insert_with(|| OperationState {
+                tokens: self.inner.config.burst_size as f64,
+                last_refill: now,
+            });
+
+        // Refill tokens
+        let elapsed = now.duration_since(op_state.last_refill).as_secs_f64();
+        let refill = elapsed * rate;
+        op_state.tokens = (op_state.tokens + refill).min(self.inner.config.burst_size as f64);
+        op_state.last_refill = now;
+
+        // Try to consume a token
+        if op_state.tokens >= 1.0 {
+            op_state.tokens -= 1.0;
+            self.inner.total_allowed.fetch_add(1, Ordering::Relaxed);
+            true
+        } else {
+            self.inner.total_denied.fetch_add(1, Ordering::Relaxed);
+            false
+        }
+    }
+
+    /// Token bucket algorithm implementation
+    fn token_bucket_acquire(&self) -> RateLimitResult {
+        let mut state = self.inner.state.write().unwrap();
+        let now = Instant::now();
+
+        // Refill tokens based on time elapsed
+        let elapsed = now.duration_since(state.last_refill).as_secs_f64();
+        let refill = elapsed * self.inner.config.requests_per_second;
+        state.tokens = (state.tokens + refill).min(self.inner.config.burst_size as f64);
+        state.last_refill = now;
+
+        // Try to consume a token
+        if state.tokens >= 1.0 {
+            state.tokens -= 1.0;
+            self.inner.total_allowed.fetch_add(1, Ordering::Relaxed);
+
+            RateLimitResult {
+                allowed: true,
+                remaining: state.tokens as usize,
+                reset_after: Duration::ZERO,
+                current_rate: self.calculate_rate(&state),
             }
+        } else {
+            self.inner.total_denied.fetch_add(1, Ordering::Relaxed);
 
-            most_restrictive.remaining = most_restrictive.remaining.min(result.remaining);
+            // Calculate time until next token
+            let time_for_token = 1.0 / self.inner.config.requests_per_second;
+            let reset_after = Duration::from_secs_f64(time_for_token * (1.0 - state.tokens));
+
+            RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after,
+                current_rate: self.calculate_rate(&state),
+            }
         }
-
-        most_restrictive
     }
 
-    /// Reset all tiers for a key
-    pub fn reset(&self, key: &str) {
-        for (_, limiter) in &self.limiters {
-            limiter.reset(key);
+    /// Sliding window algorithm implementation
+    fn sliding_window_acquire(&self) -> RateLimitResult {
+        let mut state = self.inner.state.write().unwrap();
+        let now = Instant::now();
+        let window = Duration::from_secs(1);
+
+        // Remove old requests
+        state.window_requests.retain(|t| now.duration_since(*t) < window);
+
+        let current_count = state.window_requests.len();
+        let max_requests = self.inner.config.requests_per_second as usize;
+
+        if current_count < max_requests {
+            state.window_requests.push(now);
+            self.inner.total_allowed.fetch_add(1, Ordering::Relaxed);
+
+            RateLimitResult {
+                allowed: true,
+                remaining: max_requests - current_count - 1,
+                reset_after: Duration::ZERO,
+                current_rate: current_count as f64,
+            }
+        } else {
+            self.inner.total_denied.fetch_add(1, Ordering::Relaxed);
+
+            // Calculate reset time based on oldest request
+            let oldest = state.window_requests.first().copied().unwrap_or(now);
+            let reset_after = window.saturating_sub(now.duration_since(oldest));
+
+            RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after,
+                current_rate: current_count as f64,
+            }
         }
     }
 
-    /// Reset all tiers for all keys
-    pub fn reset_all(&self) {
-        for (_, limiter) in &self.limiters {
-            limiter.reset_all();
+    /// Leaky bucket algorithm implementation
+    fn leaky_bucket_acquire(&self) -> RateLimitResult {
+        let mut state = self.inner.state.write().unwrap();
+        let now = Instant::now();
+
+        // Drain the bucket
+        let elapsed = now.duration_since(state.last_drain).as_secs_f64();
+        let drained = elapsed * self.inner.config.requests_per_second;
+        state.queue_size = (state.queue_size - drained).max(0.0);
+        state.last_drain = now;
+
+        // Check if adding one more would exceed capacity
+        // Use ceiling of queue_size to avoid floating-point edge cases
+        let effective_queue = state.queue_size.ceil() as usize;
+        if effective_queue < self.inner.config.burst_size {
+            state.queue_size += 1.0;
+            self.inner.total_allowed.fetch_add(1, Ordering::Relaxed);
+
+            RateLimitResult {
+                allowed: true,
+                remaining: self.inner.config.burst_size - effective_queue - 1,
+                reset_after: Duration::ZERO,
+                current_rate: state.queue_size,
+            }
+        } else {
+            self.inner.total_denied.fetch_add(1, Ordering::Relaxed);
+
+            // Calculate time until space is available
+            let time_for_drain = if self.inner.config.requests_per_second > 0.0 {
+                1.0 / self.inner.config.requests_per_second
+            } else {
+                f64::MAX
+            };
+            let reset_after = Duration::from_secs_f64(time_for_drain.min(3600.0));
+
+            RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after,
+                current_rate: state.queue_size,
+            }
+        }
+    }
+
+    fn calculate_rate(&self, state: &RateLimiterState) -> f64 {
+        // Calculate approximate current rate based on token consumption
+        let available = state.tokens;
+        let max = self.inner.config.burst_size as f64;
+        let consumed_ratio = 1.0 - (available / max);
+        consumed_ratio * self.inner.config.requests_per_second
+    }
+
+    /// Get current statistics
+    pub fn stats(&self) -> RateLimitStats {
+        let state = self.inner.state.read().unwrap();
+
+        RateLimitStats {
+            total_allowed: self.inner.total_allowed.load(Ordering::Relaxed),
+            total_denied: self.inner.total_denied.load(Ordering::Relaxed),
+            current_tokens: state.tokens as usize,
+            requests_per_second: self.inner.config.requests_per_second,
+            burst_size: self.inner.config.burst_size,
+        }
+    }
+
+    /// Reset the rate limiter state
+    pub fn reset(&self) {
+        let mut state = self.inner.state.write().unwrap();
+        state.tokens = self.inner.config.burst_size as f64;
+        state.last_refill = Instant::now();
+        state.window_requests.clear();
+        state.queue_size = 0.0;
+        state.last_drain = Instant::now();
+        state.operation_states.clear();
+
+        self.inner.total_allowed.store(0, Ordering::Relaxed);
+        self.inner.total_denied.store(0, Ordering::Relaxed);
+    }
+
+    /// Check if rate limiting is enabled
+    pub fn is_enabled(&self) -> bool {
+        self.inner.config.enabled
+    }
+}
+
+impl Clone for RateLimiter {
+    fn clone(&self) -> Self {
+        Self {
+            inner: Arc::clone(&self.inner),
         }
     }
 }
 
-impl Default for MultiTierRateLimiter {
-    fn default() -> Self {
-        Self::new()
+/// Statistics for rate limiting
+#[derive(Debug, Clone)]
+pub struct RateLimitStats {
+    /// Total number of allowed requests
+    pub total_allowed: u64,
+
+    /// Total number of denied requests
+    pub total_denied: u64,
+
+    /// Current available tokens
+    pub current_tokens: usize,
+
+    /// Configured requests per second
+    pub requests_per_second: f64,
+
+    /// Configured burst size
+    pub burst_size: usize,
+}
+
+impl RateLimitStats {
+    /// Calculate the denial rate
+    pub fn denial_rate(&self) -> f64 {
+        let total = self.total_allowed + self.total_denied;
+        if total == 0 {
+            0.0
+        } else {
+            self.total_denied as f64 / total as f64
+        }
+    }
+}
+
+/// A rate limiter that can have different limits per key (e.g., per tenant)
+pub struct KeyedRateLimiter {
+    default_config: RateLimitConfig,
+    limiters: RwLock<HashMap<String, RateLimiter>>,
+}
+
+impl KeyedRateLimiter {
+    /// Create a new keyed rate limiter
+    pub fn new(default_config: RateLimitConfig) -> Self {
+        Self {
+            default_config,
+            limiters: RwLock::new(HashMap::new()),
+        }
+    }
+
+    /// Try to acquire for a specific key
+    pub fn try_acquire(&self, key: &str) -> bool {
+        let limiters = self.limiters.read().unwrap();
+
+        if let Some(limiter) = limiters.get(key) {
+            limiter.try_acquire()
+        } else {
+            drop(limiters);
+
+            // Create new limiter
+            let mut limiters = self.limiters.write().unwrap();
+            let limiter = limiters
+                .entry(key.to_string())
+                .or_insert_with(|| RateLimiter::new(self.default_config.clone()));
+            limiter.try_acquire()
+        }
+    }
+
+    /// Set a custom rate limit for a specific key
+    pub fn set_limit(&self, key: &str, requests_per_second: f64) {
+        let mut limiters = self.limiters.write().unwrap();
+        let config = RateLimitConfig {
+            requests_per_second,
+            ..self.default_config.clone()
+        };
+        limiters.insert(key.to_string(), RateLimiter::new(config));
+    }
+
+    /// Get stats for all keys
+    pub fn all_stats(&self) -> HashMap<String, RateLimitStats> {
+        let limiters = self.limiters.read().unwrap();
+        limiters
+            .iter()
+            .map(|(k, v)| (k.clone(), v.stats()))
+            .collect()
     }
 }
 
@@ -486,220 +484,372 @@ impl Default for MultiTierRateLimiter {
 mod tests {
     use super::*;
     use std::thread;
+    use std::time::Duration;
 
     #[test]
     fn test_token_bucket_basic() {
-        let config = RateLimitConfig {
-            max_requests: 10,
-            window: Duration::from_secs(1),
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 10.0,
+            burst_size: 5,
             algorithm: RateLimitAlgorithm::TokenBucket,
-            allow_burst: false, // Disable burst for this test
+            enabled: true,
             ..Default::default()
-        };
+        });
 
-        let limiter = RateLimiter::new(config);
-
-        // First 10 requests should succeed
-        for _ in 0..10 {
-            let result = limiter.check("user1");
-            assert!(result.allowed);
+        // Should allow burst
+        for _ in 0..5 {
+            assert!(limiter.try_acquire(), "Should allow burst");
         }
 
-        // 11th request should fail
-        let result = limiter.check("user1");
-        assert!(!result.allowed);
-        assert!(result.retry_after.is_some());
+        // Should deny after burst exhausted
+        assert!(!limiter.try_acquire(), "Should deny after burst");
     }
 
     #[test]
     fn test_token_bucket_refill() {
-        let config = RateLimitConfig {
-            max_requests: 5,
-            window: Duration::from_secs(1),
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 100.0,
+            burst_size: 5,
             algorithm: RateLimitAlgorithm::TokenBucket,
-            allow_burst: false,
+            enabled: true,
             ..Default::default()
-        };
+        });
 
-        let limiter = RateLimiter::new(config);
-
-        // Consume all tokens
+        // Exhaust burst
         for _ in 0..5 {
-            assert!(limiter.check("user1").allowed);
+            limiter.try_acquire();
         }
 
-        // Should be rate limited
-        assert!(!limiter.check("user1").allowed);
-
         // Wait for refill
-        thread::sleep(Duration::from_millis(250)); // 25% of window
+        thread::sleep(Duration::from_millis(100));
 
-        // Should have ~1 token now
-        assert!(limiter.check("user1").allowed);
+        // Should be able to acquire again
+        assert!(limiter.try_acquire());
     }
 
     #[test]
     fn test_sliding_window() {
-        let config = RateLimitConfig {
-            max_requests: 5,
-            window: Duration::from_millis(500),
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 10.0,
+            burst_size: 10,
             algorithm: RateLimitAlgorithm::SlidingWindow,
+            enabled: true,
             ..Default::default()
-        };
+        });
 
-        let limiter = RateLimiter::new(config);
-
-        // First 5 requests should succeed
-        for _ in 0..5 {
-            assert!(limiter.check("user1").allowed);
+        // Should allow up to rate limit
+        for _ in 0..10 {
+            assert!(limiter.try_acquire());
         }
 
-        // 6th should fail
-        assert!(!limiter.check("user1").allowed);
-
-        // Wait for window to slide
-        thread::sleep(Duration::from_millis(600));
-
-        // Should work again
-        assert!(limiter.check("user1").allowed);
+        // Should deny after limit
+        assert!(!limiter.try_acquire());
     }
 
     #[test]
-    fn test_fixed_window() {
-        let config = RateLimitConfig {
-            max_requests: 5,
-            window: Duration::from_millis(500),
-            algorithm: RateLimitAlgorithm::FixedWindow,
-            ..Default::default()
-        };
-
-        let limiter = RateLimiter::new(config);
-
-        // First 5 requests should succeed
-        for _ in 0..5 {
-            assert!(limiter.check("user1").allowed);
-        }
-
-        // 6th should fail
-        assert!(!limiter.check("user1").allowed);
-
-        // Wait for window reset
-        thread::sleep(Duration::from_millis(600));
-
-        // Should work again
-        assert!(limiter.check("user1").allowed);
-    }
-
-    #[test]
-    fn test_per_user_isolation() {
-        let mut config = RateLimitConfig::per_second(5);
-        config.allow_burst = false; // Disable burst
-        let limiter = RateLimiter::new(config);
-
-        // User1 consumes their limit
-        for _ in 0..5 {
-            assert!(limiter.check("user1").allowed);
-        }
-        assert!(!limiter.check("user1").allowed);
-
-        // User2 should still have full quota
-        for _ in 0..5 {
-            assert!(limiter.check("user2").allowed);
-        }
-    }
-
-    #[test]
-    fn test_reset() {
-        let mut config = RateLimitConfig::per_second(3);
-        config.allow_burst = false;
-        let limiter = RateLimiter::new(config);
-
-        // Consume limit
-        for _ in 0..3 {
-            limiter.record("user1");
-        }
-        assert!(!limiter.check("user1").allowed);
-
-        // Reset
-        limiter.reset("user1");
-
-        // Should work again
-        assert!(limiter.check("user1").allowed);
-    }
-
-    #[test]
-    fn test_remaining_requests() {
-        let mut config = RateLimitConfig::per_second(10);
-        config.allow_burst = false;
-        let limiter = RateLimiter::new(config);
-
-        // Initial remaining should be max_requests
-        let initial = limiter.get_remaining_requests("user1");
-        assert_eq!(initial, 10);
-
-        // After recording one request
-        limiter.record("user1");
-        let remaining = limiter.get_remaining_requests("user1");
-        assert!(remaining < initial);
-    }
-
-    #[test]
-    fn test_multi_tier() {
-        let mut multi = MultiTierRateLimiter::new();
-
-        // Add per-second tier
-        let mut config1 = RateLimitConfig::per_second(5);
-        config1.allow_burst = false;
-        multi.add_tier("per_second", RateLimiter::new(config1));
-
-        // Add per-minute tier
-        let mut config2 = RateLimitConfig::per_minute(20);
-        config2.allow_burst = false;
-        multi.add_tier("per_minute", RateLimiter::new(config2));
-
-        // First 5 requests should succeed
-        for _ in 0..5 {
-            let result = multi.check("user1");
-            assert!(result.allowed);
-        }
-
-        // 6th should fail (per-second limit)
-        let result = multi.check("user1");
-        assert!(!result.allowed);
-    }
-
-    #[test]
-    fn test_burst_mode() {
-        let config = RateLimitConfig {
-            max_requests: 10,
-            window: Duration::from_secs(1),
-            algorithm: RateLimitAlgorithm::TokenBucket,
-            allow_burst: true,
+    fn test_leaky_bucket() {
+        // Use extremely low rate so bucket doesn't drain during test
+        // 1e-9 RPS means the bucket would take ~31 years to drain one item
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 1e-9,
             burst_size: 5,
+            algorithm: RateLimitAlgorithm::LeakyBucket,
+            enabled: true,
             ..Default::default()
-        };
+        });
 
-        let limiter = RateLimiter::new(config);
-
-        // Should allow up to max_requests + burst_size
-        for _ in 0..15 {
-            let result = limiter.check("user1");
-            assert!(result.allowed);
+        // Should allow up to burst size
+        for _ in 0..5 {
+            assert!(limiter.try_acquire());
         }
 
-        // 16th should fail
-        assert!(!limiter.check("user1").allowed);
+        // Should deny when bucket full
+        assert!(!limiter.try_acquire());
     }
 
     #[test]
-    fn test_helper_constructors() {
-        let per_sec = RateLimitConfig::per_second(100);
-        assert_eq!(per_sec.window, Duration::from_secs(1));
+    fn test_disabled() {
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 1.0,
+            burst_size: 1,
+            enabled: false,
+            ..Default::default()
+        });
 
-        let per_min = RateLimitConfig::per_minute(1000);
-        assert_eq!(per_min.window, Duration::from_secs(60));
+        // Should always allow when disabled
+        for _ in 0..100 {
+            assert!(limiter.try_acquire());
+        }
+    }
 
-        let per_hour = RateLimitConfig::per_hour(10000);
-        assert_eq!(per_hour.window, Duration::from_secs(3600));
+    #[test]
+    fn test_operation_limits() {
+        // Use very low rates so tokens don't refill during test
+        let mut config = RateLimitConfig {
+            requests_per_second: 0.001,
+            burst_size: 10,
+            enabled: true,
+            ..Default::default()
+        };
+        config.operation_limits.insert("query".to_string(), 0.001);
+        config.operation_limits.insert("write".to_string(), 0.001);
+
+        let limiter = RateLimiter::new(config);
+
+        // Query uses burst_size (10)
+        for _ in 0..10 {
+            assert!(limiter.try_acquire_for("query"));
+        }
+        assert!(!limiter.try_acquire_for("query"));
+
+        // Write also uses burst_size (10) - each operation is independent
+        for _ in 0..10 {
+            assert!(limiter.try_acquire_for("write"));
+        }
+        assert!(!limiter.try_acquire_for("write"));
+    }
+
+    #[test]
+    fn test_keyed_rate_limiter() {
+        let limiter = KeyedRateLimiter::new(RateLimitConfig {
+            requests_per_second: 10.0,
+            burst_size: 3,
+            enabled: true,
+            ..Default::default()
+        });
+
+        // Different keys have independent limits
+        for _ in 0..3 {
+            assert!(limiter.try_acquire("tenant_a"));
+            assert!(limiter.try_acquire("tenant_b"));
+        }
+
+        assert!(!limiter.try_acquire("tenant_a"));
+        assert!(!limiter.try_acquire("tenant_b"));
+    }
+
+    #[test]
+    fn test_stats() {
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 10.0,
+            burst_size: 5,
+            enabled: true,
+            ..Default::default()
+        });
+
+        for _ in 0..7 {
+            limiter.try_acquire();
+        }
+
+        let stats = limiter.stats();
+        assert_eq!(stats.total_allowed, 5);
+        assert_eq!(stats.total_denied, 2);
+        assert!(stats.denial_rate() > 0.2);
+    }
+
+    #[test]
+    fn test_with_rate() {
+        let limiter = RateLimiter::with_rate(100.0);
+        assert!(limiter.try_acquire());
+    }
+
+    #[test]
+    fn test_result_details() {
+        let limiter = RateLimiter::new(RateLimitConfig {
+            requests_per_second: 10.0,
+            burst_size: 3,
+            enabled: true,
+            ..Default::default()
+        });
+
+        let result = limiter.try_acquire_result();
+        assert!(result.allowed);
+        assert_eq!(result.remaining, 2);
+    }
+}
+
+// ============================================================================
+// Additional Rate Limiting Types (for API compatibility)
+// ============================================================================
+
+/// Scope for rate limiting (global, per-tenant, per-operation)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RateLimitScope {
+    /// Global rate limit across all requests
+    Global,
+    /// Per-tenant rate limiting
+    Tenant,
+    /// Per-operation rate limiting
+    Operation,
+    /// Per-IP rate limiting
+    Ip,
+    /// Custom scope
+    Custom,
+}
+
+impl Default for RateLimitScope {
+    fn default() -> Self {
+        Self::Global
+    }
+}
+
+/// Multi-tier rate limiter that applies limits at different scopes
+///
+/// For example, you might want:
+/// - 1000 req/s global limit
+/// - 100 req/s per-tenant limit
+/// - 10 req/s per-operation limit
+pub struct MultiTierRateLimiter {
+    /// Global limiter
+    global: RateLimiter,
+    /// Per-key limiters (tenant, IP, etc.)
+    keyed: KeyedRateLimiter,
+    /// Per-operation limiters
+    operations: KeyedRateLimiter,
+    /// Configuration
+    #[allow(dead_code)]
+    config: MultiTierConfig,
+}
+
+/// Configuration for multi-tier rate limiting
+#[derive(Debug, Clone)]
+pub struct MultiTierConfig {
+    /// Global rate limit
+    pub global_rps: f64,
+    /// Per-key rate limit
+    pub per_key_rps: f64,
+    /// Per-operation rate limit
+    pub per_operation_rps: f64,
+    /// Burst size multiplier
+    pub burst_multiplier: f64,
+}
+
+impl Default for MultiTierConfig {
+    fn default() -> Self {
+        Self {
+            global_rps: 10000.0,
+            per_key_rps: 1000.0,
+            per_operation_rps: 100.0,
+            burst_multiplier: 0.1,
+        }
+    }
+}
+
+impl MultiTierRateLimiter {
+    /// Create a new multi-tier rate limiter
+    pub fn new(config: MultiTierConfig) -> Self {
+        let burst = |rps: f64| -> usize {
+            (rps * config.burst_multiplier).max(1.0) as usize
+        };
+
+        Self {
+            global: RateLimiter::new(RateLimitConfig {
+                requests_per_second: config.global_rps,
+                burst_size: burst(config.global_rps),
+                ..Default::default()
+            }),
+            keyed: KeyedRateLimiter::new(RateLimitConfig {
+                requests_per_second: config.per_key_rps,
+                burst_size: burst(config.per_key_rps),
+                ..Default::default()
+            }),
+            operations: KeyedRateLimiter::new(RateLimitConfig {
+                requests_per_second: config.per_operation_rps,
+                burst_size: burst(config.per_operation_rps),
+                ..Default::default()
+            }),
+            config,
+        }
+    }
+
+    /// Check if a request is allowed
+    ///
+    /// Checks all applicable limits in order: global -> key -> operation
+    pub fn try_acquire(&self, key: Option<&str>, operation: Option<&str>) -> bool {
+        // Check global limit first
+        if !self.global.try_acquire() {
+            return false;
+        }
+
+        // Check per-key limit if key is provided
+        if let Some(k) = key {
+            if !self.keyed.try_acquire(k) {
+                return false;
+            }
+        }
+
+        // Check per-operation limit if operation is provided
+        if let Some(op) = operation {
+            if !self.operations.try_acquire(op) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Get stats for all tiers
+    pub fn stats(&self) -> MultiTierStats {
+        MultiTierStats {
+            global: self.global.stats(),
+            per_key: self.keyed.all_stats(),
+            per_operation: self.operations.all_stats(),
+        }
+    }
+}
+
+/// Statistics for multi-tier rate limiting
+#[derive(Debug, Clone)]
+pub struct MultiTierStats {
+    /// Global tier stats
+    pub global: RateLimitStats,
+    /// Per-key tier stats
+    pub per_key: HashMap<String, RateLimitStats>,
+    /// Per-operation tier stats
+    pub per_operation: HashMap<String, RateLimitStats>,
+}
+
+#[cfg(test)]
+mod multi_tier_tests {
+    use super::*;
+
+    #[test]
+    fn test_multi_tier_basic() {
+        let limiter = MultiTierRateLimiter::new(MultiTierConfig {
+            global_rps: 100.0,
+            per_key_rps: 10.0,
+            per_operation_rps: 5.0,
+            burst_multiplier: 0.5,
+        });
+
+        // Should allow requests
+        assert!(limiter.try_acquire(Some("tenant1"), Some("query")));
+        assert!(limiter.try_acquire(Some("tenant1"), Some("query")));
+    }
+
+    #[test]
+    fn test_multi_tier_per_key_limit() {
+        let limiter = MultiTierRateLimiter::new(MultiTierConfig {
+            global_rps: 1000.0,
+            per_key_rps: 10.0,
+            per_operation_rps: 100.0,
+            burst_multiplier: 0.5,
+        });
+
+        // Per-key limit is 10 * 0.5 = 5
+        for _ in 0..5 {
+            assert!(limiter.try_acquire(Some("tenant1"), None));
+        }
+
+        // Should be rate limited for tenant1
+        assert!(!limiter.try_acquire(Some("tenant1"), None));
+
+        // But tenant2 should still work
+        assert!(limiter.try_acquire(Some("tenant2"), None));
+    }
+
+    #[test]
+    fn test_rate_limit_scope() {
+        assert_eq!(RateLimitScope::default(), RateLimitScope::Global);
     }
 }

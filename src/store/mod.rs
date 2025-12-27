@@ -425,7 +425,7 @@ impl VecStore {
 
     /// Rebuild quantized vector representations from records
     fn rebuild_quantized_vectors(&mut self) -> Result<()> {
-        use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
+        
 
         let quantizer = match &self.quantizer {
             Some(q) => q,
@@ -455,7 +455,7 @@ impl VecStore {
 
     /// Encode a single vector using the trained quantizer
     fn encode_vector(&self, vector: &[f32]) -> Option<Vec<u8>> {
-        use crate::quantization::{BinaryQuantizer, ScalarQuantizer4, ScalarQuantizer8};
+        
 
         match &self.quantizer {
             None => None,

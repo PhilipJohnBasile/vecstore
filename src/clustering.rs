@@ -42,7 +42,6 @@
 use crate::error::{Result, VecStoreError};
 use crate::simd::euclidean_distance_simd;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
 
 // Helper function for euclidean distance
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
@@ -644,6 +643,7 @@ impl HierarchicalClustering {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
 
     #[test]
     fn test_kmeans_simple() -> Result<()> {

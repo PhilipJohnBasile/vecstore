@@ -339,8 +339,9 @@ impl Default for Config {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct Metadata {
+    #[serde(default)]
     pub fields: HashMap<String, serde_json::Value>,
 }
 
