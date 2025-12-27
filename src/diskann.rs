@@ -236,6 +236,7 @@ impl PQQuantizer {
         Ok(centroids)
     }
 
+    #[inline]
     fn l2_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         a.iter()
             .zip(b.iter())
@@ -245,6 +246,7 @@ impl PQQuantizer {
     }
 
     /// Encode a vector to PQ codes
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Vec<u8> {
         let mut codes = Vec::with_capacity(self.num_subvectors);
 
@@ -271,6 +273,7 @@ impl PQQuantizer {
     }
 
     /// Compute approximate distance using PQ codes
+    #[inline]
     pub fn asymmetric_distance(&self, query: &[f32], codes: &[u8]) -> f32 {
         let mut distance = 0.0;
 
@@ -289,6 +292,7 @@ impl PQQuantizer {
     }
 
     /// Precompute distance table for a query (for faster batch lookups)
+    #[inline]
     pub fn compute_distance_table(&self, query: &[f32]) -> Vec<Vec<f32>> {
         let mut table = Vec::with_capacity(self.num_subvectors);
 
@@ -776,6 +780,7 @@ impl DiskANN {
         Ok(reranked)
     }
 
+    #[inline]
     fn l2_distance(&self, a: &[f32], b: &[f32]) -> f32 {
         a.iter()
             .zip(b.iter())

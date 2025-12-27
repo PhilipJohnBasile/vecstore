@@ -451,11 +451,12 @@ impl VecStoreOperator {
             }
         }
 
-        // Check backup schedule
-        if let Some(ref backup) = cluster.spec.backup {
-            if backup.enabled && self.backup_due(cluster) {
-                actions.push(ReconcileAction::TriggerBackup);
-            }
+        // Check backup schedule (Rust 1.92 if-let chain)
+        if let Some(ref backup) = cluster.spec.backup
+            && backup.enabled
+            && self.backup_due(cluster)
+        {
+            actions.push(ReconcileAction::TriggerBackup);
         }
 
         Ok(actions)

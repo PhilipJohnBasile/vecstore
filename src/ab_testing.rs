@@ -310,22 +310,22 @@ impl ABTestManager {
             ));
         }
 
-        // Check for existing assignment
+        // Check for existing assignment (Rust 1.92 if-let chain)
         let assignments = self.assignments.read().unwrap();
-        if let Some((exp_id, var_id)) = assignments.get(identity) {
-            if exp_id == experiment_id {
-                let variant = state.config.variants.iter()
-                    .find(|v| &v.id == var_id)
-                    .cloned()
-                    .ok_or_else(|| VecStoreError::NotFound("Variant not found".into()))?;
+        if let Some((exp_id, var_id)) = assignments.get(identity)
+            && exp_id == experiment_id
+        {
+            let variant = state.config.variants.iter()
+                .find(|v| &v.id == var_id)
+                .cloned()
+                .ok_or_else(|| VecStoreError::NotFound("Variant not found".into()))?;
 
-                return Ok(VariantAssignment {
-                    experiment_id: experiment_id.to_string(),
-                    variant_id: var_id.clone(),
-                    variant_config: variant.config,
-                    is_new_assignment: false,
-                });
-            }
+            return Ok(VariantAssignment {
+                experiment_id: experiment_id.to_string(),
+                variant_id: var_id.clone(),
+                variant_config: variant.config,
+                is_new_assignment: false,
+            });
         }
         drop(assignments);
 

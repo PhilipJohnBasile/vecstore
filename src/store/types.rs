@@ -78,20 +78,33 @@ pub enum QuantizationConfig {
     },
 }
 
-fn default_quantile() -> f32 {
-    0.99
+/// Default quantile for scalar quantization
+pub const DEFAULT_QUANTILE: f32 = 0.99;
+/// Default number of subvectors for PQ
+pub const DEFAULT_PQ_SUBVECTORS: usize = 16;
+/// Default number of centroids for PQ
+pub const DEFAULT_PQ_CENTROIDS: usize = 256;
+/// Default training iterations for PQ
+pub const DEFAULT_PQ_ITERATIONS: usize = 20;
+
+#[inline]
+const fn default_quantile() -> f32 {
+    DEFAULT_QUANTILE
 }
 
-fn default_pq_subvectors() -> usize {
-    16
+#[inline]
+const fn default_pq_subvectors() -> usize {
+    DEFAULT_PQ_SUBVECTORS
 }
 
-fn default_pq_centroids() -> usize {
-    256
+#[inline]
+const fn default_pq_centroids() -> usize {
+    DEFAULT_PQ_CENTROIDS
 }
 
-fn default_pq_iterations() -> usize {
-    20
+#[inline]
+const fn default_pq_iterations() -> usize {
+    DEFAULT_PQ_ITERATIONS
 }
 
 impl Default for QuantizationConfig {

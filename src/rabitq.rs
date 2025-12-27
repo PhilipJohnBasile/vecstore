@@ -61,45 +61,65 @@ pub struct RaBitQConfig {
     pub rerank_factor: usize,
 }
 
-fn default_num_subvectors() -> usize { 1 }
-fn default_true() -> bool { true }
-fn default_rerank_factor() -> usize { 4 }
+/// Default number of subvectors for RaBitQ
+pub const DEFAULT_NUM_SUBVECTORS: usize = 1;
+/// Default rerank factor for RaBitQ search
+pub const DEFAULT_RERANK_FACTOR: usize = 4;
+
+#[inline]
+const fn default_num_subvectors() -> usize { DEFAULT_NUM_SUBVECTORS }
+#[inline]
+const fn default_true() -> bool { true }
+#[inline]
+const fn default_rerank_factor() -> usize { DEFAULT_RERANK_FACTOR }
 
 impl RaBitQConfig {
     /// Create a new configuration
-    pub fn new(dimension: usize) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn new(dimension: usize) -> Self {
         Self {
             dimension,
-            num_subvectors: 1,
+            num_subvectors: DEFAULT_NUM_SUBVECTORS,
             seed: None,
             optimize_projection: true,
-            rerank_factor: 4,
+            rerank_factor: DEFAULT_RERANK_FACTOR,
         }
     }
 
     /// Set number of subvectors
-    pub fn with_subvectors(mut self, n: usize) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn with_subvectors(mut self, n: usize) -> Self {
         self.num_subvectors = n;
         self
     }
 
     /// Set random seed
-    pub fn with_seed(mut self, seed: u64) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn with_seed(mut self, seed: u64) -> Self {
         self.seed = Some(seed);
         self
     }
 
     /// Calculate bits per code
-    pub fn bits_per_code(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn bits_per_code(&self) -> usize {
         self.dimension
     }
 
     /// Calculate bytes per code
-    pub fn bytes_per_code(&self) -> usize {
+    #[inline]
+    #[must_use]
+    pub const fn bytes_per_code(&self) -> usize {
         (self.dimension + 7) / 8
     }
 
     /// Calculate compression ratio
+    #[inline]
+    #[must_use]
     pub fn compression_ratio(&self) -> f32 {
         (self.dimension * 4) as f32 / self.bytes_per_code() as f32
     }
@@ -144,11 +164,13 @@ impl BinaryCode {
     }
 
     /// Count set bits (popcount)
+    #[inline]
     pub fn popcount(&self) -> u32 {
         self.bits.iter().map(|w| w.count_ones()).sum()
     }
 
     /// Hamming distance to another code
+    #[inline]
     pub fn hamming_distance(&self, other: &BinaryCode) -> u32 {
         self.bits.iter()
             .zip(other.bits.iter())

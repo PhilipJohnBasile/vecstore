@@ -13,7 +13,7 @@ pub const DEFAULT_HNSW_EF_CONSTRUCTION: usize = 200;
 pub const DEFAULT_MAX_ELEMENTS: usize = 100_000;
 
 /// HNSW configuration parameters
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct HnswConfig {
     /// Number of connections per layer (M parameter)
     pub m: usize,
@@ -23,13 +23,47 @@ pub struct HnswConfig {
     pub max_elements: usize,
 }
 
-impl Default for HnswConfig {
-    fn default() -> Self {
+impl HnswConfig {
+    /// Create a new HNSW configuration with default values
+    #[inline]
+    #[must_use]
+    pub const fn new() -> Self {
         Self {
             m: DEFAULT_HNSW_M,
             ef_construction: DEFAULT_HNSW_EF_CONSTRUCTION,
             max_elements: DEFAULT_MAX_ELEMENTS,
         }
+    }
+
+    /// Set the M parameter (connections per layer)
+    #[inline]
+    #[must_use]
+    pub const fn with_m(mut self, m: usize) -> Self {
+        self.m = m;
+        self
+    }
+
+    /// Set the ef_construction parameter
+    #[inline]
+    #[must_use]
+    pub const fn with_ef_construction(mut self, ef: usize) -> Self {
+        self.ef_construction = ef;
+        self
+    }
+
+    /// Set the maximum elements
+    #[inline]
+    #[must_use]
+    pub const fn with_max_elements(mut self, max: usize) -> Self {
+        self.max_elements = max;
+        self
+    }
+}
+
+impl Default for HnswConfig {
+    #[inline]
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -102,26 +136,36 @@ impl HnswBackend {
     }
 
     /// Get the current HNSW configuration
+    #[inline]
+    #[must_use]
     pub fn config(&self) -> &HnswConfig {
         &self.config
     }
 
     /// Get the maximum capacity of this index
+    #[inline]
+    #[must_use]
     pub fn max_capacity(&self) -> usize {
         self.config.max_elements
     }
 
     /// Get the current number of vectors in the index
+    #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.id_to_idx.len()
     }
 
     /// Check if the index is empty
+    #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.id_to_idx.is_empty()
     }
 
     /// Check if the index is at capacity
+    #[inline]
+    #[must_use]
     pub fn is_at_capacity(&self) -> bool {
         self.id_to_idx.len() >= self.config.max_elements
     }

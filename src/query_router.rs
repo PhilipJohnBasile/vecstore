@@ -439,14 +439,13 @@ impl QueryRouter {
     fn consistent_hash(&self, nodes: &[Arc<ReplicaNode>], query: &QueryCharacteristics)
         -> (Arc<ReplicaNode>, RoutingReason)
     {
-        // Check for cache affinity via consistent hash
-        if let Some(hash) = query.query_hash {
-            if let Some(node_id) = self.hash_ring.read().unwrap().get_node(hash) {
-                if let Some(node) = nodes.iter().find(|n| n.id == node_id) {
-                    self.metrics.cache_affinity_hits.fetch_add(1, Ordering::Relaxed);
-                    return (node.clone(), RoutingReason::CacheAffinity);
-                }
-            }
+        // Check for cache affinity via consistent hash (Rust 1.92 if-let chain)
+        if let Some(hash) = query.query_hash
+            && let Some(node_id) = self.hash_ring.read().unwrap().get_node(hash)
+            && let Some(node) = nodes.iter().find(|n| n.id == node_id)
+        {
+            self.metrics.cache_affinity_hits.fetch_add(1, Ordering::Relaxed);
+            return (node.clone(), RoutingReason::CacheAffinity);
         }
 
         // Fallback to round robin

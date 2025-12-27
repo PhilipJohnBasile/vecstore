@@ -496,11 +496,13 @@ impl ProductQuantizer {
     }
 
     /// Find nearest centroid index
+    #[inline]
     fn find_nearest_centroid(&self, vector: &[f32], centroids: &[Vec<f32>]) -> usize {
         self.find_nearest_centroid_with_distance(vector, centroids).0
     }
 
     /// Find nearest centroid with distance
+    #[inline]
     fn find_nearest_centroid_with_distance(
         &self,
         vector: &[f32],
@@ -521,6 +523,7 @@ impl ProductQuantizer {
     }
 
     /// L2 distance squared
+    #[inline]
     fn l2_distance_squared(&self, a: &[f32], b: &[f32]) -> f32 {
         a.iter().zip(b).map(|(x, y)| (x - y).powi(2)).sum()
     }
@@ -685,6 +688,7 @@ impl ProductQuantizer {
     }
 
     /// Compute distance using precomputed lookup table (very fast)
+    #[inline]
     pub fn distance_with_table(&self, table: &[Vec<f32>], codes: &[u8]) -> f32 {
         let mut distance = 0.0;
         for (m, &code) in codes.iter().enumerate() {
@@ -726,6 +730,8 @@ impl ProductQuantizer {
     }
 
     /// Get compression ratio
+    #[inline]
+    #[must_use]
     pub fn compression_ratio(&self) -> f32 {
         let original_bytes = self.config.dimension * 4; // float32
         let compressed_bytes = self.config.num_subspaces; // 1 byte per subspace (if K=256)
