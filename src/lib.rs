@@ -304,6 +304,14 @@ pub mod rest_api;        // REST API with OpenAPI (spec generation)
 pub mod raft_consensus;  // Production Raft Consensus (leader election)
 pub mod sdk_gen;         // Multi-Language SDK Generation (TS/Python/Go)
 
+// 2026 Competitive Features - Phase 6 (Cloud-Native Operations)
+pub mod k8s_operator;      // Kubernetes Operator (CRD, Helm charts)
+pub mod query_router;      // Query Router / Load Balancer (circuit breaker)
+pub mod data_lineage;      // Data Lineage Tracking (provenance, impact analysis)
+pub mod ab_testing;        // A/B Testing Framework (experiments, variants)
+pub mod incremental_index; // Incremental Index Updates (delta indexes, WAL)
+pub mod federation;        // Federation (cross-store queries, multi-cluster)
+
 #[cfg(feature = "async")]
 pub mod kafka_connector;
 
@@ -700,6 +708,45 @@ pub use raft_consensus::{
 pub use sdk_gen::{
     FieldDef as SdkFieldDef, FieldType as SdkFieldType, Language as SdkLanguage, MethodDef,
     ParamDef, ParamLocation, SdkGenerator, TypeDef,
+};
+
+// Export 2026 Competitive Features - Phase 6 (Cloud-Native Operations)
+pub use k8s_operator::{
+    AutoscalingConfig, BackupConfig as K8sBackupConfig, ClusterCondition, ClusterPhase,
+    ConditionType, DistanceMetric as K8sDistanceMetric, HAConfig, HelmChartGenerator,
+    IndexConfig as K8sIndexConfig, ManifestGenerator, MonitoringConfig as K8sMonitoringConfig,
+    OperatorConfig, OperatorMetricsSnapshot, ReconcileAction, ReconcileResult,
+    ResourceRequirements, ResourceSpec, VecStoreClusterSpec, VecStoreClusterStatus,
+    VecStoreOperator,
+};
+pub use query_router::{
+    CircuitState as RouterCircuitState, FilterComplexity, HealthStatus as RouterHealthStatus,
+    LoadBalanceStrategy, NodeCapabilities, NodeStats, QueryCharacteristics, QueryPriority,
+    QueryRouter, ReplicaNode, RequestContext, RetryConfig, RetryHandler, RouterConfig,
+    RouterStats, RoutingDecision, RoutingReason,
+};
+pub use data_lineage::{
+    AccessRecord, AccessType, DerivationOperation, ImpactReport, LineageConfig,
+    LineageRecord, LineageStats, LineageTracker, QualityMetrics as LineageQualityMetrics,
+    Transformation, TransformationType, VectorId, VectorSource,
+};
+pub use ab_testing::{
+    ABTestManager, ABTestStats, ExperimentConfig, ExperimentResults, ExperimentStatus,
+    ExperimentSummary, ExperimentType, IndexParams as ABIndexParams, Metric as ABMetric,
+    MetricSummary, MetricType as ABMetricType, RerankingConfig as ABRerankingConfig,
+    RequestResult as ABRequestResult, SearchParams as ABSearchParams, TrafficAllocation,
+    Variant, VariantAssignment, VariantComparison, VariantConfig, VariantResult,
+};
+pub use incremental_index::{
+    BatchResult as IncrementalBatchResult, IncrementalConfig, IncrementalIndex,
+    IndexStats as IncrementalIndexStats, MergeResult as IncrementalMergeResult,
+    Operation as IncrementalOperation, RecoveryResult, SearchResult as IncrementalSearchResult,
+    SearchSource, VectorEntry, WalRecovery,
+};
+pub use federation::{
+    FederatedQuery, FederatedQueryResult, FederatedResult, Federation, FederationBuilder,
+    FederationConfig, FederationMember, FederationStatus, MemberCapabilities, MemberHealth,
+    MemberStatus, MemberType, MergeStrategy,
 };
 
 /// Initialize tracing subscriber for logging
