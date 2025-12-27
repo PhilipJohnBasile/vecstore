@@ -19,6 +19,7 @@
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ============================================================================
 // SCALAR QUANTIZATION (8-bit)

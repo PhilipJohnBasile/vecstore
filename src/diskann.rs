@@ -532,19 +532,23 @@ impl DiskANN {
 
             // Add reverse edges
             for &neighbor_id in &neighbors {
-                let neighbor_neighbors = self.graph.entry(neighbor_id).or_insert_with(Vec::new);
-                if !neighbor_neighbors.contains(&node_id) {
-                    neighbor_neighbors.push(node_id);
-
-                    // Prune if over max degree
-                    if neighbor_neighbors.len() > self.config.max_degree {
-                        let pruned = self.robust_prune(
-                            vectors,
-                            neighbor_id,
-                            &neighbor_neighbors.iter().cloned().collect::<Vec<_>>(),
-                        )?;
-                        *neighbor_neighbors = pruned;
+                let needs_prune = {
+                    let neighbor_neighbors = self.graph.entry(neighbor_id).or_insert_with(Vec::new);
+                    if !neighbor_neighbors.contains(&node_id) {
+                        neighbor_neighbors.push(node_id);
+                        neighbor_neighbors.len() > self.config.max_degree
+                    } else {
+                        false
                     }
+                };
+
+                // Prune if over max degree (done outside the mutable borrow)
+                if needs_prune {
+                    let candidates: Vec<u64> = self.graph.get(&neighbor_id)
+                        .map(|v| v.clone())
+                        .unwrap_or_default();
+                    let pruned = self.robust_prune(vectors, neighbor_id, &candidates)?;
+                    self.graph.insert(neighbor_id, pruned);
                 }
             }
         }

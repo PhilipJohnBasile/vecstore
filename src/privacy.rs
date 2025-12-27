@@ -34,10 +34,34 @@
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use rand::Rng;
-use rand_distr::{Distribution, Normal, Laplace};
+use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
 
 use crate::error::VecStoreError;
+
+/// Laplace distribution for differential privacy
+/// Laplace(μ, b) where μ is location and b is scale
+pub struct Laplace {
+    location: f64,
+    scale: f64,
+}
+
+impl Laplace {
+    pub fn new(location: f64, scale: f64) -> Result<Self, &'static str> {
+        if scale <= 0.0 {
+            return Err("Scale must be positive");
+        }
+        Ok(Self { location, scale })
+    }
+}
+
+impl Distribution<f64> for Laplace {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> f64 {
+        // Inverse CDF method for Laplace distribution
+        let u: f64 = rng.gen_range(-0.5..0.5);
+        self.location - self.scale * u.signum() * (1.0 - 2.0 * u.abs()).ln()
+    }
+}
 
 /// Differential privacy mechanism
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]

@@ -529,7 +529,7 @@ impl EmbeddingVCS {
                     .iter()
                     .zip(to_vec)
                     .enumerate()
-                    .filter(|(_, (a, b))| (a - b).abs() > 0.001)
+                    .filter(|(_, (a, b))| (*a - *b).abs() > 0.001)
                     .map(|(i, (&a, &b))| (i, a, b))
                     .take(10)
                     .collect();
@@ -563,6 +563,10 @@ impl EmbeddingVCS {
             None
         };
 
+        let total_added = added.len();
+        let total_removed = removed.len();
+        let total_changed = changed.len();
+
         Ok(CommitDiff {
             from_commit: from_commit.to_string(),
             to_commit: to_commit.to_string(),
@@ -571,9 +575,9 @@ impl EmbeddingVCS {
             changed,
             model_change,
             stats: DiffStats {
-                total_added: added.len(),
-                total_removed: removed.len(),
-                total_changed: changed.len(),
+                total_added,
+                total_removed,
+                total_changed,
                 avg_similarity,
                 min_similarity,
                 dimension_changed: from_snapshot.dimension != to_snapshot.dimension,

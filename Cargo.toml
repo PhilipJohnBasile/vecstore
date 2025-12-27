@@ -39,7 +39,7 @@ regex = "1"
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter", "json"] }
-chrono = "0.4"
+chrono = { version = "0.4", features = ["serde"] }
 directories = "6"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"], optional = true }
 futures = { version = "0.3", optional = true }

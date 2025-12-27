@@ -754,6 +754,7 @@ impl QueryAgent {
         }
 
         let overall_confidence = steps.iter().map(|s| s.confidence).product::<f32>();
+        let steps_len = steps.len();
 
         Ok(ExecutionPlan {
             query: query.to_string(),
@@ -772,7 +773,7 @@ impl QueryAgent {
                     IntentAction::Transform => "transform",
                     IntentAction::Combine => "combine",
                 },
-                steps.len()
+                steps_len
             ),
         })
     }

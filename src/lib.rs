@@ -254,8 +254,22 @@ pub mod auto_tune;
 pub mod debugger;
 pub mod embedding_vcs;
 pub mod matryoshka;
+#[cfg(feature = "async")]
 pub mod object_storage;
 pub mod pq;
+
+// 2026 Competitive Features - Phase 2
+pub mod inference;       // Integrated Inference API (embed at query time)
+pub mod sql;             // SQL Interface for vector operations
+pub mod rabitq;          // RaBitQ 1-bit quantization (30x compression)
+pub mod generative;      // Native Generative Search (RAG in single call)
+pub mod llm_cache;       // Semantic LLM Cache (query deduplication)
+pub mod multilang;       // Multi-Language Stemming (17+ languages)
+pub mod typo_tolerance;  // Typo-Tolerant Search (fuzzy matching)
+pub mod graphrag;        // GraphRAG Integration (knowledge graphs)
+pub mod streaming;       // Streaming Index Updates (real-time)
+pub mod edge_runtime;    // Edge Runtime (Workers/Vercel)
+pub mod ml_ranking;      // ONNX/ML Models in Ranking
 
 #[cfg(feature = "async")]
 pub mod kafka_connector;
@@ -512,6 +526,25 @@ pub use embeddings::{CandleEmbedder, CandleModel};
 
 #[cfg(feature = "wasm")]
 pub use wasm::{WasmSearchResult, WasmVecStore};
+
+// Export 2026 Competitive Features - Phase 2
+pub use inference::{EmbeddingProvider, InferenceConfig, InferenceEngine, InferenceStats};
+pub use sql::{DataType, Row, TableSchema, VectorSQL};
+pub use rabitq::{BinaryCode, RaBitQ, RaBitQConfig, RaBitQIndex};
+pub use generative::{
+    Citation, GenerativeConfig, GenerativeResponse, GenerativeSearch, LLMProvider,
+    RetrievedDocument, TokenUsage,
+};
+pub use llm_cache::{CacheConfig, CacheResult, SemanticCache};
+pub use multilang::{AutoLangAnalyzer, Language, MultiLangAnalyzer};
+pub use typo_tolerance::{MatchType, TypoConfig, TypoSearchResult, TypoTolerantSearch};
+pub use graphrag::{Entity as GraphEntity, GraphRAG as GraphRAGV2, Relationship};
+pub use streaming::{ConflictStrategy, StreamConfig, StreamingIndex, StreamingStats};
+pub use edge_runtime::{EdgeConfig, EdgeSearchResult, EdgeVectorStore};
+pub use ml_ranking::{
+    MLRanker, RankedResult, RankingCandidate, RankingConfig, RankingFeatures, RankingModel,
+    RankingPipeline, RankingStage,
+};
 
 /// Initialize tracing subscriber for logging
 pub fn init_tracing() {
