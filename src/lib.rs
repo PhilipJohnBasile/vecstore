@@ -271,6 +271,18 @@ pub mod streaming;       // Streaming Index Updates (real-time)
 pub mod edge_runtime;    // Edge Runtime (Workers/Vercel)
 pub mod ml_ranking;      // ONNX/ML Models in Ranking
 
+// 2026 Competitive Features - Phase 3 (Market Domination)
+pub mod sparse_native;   // Native SPLADE/BM25 sparse vectors
+pub mod serverless;      // Pinecone-style auto-scaling
+pub mod timetravel;      // Milvus-style point-in-time queries
+pub mod payload_index;   // Qdrant-style B-tree/Hash/Geo indexes
+pub mod partition_keys;  // Multi-tenant partition routing
+pub mod graphql_api;     // Weaviate-style GraphQL interface
+pub mod recommendations; // Item-to-item recommendations
+pub mod zero_copy;       // LanceDB-style versioning
+pub mod dynamic_schema;  // Runtime schema flexibility
+pub mod embedded_onnx;   // Chroma-style local embeddings
+
 #[cfg(feature = "async")]
 pub mod kafka_connector;
 
@@ -544,6 +556,46 @@ pub use edge_runtime::{EdgeConfig, EdgeSearchResult, EdgeVectorStore};
 pub use ml_ranking::{
     MLRanker, RankedResult, RankingCandidate, RankingConfig, RankingFeatures, RankingModel,
     RankingPipeline, RankingStage,
+};
+
+// Export 2026 Competitive Features - Phase 3 (Market Domination)
+pub use sparse_native::{
+    HybridSparseIndex, InvertedSparseIndex, SparseVector as NativeSparseVector,
+    SpladeEncoder as NativeSpladeEncoder,
+};
+pub use serverless::{
+    Autoscaler, ColdStartOptimizer, LoadBalancer, ReplicaInfo, ServerlessCluster, ServerlessConfig,
+    ServerlessStats,
+};
+pub use timetravel::{
+    SnapshotManager, TimeTravelIndex, TimeTravelResult, Timestamp, VersionEntry,
+    VersionHistory as TimeTravelVersionHistory,
+};
+pub use payload_index::{
+    Filter, GeoIndex as PayloadGeoIndex, GeoPoint as PayloadGeoPoint, HashIndex as PayloadHashIndex,
+    BTreeIndex as PayloadBTreeIndex, FullTextIndex, PayloadIndexManager, IndexType as PayloadIndexType,
+};
+pub use partition_keys::{
+    HashAlgorithm, Partition, PartitionConfig as PartitionKeyConfig, PartitionRouter,
+    PartitionedIndex, PartitionState,
+};
+pub use graphql_api::{
+    GqlCollection, GqlField, GqlType, GraphQLExecutor, NearTextInput, NearVectorInput, VectorQuery,
+    WhereFilter, WhereOperator,
+};
+pub use recommendations::{
+    RecommendRequest, RecommendResult, RecommendStrategy, RecommendationEngine,
+    UserProfile as RecommendUserProfile,
+};
+pub use zero_copy::{
+    Branch, BranchName, Commit, CommitHash, Diff, MergeResult, VersionedStore as CowVersionedStore,
+};
+pub use dynamic_schema::{
+    DynamicCollection, FieldDef, FieldType as DynamicFieldType, Schema as DynamicSchema,
+    SchemaBuilder, SchemaChange, SchemaEvolution,
+};
+pub use embedded_onnx::{
+    EmbeddedStore, EmbeddingFunction, EmbeddingModel, ModelConfig, ModelType,
 };
 
 /// Initialize tracing subscriber for logging
