@@ -1170,7 +1170,7 @@ mod tests {
 
         let codes_db: Vec<Vec<u8>> = vectors.iter().map(|v| pq.encode(v).unwrap()).collect();
 
-        let results = pq.search(&vectors[0], 5).unwrap();
+        let results = pq.search(&vectors[0], &codes_db, 5).unwrap();
 
         assert_eq!(results.len(), 5);
         // First result should be the query itself (distance 0 or very small)
