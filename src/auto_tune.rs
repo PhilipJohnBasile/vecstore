@@ -303,7 +303,7 @@ impl BayesianOptimizer {
 
         for (i, &(low, high)) in self.bounds.iter().enumerate() {
             let range = high - low;
-            let perturbation = rng.gen::<f64>() * range * self.kappa - range * self.kappa / 2.0;
+            let perturbation = rng.random::<f64>() * range * self.kappa - range * self.kappa / 2.0;
             candidate[i] = (candidate[i] + perturbation).clamp(low, high);
         }
 
@@ -315,7 +315,7 @@ impl BayesianOptimizer {
         let mut rng = rand::thread_rng();
         self.bounds
             .iter()
-            .map(|&(low, high)| rng.gen::<f64>() * (high - low) + low)
+            .map(|&(low, high)| rng.random::<f64>() * (high - low) + low)
             .collect()
     }
 
@@ -649,7 +649,7 @@ impl RecallEstimator {
         let mut sample_count = 0;
 
         for query in queries {
-            if rng.gen::<f32>() > self.sample_rate {
+            if rng.random::<f32>() > self.sample_rate {
                 continue;
             }
 

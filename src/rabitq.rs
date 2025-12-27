@@ -251,7 +251,7 @@ impl RaBitQ {
         for i in 0..dim {
             // Generate random vector
             let mut vec: Vec<f32> = (0..dim)
-                .map(|_| rng.gen::<f32>() - 0.5)
+                .map(|_| rng.random::<f32>() - 0.5)
                 .collect();
 
             // Gram-Schmidt orthogonalization
@@ -606,7 +606,7 @@ mod tests {
     fn random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         let mut rng = rand::thread_rng();
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen::<f32>() - 0.5).collect())
+            .map(|_| (0..dim).map(|_| rng.random::<f32>() - 0.5).collect())
             .collect()
     }
 

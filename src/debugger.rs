@@ -940,7 +940,7 @@ mod tests {
     fn generate_random_embedding(dim: usize) -> Vec<f32> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        (0..dim).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect()
+        (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect()
     }
 
     #[test]

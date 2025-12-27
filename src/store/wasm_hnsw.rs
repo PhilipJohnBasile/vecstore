@@ -435,7 +435,7 @@ impl WasmHnsw {
     /// Randomly select layer for new node
     fn random_layer(&self) -> usize {
         let mut rng = rand::thread_rng();
-        let r: f32 = rng.gen();
+        let r: f32 = rng.random();
         (-r.ln() * self.ml).floor() as usize
     }
 
@@ -632,14 +632,14 @@ mod tests {
         // Insert 1000 random vectors
         let mut rng = rand::thread_rng();
         for i in 0..1000 {
-            let vector: Vec<f32> = (0..128).map(|_| rng.gen::<f32>()).collect();
+            let vector: Vec<f32> = (0..128).map(|_| rng.random::<f32>()).collect();
             index.insert(format!("v{}", i), vector).unwrap();
         }
 
         assert_eq!(index.len(), 1000);
 
         // Search should work
-        let query: Vec<f32> = (0..128).map(|_| rng.gen::<f32>()).collect();
+        let query: Vec<f32> = (0..128).map(|_| rng.random::<f32>()).collect();
         let results = index.search(&query, 10, 50).unwrap();
         assert_eq!(results.len(), 10);
 

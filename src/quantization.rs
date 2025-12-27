@@ -433,7 +433,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect())
+            .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())
             .collect()
     }
 
@@ -1151,7 +1151,7 @@ mod ultra_low_bit_tests {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect())
+            .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())
             .collect()
     }
 

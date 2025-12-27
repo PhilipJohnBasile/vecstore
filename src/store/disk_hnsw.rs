@@ -1188,7 +1188,7 @@ impl DiskHNSWIndex {
     fn random_layer(&self) -> u8 {
         use rand::Rng;
         let mut rng = rand::thread_rng();
-        let r: f32 = rng.gen();
+        let r: f32 = rng.random();
         (-r.ln() * self.graph.config.ml).floor() as u8
     }
 }

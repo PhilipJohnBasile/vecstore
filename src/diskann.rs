@@ -925,7 +925,7 @@ mod tests {
     fn random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
         let mut rng = rand::thread_rng();
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen::<f32>()).collect())
+            .map(|_| (0..dim).map(|_| rng.random::<f32>()).collect())
             .collect()
     }
 

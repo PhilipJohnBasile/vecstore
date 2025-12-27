@@ -340,7 +340,7 @@ impl ProductQuantizer {
 
         for row in &mut new_rotation {
             for val in row.iter_mut() {
-                *val += rng.gen::<f32>() * 0.001 - 0.0005;
+                *val += rng.random::<f32>() * 0.001 - 0.0005;
             }
         }
 
@@ -479,7 +479,7 @@ impl ProductQuantizer {
 
             // Sample according to distribution
             let mut cumsum = 0.0;
-            let threshold = rng.gen::<f32>();
+            let threshold = rng.random::<f32>();
             let mut selected = vectors.len() - 1;
 
             for (i, &d) in distances.iter().enumerate() {
@@ -1059,7 +1059,7 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         (0..n)
-            .map(|_| (0..dim).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect())
+            .map(|_| (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect())
             .collect()
     }
 

@@ -138,16 +138,16 @@ pub struct SdkGenerator {
 impl SdkGenerator {
     /// Create new generator
     pub fn new() -> Self {
-        let mut gen = Self {
+        let mut generator = Self {
             types: Vec::new(),
             methods: Vec::new(),
             package_name: "vecstore".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
-        gen.add_core_types();
-        gen.add_core_methods();
-        gen
+        generator.add_core_types();
+        generator.add_core_methods();
+        generator
     }
 
     /// Set package name
@@ -1015,8 +1015,8 @@ mod tests {
 
     #[test]
     fn test_generate_typescript() {
-        let gen = SdkGenerator::new();
-        let ts = gen.generate(Language::TypeScript);
+        let generator = SdkGenerator::new();
+        let ts = generator.generate(Language::TypeScript);
 
         assert!(ts.contains("export interface Vector"));
         assert!(ts.contains("class VecStoreClient"));
@@ -1025,8 +1025,8 @@ mod tests {
 
     #[test]
     fn test_generate_python() {
-        let gen = SdkGenerator::new();
-        let py = gen.generate(Language::Python);
+        let generator = SdkGenerator::new();
+        let py = generator.generate(Language::Python);
 
         assert!(py.contains("@dataclass"));
         assert!(py.contains("class Vector"));
@@ -1035,8 +1035,8 @@ mod tests {
 
     #[test]
     fn test_generate_go() {
-        let gen = SdkGenerator::new();
-        let go = gen.generate(Language::Go);
+        let generator = SdkGenerator::new();
+        let go = generator.generate(Language::Go);
 
         assert!(go.contains("package vecstore"));
         assert!(go.contains("type Vector struct"));
@@ -1045,8 +1045,8 @@ mod tests {
 
     #[test]
     fn test_generate_java() {
-        let gen = SdkGenerator::new();
-        let java = gen.generate(Language::Java);
+        let generator = SdkGenerator::new();
+        let java = generator.generate(Language::Java);
 
         assert!(java.contains("public class VecStoreClient"));
     }

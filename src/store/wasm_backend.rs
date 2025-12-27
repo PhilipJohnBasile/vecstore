@@ -323,14 +323,14 @@ mod tests {
 
         // Insert 1000 vectors
         for i in 0..1000 {
-            let vector: Vec<f32> = (0..128).map(|_| rng.gen()).collect();
+            let vector: Vec<f32> = (0..128).map(|_| rng.random()).collect();
             backend.insert(format!("v{}", i), &vector).unwrap();
         }
 
         assert_eq!(backend.len(), 1000);
 
         // Search should be fast and accurate
-        let query: Vec<f32> = (0..128).map(|_| rng.gen()).collect();
+        let query: Vec<f32> = (0..128).map(|_| rng.random()).collect();
         let results = backend.search(&query, 10).unwrap();
         assert_eq!(results.len(), 10);
 

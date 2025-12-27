@@ -357,7 +357,7 @@ impl Benchmarker {
         let vectors: Vec<Vec<f32>> = (0..self.config.num_vectors)
             .map(|_| {
                 (0..self.config.dimension)
-                    .map(|_| rng.gen::<f32>() * 2.0 - 1.0)
+                    .map(|_| rng.random::<f32>() * 2.0 - 1.0)
                     .collect()
             })
             .collect();
@@ -365,7 +365,7 @@ impl Benchmarker {
         let queries: Vec<Vec<f32>> = (0..self.config.num_queries)
             .map(|_| {
                 (0..self.config.dimension)
-                    .map(|_| rng.gen::<f32>() * 2.0 - 1.0)
+                    .map(|_| rng.random::<f32>() * 2.0 - 1.0)
                     .collect()
             })
             .collect();

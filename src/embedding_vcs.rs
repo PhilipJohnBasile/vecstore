@@ -730,7 +730,7 @@ mod tests {
 
         (0..n)
             .map(|i| {
-                let vec: Vec<f32> = (0..dim).map(|_| rng.gen::<f32>()).collect();
+                let vec: Vec<f32> = (0..dim).map(|_| rng.random::<f32>()).collect();
                 (format!("vec_{}", i), vec)
             })
             .collect()

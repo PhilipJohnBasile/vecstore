@@ -800,7 +800,7 @@ mod tests {
 
         (0..n)
             .map(|i| {
-                let emb: Vec<f32> = (0..dim).map(|_| rng.gen::<f32>() * 2.0 - 1.0).collect();
+                let emb: Vec<f32> = (0..dim).map(|_| rng.random::<f32>() * 2.0 - 1.0).collect();
                 (format!("doc_{}", i), emb)
             })
             .collect()
