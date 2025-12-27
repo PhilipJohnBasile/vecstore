@@ -537,15 +537,13 @@ impl Federation {
     }
 
     /// Update member health status
-    pub fn update_health(&self, member_id: &str, health: MemberHealth) -> Result<()> {
+    pub fn update_health(&self, member_id: &str, _health: MemberHealth) -> Result<()> {
         let members = self.members.read().unwrap();
-        if let Some(state) = members.get(member_id) {
-            // Can't mutate through Arc, but in production we'd use interior mutability
-            // For now, just validate
-            Ok(())
-        } else {
-            Err(VecStoreError::NotFound(format!("Member {} not found", member_id)))
-        }
+        let Some(_state) = members.get(member_id) else {
+            return Err(VecStoreError::NotFound(format!("Member {} not found", member_id)));
+        };
+        // Can't mutate through Arc, but in production we'd use interior mutability
+        Ok(())
     }
 
     /// Get federation status

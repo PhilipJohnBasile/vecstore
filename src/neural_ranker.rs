@@ -437,13 +437,14 @@ impl NeuralRanker {
     }
 
     fn create_default_vocab(&self) -> HashMap<String, u32> {
-        let mut vocab = HashMap::new();
-        vocab.insert("[PAD]".to_string(), 0);
-        vocab.insert("[UNK]".to_string(), 100);
-        vocab.insert("[CLS]".to_string(), 101);
-        vocab.insert("[SEP]".to_string(), 102);
-        vocab.insert("[MASK]".to_string(), 103);
-        vocab
+        // Rust 1.92: Use FromIterator with array for cleaner initialization
+        HashMap::from([
+            ("[PAD]".to_string(), 0),
+            ("[UNK]".to_string(), 100),
+            ("[CLS]".to_string(), 101),
+            ("[SEP]".to_string(), 102),
+            ("[MASK]".to_string(), 103),
+        ])
     }
 
     /// Rerank candidates based on query

@@ -363,11 +363,10 @@ impl LineageTracker {
                 );
             }
 
+            // Rust 1.92: Use or_default() for cleaner entry API
             for input_id in &transformation.inputs {
-                let deps = forward.entry(input_id.clone()).or_insert_with(HashSet::new);
-                for output_id in &transformation.outputs {
-                    deps.insert(output_id.clone());
-                }
+                let deps = forward.entry(input_id.clone()).or_default();
+                deps.extend(transformation.outputs.iter().cloned());
             }
         }
 
