@@ -1,0 +1,15 @@
+[package]
+name = "enterprise-explainable-rag"
+version = "0.1.0"
+edition = "2021"
+description = "Enterprise RAG with explainability, lineage, and compliance features"
+
+[dependencies]
+vecstore = { version = "0.1" }
+anyhow = "1"
+serde_json = "1"
+chrono = "0.4"
+
+# For production, add embedding support:
+# vecstore = { version = "0.1", features = ["openai-embeddings"] }
+# tokio = { version = "1", features = ["full"] }

@@ -1,0 +1,17 @@
+[package]
+name = "local-rag-app"
+version = "0.1.0"
+edition = "2021"
+description = "Privacy-first local RAG application using VecStore"
+
+[dependencies]
+vecstore = { version = "0.1", features = [] }
+anyhow = "1"
+serde_json = "1"
+
+# Uncomment for local embeddings (requires ONNX runtime)
+# vecstore = { version = "0.1", features = ["embeddings"] }
+
+# Uncomment for OpenAI embeddings
+# vecstore = { version = "0.1", features = ["openai-embeddings"] }
+# tokio = { version = "1", features = ["full"] }

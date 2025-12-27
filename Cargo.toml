@@ -1,13 +1,13 @@
 [package]
 name = "vecstore"
-version = "0.0.2"
+version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Embeddable vector database (alpha) with HNSW search and RAG tooling"
+description = "The Explainable Vector Database - embeddable, privacy-first with HNSW, DiskANN, GPU acceleration, and enterprise features"
 repository = "https://github.com/PhilipJohnBasile/vecstore"
 homepage = "https://github.com/PhilipJohnBasile/vecstore"
 documentation = "https://docs.rs/vecstore"
-keywords = ["vector-database", "embedding", "search", "rag", "hnsw"]
+keywords = ["vector-database", "embedding", "similarity-search", "rag", "ai"]
 categories = ["database", "algorithms", "data-structures"]
 exclude = ["src/bin/", "src/cli/"]
 

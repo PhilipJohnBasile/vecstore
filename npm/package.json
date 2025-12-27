@@ -1,7 +1,7 @@
 {
   "name": "@vecstore/embeddings",
-  "version": "0.0.2",
-  "description": "Embedding integration for VecStore using Transformers.js",
+  "version": "0.1.0",
+  "description": "Browser-native embedding integration for VecStore using Transformers.js",
   "type": "module",
   "main": "dist/index.js",
   "module": "dist/index.js",

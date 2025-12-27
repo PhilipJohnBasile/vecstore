@@ -1,0 +1,45 @@
+{
+  "name": "@vecstore/core",
+  "version": "0.1.0",
+  "description": "VecStore WASM core - The Explainable Vector Database for browsers and edge",
+  "type": "module",
+  "main": "vecstore.js",
+  "module": "vecstore.js",
+  "types": "vecstore.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ],
+  "files": [
+    "vecstore_bg.wasm",
+    "vecstore.js",
+    "vecstore.d.ts",
+    "snippets"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PhilipJohnBasile/vecstore.git",
+    "directory": "wasm-pkg"
+  },
+  "keywords": [
+    "vector-database",
+    "wasm",
+    "webassembly",
+    "embeddings",
+    "similarity-search",
+    "semantic-search",
+    "rag",
+    "browser",
+    "edge",
+    "privacy-first",
+    "explainable-ai"
+  ],
+  "author": "VecStore Contributors",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/PhilipJohnBasile/vecstore/issues"
+  },
+  "homepage": "https://github.com/PhilipJohnBasile/vecstore#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

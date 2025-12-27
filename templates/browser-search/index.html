@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VecStore Browser Search</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #e0e0e0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+            color: #888;
+            font-size: 1rem;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(0, 217, 255, 0.1);
+            border: 1px solid #00d9ff;
+            color: #00d9ff;
+            padding: 0.25rem 0.75rem;
+            border-radius: 1rem;
+            font-size: 0.75rem;
+            margin-top: 0.5rem;
+        }
+
+        .search-box {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 1rem 1.5rem;
+            font-size: 1.1rem;
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        .search-input:focus {
+            border-color: #00d9ff;
+        }
+
+        .search-input::placeholder {
+            color: #666;
+        }
+
+        .status {
+            text-align: center;
+            padding: 1rem;
+            color: #888;
+        }
+
+        .status.loading {
+            color: #00d9ff;
+        }
+
+        .status.ready {
+            color: #00ff88;
+        }
+
+        .results {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .result-card {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .result-card:hover {
+            transform: translateY(-2px);
+            border-color: rgba(0, 217, 255, 0.3);
+        }
+
+        .result-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .result-id {
+            font-weight: 600;
+            color: #00d9ff;
+        }
+
+        .result-score {
+            font-size: 0.85rem;
+            color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+
+        .result-content {
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+        .add-section {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .add-section h3 {
+            margin-bottom: 1rem;
+            color: #888;
+        }
+
+        .add-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .add-form input,
+        .add-form textarea {
+            padding: 0.75rem 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.5rem;
+            background: rgba(0, 0, 0, 0.3);
+            color: #fff;
+            font-family: inherit;
+        }
+
+        .add-form textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .add-form button {
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            border: none;
+            border-radius: 0.5rem;
+            color: #000;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .add-form button:hover {
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 0.5rem;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #00d9ff;
+        }
+
+        .stat-label {
+            font-size: 0.85rem;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>VecStore Search</h1>
+            <p class="subtitle">Privacy-first semantic search in your browser</p>
+            <span class="badge">100% Client-Side</span>
+        </header>
+
+        <div class="search-box">
+            <input
+                type="text"
+                class="search-input"
+                id="searchInput"
+                placeholder="Search for anything..."
+                autocomplete="off"
+            >
+        </div>
+
+        <div class="status" id="status">Loading VecStore WASM...</div>
+
+        <div class="results" id="results"></div>
+
+        <div class="add-section">
+            <h3>Add Document</h3>
+            <form class="add-form" id="addForm">
+                <input type="text" id="docId" placeholder="Document ID" required>
+                <textarea id="docContent" placeholder="Document content..." required></textarea>
+                <button type="submit">Add to Index</button>
+            </form>
+        </div>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value" id="docCount">0</div>
+                <div class="stat-label">Documents</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value" id="dimension">384</div>
+                <div class="stat-label">Dimensions</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // VecStore Browser Search Demo
+        // Uses @vecstore/core WASM package
+
+        // Simple in-memory vector store for demo
+        // In production, import from @vecstore/core
+        class VecStoreDemo {
+            constructor(dimension) {
+                this.dimension = dimension;
+                this.vectors = new Map();
+                this.metadata = new Map();
+            }
+
+            // Simple hash-based embedding (replace with real embeddings)
+            embed(text) {
+                const embedding = new Float32Array(this.dimension);
+                const words = text.toLowerCase().split(/\s+/);
+
+                for (let i = 0; i < words.length; i++) {
+                    const word = words[i];
+                    let hash = 0;
+                    for (let j = 0; j < word.length; j++) {
+                        hash = ((hash << 5) - hash) + word.charCodeAt(j);
+                        hash = hash & hash;
+                    }
+
+                    for (let k = 0; k < this.dimension; k++) {
+                        const idx = Math.abs((hash + k) % this.dimension);
+                        embedding[idx] += 1.0 / (i + 1);
+                    }
+                }
+
+                // Normalize
+                let norm = 0;
+                for (let i = 0; i < this.dimension; i++) {
+                    norm += embedding[i] * embedding[i];
+                }
+                norm = Math.sqrt(norm);
+                if (norm > 0) {
+                    for (let i = 0; i < this.dimension; i++) {
+                        embedding[i] /= norm;
+                    }
+                }
+
+                return embedding;
+            }
+
+            add(id, text) {
+                const embedding = this.embed(text);
+                this.vectors.set(id, embedding);
+                this.metadata.set(id, text);
+            }
+
+            search(query, k = 5) {
+                const queryEmb = this.embed(query);
+                const results = [];
+
+                for (const [id, vector] of this.vectors) {
+                    let dot = 0;
+                    for (let i = 0; i < this.dimension; i++) {
+                        dot += queryEmb[i] * vector[i];
+                    }
+                    results.push({
+                        id,
+                        score: dot,
+                        content: this.metadata.get(id)
+                    });
+                }
+
+                results.sort((a, b) => b.score - a.score);
+                return results.slice(0, k);
+            }
+
+            get size() {
+                return this.vectors.size;
+            }
+        }
+
+        // Initialize
+        const store = new VecStoreDemo(384);
+
+        // Add sample documents
+        const sampleDocs = [
+            { id: 'vecstore-intro', content: 'VecStore is an embeddable vector database written in Rust. It provides fast similarity search using HNSW indexing and runs entirely in the browser via WebAssembly.' },
+            { id: 'explainable', content: 'The Explainable Search feature helps you understand WHY results matched your query. Get dimension-level contribution analysis and semantic explanations.' },
+            { id: 'privacy', content: 'Privacy-preserving search ensures your sensitive data stays secure with differential privacy. Your embeddings never leave the browser.' },
+            { id: 'wasm', content: 'VecStore compiles to WebAssembly for browser deployment. Run vector search client-side without sending data to any server.' },
+            { id: 'temporal', content: 'Time-aware search lets you query how results would have looked at different points in time. Perfect for news feeds and trending content.' },
+            { id: 'lineage', content: 'Vector lineage tracking provides full provenance from source document to embedding. Essential for compliance and auditing.' },
+        ];
+
+        sampleDocs.forEach(doc => store.add(doc.id, doc.content));
+
+        // UI elements
+        const searchInput = document.getElementById('searchInput');
+        const statusEl = document.getElementById('status');
+        const resultsEl = document.getElementById('results');
+        const docCountEl = document.getElementById('docCount');
+        const addForm = document.getElementById('addForm');
+
+        // Update status
+        statusEl.textContent = 'Ready - Search powered by VecStore';
+        statusEl.className = 'status ready';
+        docCountEl.textContent = store.size;
+
+        // Search handler
+        let debounceTimer;
+        searchInput.addEventListener('input', (e) => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const query = e.target.value.trim();
+                if (query.length < 2) {
+                    resultsEl.innerHTML = '';
+                    return;
+                }
+
+                const results = store.search(query, 5);
+                displayResults(results);
+            }, 200);
+        });
+
+        // Display results
+        function displayResults(results) {
+            resultsEl.innerHTML = results.map(r => `
+                <div class="result-card">
+                    <div class="result-header">
+                        <span class="result-id">${r.id}</span>
+                        <span class="result-score">Score: ${r.score.toFixed(4)}</span>
+                    </div>
+                    <p class="result-content">${r.content}</p>
+                </div>
+            `).join('');
+        }
+
+        // Add document handler
+        addForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const id = document.getElementById('docId').value.trim();
+            const content = document.getElementById('docContent').value.trim();
+
+            if (id && content) {
+                store.add(id, content);
+                docCountEl.textContent = store.size;
+                addForm.reset();
+
+                // Re-search if there's a query
+                const query = searchInput.value.trim();
+                if (query.length >= 2) {
+                    const results = store.search(query, 5);
+                    displayResults(results);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
