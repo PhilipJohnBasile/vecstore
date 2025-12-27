@@ -44,10 +44,10 @@ chrono = { version = "0.4", features = ["serde"] }
 directories = "6"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"], optional = true }
 futures = { version = "0.3", optional = true }
-pyo3 = { version = "0.24.1", features = ["extension-module"], optional = true }
-ort = { version = "1.16", optional = true }
+pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
+ort = { version = "2.0.0-rc.10", optional = true }
 tokenizers = { version = "0.22", optional = true, default-features = false, features = ["onig"] }
-ndarray = { version = "0.16", optional = true }
+ndarray = { version = "0.17", optional = true }
 ureq = { version = "3.1", optional = true, default-features = false, features = ["native-tls"] }
 reqwest = { version = "0.12", optional = true, default-features = false, features = ["json", "rustls-tls", "blocking"] }
 async-trait = "0.1"  # Required for object storage trait
@@ -57,18 +57,18 @@ serde-wasm-bindgen = { version = "0.6", optional = true }
 js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true, features = ["console", "Window", "Storage", "IdbFactory", "IdbDatabase", "IdbObjectStore", "IdbTransaction"] }
 console_error_panic_hook = { version = "0.1", optional = true }
-parquet = { version = "56", optional = true }
-arrow = { version = "56", optional = true }
+parquet = { version = "57", optional = true }
+arrow = { version = "57", optional = true }
 candle-core = { version = "0.9", optional = true }
 candle-nn = { version = "0.9", optional = true }
 candle-transformers = { version = "0.9", optional = true }
 hf-hub = { version = "0.4", optional = true }
-safetensors = { version = "0.6", optional = true }
+safetensors = { version = "0.7", optional = true }
 
 # GPU acceleration dependencies
-cudarc = { version = "0.12", optional = true }  # NVIDIA CUDA bindings
-metal-rs = { package = "metal", version = "0.31", optional = true }  # Apple Metal bindings
-wgpu = { version = "22", optional = true }  # Cross-platform GPU (WebGPU)
+cudarc = { version = "0.18", optional = true }  # NVIDIA CUDA bindings
+metal-rs = { package = "metal", version = "0.33", optional = true }  # Apple Metal bindings
+wgpu = { version = "28", optional = true }  # Cross-platform GPU (WebGPU)
 
 memmap2 = "0.9"
 tempfile = "3"
@@ -100,11 +100,11 @@ tonic-prost-build = { version = "0.14", optional = true }
 [dev-dependencies]
 tempfile = "3"
 approx = "0.5"
-criterion = { version = "0.5", features = ["html_reports"] }
+criterion = { version = "0.8", features = ["html_reports"] }
 tokio = { version = "1", features = ["rt", "sync", "macros", "rt-multi-thread"] }
 futures = "0.3"
 wiremock = "0.6"
-proptest = "1.5"
+proptest = "1.9"
 
 [features]
 default = []

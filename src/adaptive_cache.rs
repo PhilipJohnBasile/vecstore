@@ -91,18 +91,24 @@ impl Default for CacheConfig {
 
 impl CacheConfig {
     /// Set L1 size
-    pub fn with_l1_size(mut self, size: usize) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn with_l1_size(mut self, size: usize) -> Self {
         self.l1_size = size;
         self
     }
 
     /// Set L2 size
-    pub fn with_l2_size(mut self, size: usize) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn with_l2_size(mut self, size: usize) -> Self {
         self.l2_size = size;
         self
     }
 
     /// Enable L3 disk cache
+    #[inline]
+    #[must_use]
     pub fn with_l3(mut self, path: &str, size_bytes: usize) -> Self {
         self.enable_l3 = true;
         self.l3_path = Some(path.to_string());
@@ -111,7 +117,9 @@ impl CacheConfig {
     }
 
     /// Set TTLs
-    pub fn with_ttl(mut self, l1_seconds: u64, l2_seconds: u64, l3_seconds: u64) -> Self {
+    #[inline]
+    #[must_use]
+    pub const fn with_ttl(mut self, l1_seconds: u64, l2_seconds: u64, l3_seconds: u64) -> Self {
         self.l1_ttl_seconds = l1_seconds;
         self.l2_ttl_seconds = l2_seconds;
         self.l3_ttl_seconds = l3_seconds;
@@ -143,10 +151,12 @@ impl BloomFilter {
         }
     }
 
+    #[inline]
     fn optimal_bits(n: usize, p: f64) -> usize {
         (-(n as f64) * p.ln() / (2.0_f64.ln().powi(2))).ceil() as usize
     }
 
+    #[inline]
     fn optimal_hashes(m: usize, n: usize) -> usize {
         ((m as f64 / n as f64) * 2.0_f64.ln()).ceil() as usize
     }

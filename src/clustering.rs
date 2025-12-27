@@ -44,6 +44,7 @@ use crate::simd::euclidean_distance_simd;
 use serde::{Deserialize, Serialize};
 
 // Helper function for euclidean distance
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     euclidean_distance_simd(a, b)
 }

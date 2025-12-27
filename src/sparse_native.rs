@@ -78,11 +78,14 @@ impl SparseVector {
     }
 
     /// Number of non-zero elements
+    #[inline]
+    #[must_use]
     pub fn nnz(&self) -> usize {
         self.indices.len()
     }
 
     /// Compute dot product with another sparse vector
+    #[inline]
     pub fn dot(&self, other: &SparseVector) -> f32 {
         let mut result = 0.0;
         let mut i = 0;
@@ -104,6 +107,8 @@ impl SparseVector {
     }
 
     /// Compute L2 norm
+    #[inline]
+    #[must_use]
     pub fn norm(&self) -> f32 {
         self.values.iter().map(|v| v * v).sum::<f32>().sqrt()
     }
@@ -119,6 +124,8 @@ impl SparseVector {
     }
 
     /// Get value at index (0 if not present)
+    #[inline]
+    #[must_use]
     pub fn get(&self, index: u32) -> f32 {
         match self.indices.binary_search(&index) {
             Ok(pos) => self.values[pos],

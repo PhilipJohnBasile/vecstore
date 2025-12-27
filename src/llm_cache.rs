@@ -66,9 +66,17 @@ pub struct CacheConfig {
     pub track_analytics: bool,
 }
 
-fn default_similarity_threshold() -> f32 { 0.95 }
-fn default_max_size() -> usize { 10000 }
-fn default_true() -> bool { true }
+/// Default similarity threshold for cache hits
+pub const DEFAULT_SIMILARITY_THRESHOLD: f32 = 0.95;
+/// Default maximum cache size
+pub const DEFAULT_MAX_SIZE: usize = 10000;
+
+#[inline]
+const fn default_similarity_threshold() -> f32 { DEFAULT_SIMILARITY_THRESHOLD }
+#[inline]
+const fn default_max_size() -> usize { DEFAULT_MAX_SIZE }
+#[inline]
+const fn default_true() -> bool { true }
 
 impl Default for CacheConfig {
     fn default() -> Self {
@@ -135,6 +143,7 @@ struct CacheEntry {
 }
 
 impl CacheEntry {
+    #[inline]
     fn is_expired(&self, ttl: Duration) -> bool {
         if ttl.is_zero() {
             return false;
