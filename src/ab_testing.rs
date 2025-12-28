@@ -586,11 +586,11 @@ impl ABTestManager {
         // Return the variant with best improvement
         let best = if config.primary_metric.higher_is_better {
             significant.iter().max_by(|a, b|
-                a.relative_change.partial_cmp(&b.relative_change).unwrap()
+                a.relative_change.partial_cmp(&b.relative_change).unwrap_or(std::cmp::Ordering::Equal)
             )
         } else {
             significant.iter().min_by(|a, b|
-                a.relative_change.partial_cmp(&b.relative_change).unwrap()
+                a.relative_change.partial_cmp(&b.relative_change).unwrap_or(std::cmp::Ordering::Equal)
             )
         };
 
@@ -598,11 +598,10 @@ impl ABTestManager {
     }
 
     /// List all experiments
-    pub fn list_experiments(&self) -> Vec<ExperimentSummary> {
-        let Ok(experiments) = self.experiments.read() else {
-            return Vec::new();
-        };
-        experiments.iter()
+    pub fn list_experiments(&self) -> Result<Vec<ExperimentSummary>> {
+        let experiments = self.experiments.read()
+            .map_err(|_| VecStoreError::LockError("experiments lock poisoned".into()))?;
+        Ok(experiments.iter()
             .map(|(id, state)| ExperimentSummary {
                 id: id.clone(),
                 name: state.config.name.clone(),
@@ -615,20 +614,20 @@ impl ABTestManager {
                 created_at: state.created_at,
                 started_at: state.started_at,
             })
-            .collect()
+            .collect())
     }
 
     /// Get manager stats
-    pub fn get_stats(&self) -> ABTestStats {
-        ABTestStats {
+    pub fn get_stats(&self) -> Result<ABTestStats> {
+        let experiments = self.experiments.read()
+            .map_err(|_| VecStoreError::LockError("experiments lock poisoned".into()))?;
+        Ok(ABTestStats {
             experiments_created: self.metrics.experiments_created.load(Ordering::Relaxed),
             experiments_completed: self.metrics.experiments_completed.load(Ordering::Relaxed),
             total_assignments: self.metrics.total_assignments.load(Ordering::Relaxed),
             total_results_recorded: self.metrics.total_results_recorded.load(Ordering::Relaxed),
-            active_experiments: self.experiments.read()
-                .map(|e| e.values().filter(|s| s.status == ExperimentStatus::Running).count())
-                .unwrap_or(0),
-        }
+            active_experiments: experiments.values().filter(|s| s.status == ExperimentStatus::Running).count(),
+        })
     }
 }
 
@@ -736,7 +735,7 @@ pub struct ABTestStats {
 fn current_timestamp() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .unwrap()
+        .unwrap_or_default()
         .as_millis() as u64
 }
 
@@ -886,7 +885,7 @@ mod tests {
         let id = manager.create_experiment(config).unwrap();
         assert!(id.starts_with("exp_"));
 
-        let experiments = manager.list_experiments();
+        let experiments = manager.list_experiments().unwrap();
         assert_eq!(experiments.len(), 1);
     }
 

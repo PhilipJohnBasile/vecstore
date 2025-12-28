@@ -200,7 +200,7 @@ impl RateLimiter {
             .copied()
             .unwrap_or(self.inner.config.requests_per_second);
 
-        let mut state = self.inner.state.write().unwrap();
+        let Ok(mut state) = self.inner.state.write() else { return false; };
         let now = Instant::now();
 
         let op_state = state.operation_states
@@ -229,7 +229,14 @@ impl RateLimiter {
 
     /// Token bucket algorithm implementation
     fn token_bucket_acquire(&self) -> RateLimitResult {
-        let mut state = self.inner.state.write().unwrap();
+        let Ok(mut state) = self.inner.state.write() else {
+            return RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after: Duration::from_secs(1),
+                current_rate: 0.0,
+            };
+        };
         let now = Instant::now();
 
         // Refill tokens based on time elapsed
@@ -267,7 +274,14 @@ impl RateLimiter {
 
     /// Sliding window algorithm implementation
     fn sliding_window_acquire(&self) -> RateLimitResult {
-        let mut state = self.inner.state.write().unwrap();
+        let Ok(mut state) = self.inner.state.write() else {
+            return RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after: Duration::from_secs(1),
+                current_rate: 0.0,
+            };
+        };
         let now = Instant::now();
         let window = Duration::from_secs(1);
 
@@ -305,7 +319,14 @@ impl RateLimiter {
 
     /// Leaky bucket algorithm implementation
     fn leaky_bucket_acquire(&self) -> RateLimitResult {
-        let mut state = self.inner.state.write().unwrap();
+        let Ok(mut state) = self.inner.state.write() else {
+            return RateLimitResult {
+                allowed: false,
+                remaining: 0,
+                reset_after: Duration::from_secs(1),
+                current_rate: 0.0,
+            };
+        };
         let now = Instant::now();
 
         // Drain the bucket
@@ -357,7 +378,15 @@ impl RateLimiter {
 
     /// Get current statistics
     pub fn stats(&self) -> RateLimitStats {
-        let state = self.inner.state.read().unwrap();
+        let Ok(state) = self.inner.state.read() else {
+            return RateLimitStats {
+                total_allowed: self.inner.total_allowed.load(Ordering::Relaxed),
+                total_denied: self.inner.total_denied.load(Ordering::Relaxed),
+                current_tokens: 0,
+                requests_per_second: self.inner.config.requests_per_second,
+                burst_size: self.inner.config.burst_size,
+            };
+        };
 
         RateLimitStats {
             total_allowed: self.inner.total_allowed.load(Ordering::Relaxed),
@@ -370,7 +399,7 @@ impl RateLimiter {
 
     /// Reset the rate limiter state
     pub fn reset(&self) {
-        let mut state = self.inner.state.write().unwrap();
+        let Ok(mut state) = self.inner.state.write() else { return; };
         state.tokens = self.inner.config.burst_size as f64;
         state.last_refill = Instant::now();
         state.window_requests.clear();
@@ -444,7 +473,7 @@ impl KeyedRateLimiter {
 
     /// Try to acquire for a specific key
     pub fn try_acquire(&self, key: &str) -> bool {
-        let limiters = self.limiters.read().unwrap();
+        let Ok(limiters) = self.limiters.read() else { return false; };
 
         if let Some(limiter) = limiters.get(key) {
             limiter.try_acquire()
@@ -452,7 +481,7 @@ impl KeyedRateLimiter {
             drop(limiters);
 
             // Create new limiter
-            let mut limiters = self.limiters.write().unwrap();
+            let Ok(mut limiters) = self.limiters.write() else { return false; };
             let limiter = limiters
                 .entry(key.to_string())
                 .or_insert_with(|| RateLimiter::new(self.default_config.clone()));
@@ -462,7 +491,7 @@ impl KeyedRateLimiter {
 
     /// Set a custom rate limit for a specific key
     pub fn set_limit(&self, key: &str, requests_per_second: f64) {
-        let mut limiters = self.limiters.write().unwrap();
+        let Ok(mut limiters) = self.limiters.write() else { return; };
         let config = RateLimitConfig {
             requests_per_second,
             ..self.default_config.clone()
@@ -472,7 +501,7 @@ impl KeyedRateLimiter {
 
     /// Get stats for all keys
     pub fn all_stats(&self) -> HashMap<String, RateLimitStats> {
-        let limiters = self.limiters.read().unwrap();
+        let Ok(limiters) = self.limiters.read() else { return HashMap::new(); };
         limiters
             .iter()
             .map(|(k, v)| (k.clone(), v.stats()))

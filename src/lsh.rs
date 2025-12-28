@@ -96,6 +96,7 @@ impl HashFunction {
     }
 
     /// Hash a vector (returns 0 or 1 based on which side of hyperplane)
+    #[inline]
     fn hash(&self, vector: &[f32]) -> u32 {
         let dot_product: f32 = self
             .projection
@@ -136,6 +137,7 @@ impl HashTable {
     }
 
     /// Compute hash code for a vector
+    #[inline]
     fn compute_hash(&self, vector: &[f32]) -> u64 {
         let mut hash_code: u64 = 0;
 
@@ -157,6 +159,7 @@ impl HashTable {
     }
 
     /// Get candidate vectors for a query
+    #[inline]
     fn get_candidates(&self, query: &[f32]) -> Vec<(String, Vec<f32>)> {
         let hash_code = self.compute_hash(query);
 
@@ -409,21 +412,25 @@ impl LSHIndex {
     }
 
     /// Get the number of vectors in the index
+    #[inline]
     pub fn len(&self) -> usize {
         self.num_vectors
     }
 
     /// Check if the index is empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.num_vectors == 0
     }
 
     /// Get the dimension
+    #[inline]
     pub fn dimension(&self) -> usize {
         self.dimension
     }
 
     /// Get the configuration
+    #[inline]
     pub fn config(&self) -> &LSHConfig {
         &self.config
     }
@@ -443,6 +450,7 @@ pub struct LSHStats {
 }
 
 /// Helper function: Euclidean distance
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b.iter())
@@ -452,6 +460,7 @@ fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Helper function: Cosine similarity
+#[inline]
 #[allow(dead_code)]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot_product: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();

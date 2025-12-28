@@ -545,9 +545,47 @@ impl DistributedStore {
     /// * `node_id` - Unique identifier for this node
     /// * `peer_ids` - List of peer node IDs in the cluster
     pub async fn enable_raft(&mut self, node_id: String, peer_ids: Vec<String>) -> Result<()> {
+        // Convert string peer IDs to PeerInfo structs with placeholder addresses
+        // In production, the caller should provide full PeerInfo with addresses
+        let peers: Vec<raft::PeerInfo> = peer_ids
+            .into_iter()
+            .map(|id| raft::PeerInfo {
+                node_id: id.clone(),
+                address: format!("{}:50051", id), // Placeholder address
+            })
+            .collect();
+
         let raft_config = raft::RaftConfig {
             node_id,
-            peers: peer_ids,
+            peers,
+            ..Default::default()
+        };
+
+        let raft_node = raft::RaftNode::new(raft_config);
+        self.raft_node = Some(Arc::new(raft_node));
+
+        Ok(())
+    }
+
+    /// Enable Raft consensus with full peer information
+    ///
+    /// This creates a Raft node for distributed coordination and consensus.
+    /// All cluster membership changes and critical operations will go through Raft.
+    ///
+    /// # Arguments
+    /// * `node_id` - Unique identifier for this node
+    /// * `address` - gRPC address for this node (e.g., "127.0.0.1:50051")
+    /// * `peers` - List of peer nodes with their addresses
+    pub async fn enable_raft_with_peers(
+        &mut self,
+        node_id: String,
+        address: String,
+        peers: Vec<raft::PeerInfo>,
+    ) -> Result<()> {
+        let raft_config = raft::RaftConfig {
+            node_id,
+            address,
+            peers,
             ..Default::default()
         };
 
@@ -917,8 +955,8 @@ impl DistributedStore {
 fn current_timestamp() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
 }
 
 #[cfg(test)]

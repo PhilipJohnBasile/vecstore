@@ -41,7 +41,7 @@ use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Cache configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -229,7 +229,7 @@ impl SemanticCache {
     {
         // Try to find a cache hit
         if let Some(hit) = self.find_similar(query, embedding)? {
-            self.record_hit(&hit);
+            self.record_hit(&hit)?;
             return Ok(CacheResult {
                 response: hit.response,
                 cache_hit: true,
@@ -243,7 +243,7 @@ impl SemanticCache {
 
         // Store in cache
         self.store(query, embedding, &response, None)?;
-        self.record_miss();
+        self.record_miss()?;
 
         Ok(CacheResult {
             response,
@@ -255,7 +255,8 @@ impl SemanticCache {
 
     /// Find a similar cached query
     fn find_similar(&self, _query: &str, embedding: &[f32]) -> Result<Option<CacheHit>> {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
         let ttl = Duration::from_secs(self.config.ttl_seconds);
 
         let mut best_match: Option<(usize, f32)> = None;
@@ -296,7 +297,8 @@ impl SemanticCache {
         response: &str,
         metadata: Option<serde_json::Value>,
     ) -> Result<()> {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
 
         // Evict if at capacity
         while entries.len() >= self.config.max_size {
@@ -324,12 +326,13 @@ impl SemanticCache {
     }
 
     /// Record a cache hit
-    fn record_hit(&self, hit: &CacheHit) {
+    fn record_hit(&self, hit: &CacheHit) -> Result<()> {
         if !self.config.track_analytics {
-            return;
+            return Ok(());
         }
 
-        let mut analytics = self.analytics.write().unwrap();
+        let mut analytics = self.analytics.write()
+            .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?;
         analytics.total_queries += 1;
         analytics.cache_hits += 1;
 
@@ -343,39 +346,48 @@ impl SemanticCache {
         analytics.avg_hit_similarity =
             (analytics.avg_hit_similarity * (n - 1.0) + hit.similarity) / n;
 
-        analytics.cache_size = self.entries.read().unwrap().len();
+        analytics.cache_size = self.entries.read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len();
+        Ok(())
     }
 
     /// Record a cache miss
-    fn record_miss(&self) {
+    fn record_miss(&self) -> Result<()> {
         if !self.config.track_analytics {
-            return;
+            return Ok(());
         }
 
-        let mut analytics = self.analytics.write().unwrap();
+        let mut analytics = self.analytics.write()
+            .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?;
         analytics.total_queries += 1;
         analytics.cache_misses += 1;
-        analytics.cache_size = self.entries.read().unwrap().len();
+        analytics.cache_size = self.entries.read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len();
+        Ok(())
     }
 
     /// Get cache analytics
-    pub fn analytics(&self) -> CacheAnalytics {
-        self.analytics.read().unwrap().clone()
+    pub fn analytics(&self) -> Result<CacheAnalytics> {
+        Ok(self.analytics.read()
+            .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?.clone())
     }
 
     /// Clear the cache
-    pub fn clear(&self) {
-        self.entries.write().unwrap().clear();
+    pub fn clear(&self) -> Result<()> {
+        self.entries.write()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.clear();
+        Ok(())
     }
 
     /// Invalidate expired entries
-    pub fn cleanup(&self) -> usize {
-        let mut entries = self.entries.write().unwrap();
+    pub fn cleanup(&self) -> Result<usize> {
+        let mut entries = self.entries.write()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
         let ttl = Duration::from_secs(self.config.ttl_seconds);
 
         let before = entries.len();
         entries.retain(|e| !e.is_expired(ttl));
-        before - entries.len()
+        Ok(before - entries.len())
     }
 
     /// Calculate cosine similarity
@@ -392,13 +404,15 @@ impl SemanticCache {
     }
 
     /// Get cache size
-    pub fn len(&self) -> usize {
-        self.entries.read().unwrap().len()
+    pub fn len(&self) -> Result<usize> {
+        Ok(self.entries.read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len())
     }
 
     /// Check if empty
-    pub fn is_empty(&self) -> bool {
-        self.entries.read().unwrap().is_empty()
+    pub fn is_empty(&self) -> Result<bool> {
+        Ok(self.entries.read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.is_empty())
     }
 }
 
@@ -473,7 +487,7 @@ impl IntegratedSemanticCache {
     }
 
     /// Get analytics
-    pub fn analytics(&self) -> CacheAnalytics {
+    pub fn analytics(&self) -> Result<CacheAnalytics> {
         self.cache.analytics()
     }
 }
@@ -533,7 +547,7 @@ mod tests {
         // Hit
         cache.get_or_generate("Query 1", &embedding, || Ok("Response 2".to_string())).unwrap();
 
-        let analytics = cache.analytics();
+        let analytics = cache.analytics().unwrap();
         assert_eq!(analytics.total_queries, 2);
         assert_eq!(analytics.cache_hits, 1);
         assert_eq!(analytics.cache_misses, 1);

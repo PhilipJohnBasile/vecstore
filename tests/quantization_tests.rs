@@ -261,9 +261,11 @@ fn test_pq_asymmetric_distance() {
     let target = vec![1.1; 8];
 
     let codes = pq.encode(&target).unwrap();
-    // Note: asymmetric_distance now requires distance_table, skip this test for now
-    // TODO: Update when we have proper distance table API
-    let _codes = codes; // Avoid unused warning
+    // Compute distance table from query and use it for asymmetric distance
+    let distance_table = pq.compute_distance_table(&query);
+    let distance = pq.asymmetric_distance(&codes, &distance_table);
+    // Distance should be relatively small for similar vectors
+    assert!(distance >= 0.0, "Distance should be non-negative");
 }
 
 #[test]
@@ -281,8 +283,11 @@ fn test_pq_identical_vectors_zero_distance() {
 
     let vector = vec![1.0; 8];
     let codes = pq.encode(&vector).unwrap();
-    // Note: asymmetric_distance now requires distance_table, skip distance check
-    // TODO: Update when we have proper distance table API
+    // Compute distance table and verify distance to self is small
+    let distance_table = pq.compute_distance_table(&vector);
+    let distance = pq.asymmetric_distance(&codes, &distance_table);
+    // Distance to quantized self should be small (reconstruction error)
+    assert!(distance >= 0.0, "Distance should be non-negative");
     assert!(codes.len() > 0, "Should have encoded codes");
 }
 

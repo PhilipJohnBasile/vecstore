@@ -383,7 +383,8 @@ impl InferenceEngine {
 
     /// Get current statistics
     pub fn stats(&self) -> InferenceStats {
-        self.stats.read().unwrap().clone()
+        let Ok(guard) = self.stats.read() else { return InferenceStats::default(); };
+        guard.clone()
     }
 
     /// Embed a single text
@@ -413,16 +414,21 @@ impl InferenceEngine {
 
         // Check cache first
         if self.config.cache_enabled {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on embedding cache".into()))?;
             for (i, text) in texts.iter().enumerate() {
                 let cache_key = Self::cache_key(text);
                 if let Some(embedding) = cache.get(&cache_key, &model_name) {
                     results[i] = Some(embedding);
-                    self.stats.write().unwrap().cache_hits += 1;
+                    self.stats.write()
+                        .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?
+                        .cache_hits += 1;
                 } else {
                     uncached_indices.push(i);
                     uncached_texts.push(text.clone());
-                    self.stats.write().unwrap().cache_misses += 1;
+                    self.stats.write()
+                        .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?
+                        .cache_misses += 1;
                 }
             }
         } else {
@@ -436,7 +442,8 @@ impl InferenceEngine {
 
             // Update cache and results
             if self.config.cache_enabled {
-                let mut cache = self.cache.write().unwrap();
+                let mut cache = self.cache.write()
+                    .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on embedding cache".into()))?;
                 for (i, embedding) in new_embeddings.into_iter().enumerate() {
                     let orig_idx = uncached_indices[i];
                     let cache_key = Self::cache_key(&uncached_texts[i]);
@@ -452,7 +459,8 @@ impl InferenceEngine {
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?;
             stats.total_requests += 1;
             stats.total_embeddings += texts.len() as u64;
         }
@@ -618,12 +626,14 @@ impl InferenceEngine {
 
     /// Clear the embedding cache
     pub fn clear_cache(&self) {
-        self.cache.write().unwrap().clear();
+        let Ok(mut cache) = self.cache.write() else { return; };
+        cache.clear();
     }
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> CacheStats {
-        self.cache.read().unwrap().stats()
+        let Ok(cache) = self.cache.read() else { return CacheStats { size: 0, max_size: 0 }; };
+        cache.stats()
     }
 }
 

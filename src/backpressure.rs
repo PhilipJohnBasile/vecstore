@@ -329,7 +329,7 @@ impl BackpressureController {
 
         let partition_lag = self.partition_offsets.read()
             .map(|guard| guard.clone())
-            .unwrap_or_default();
+            .unwrap_or_default();  // Safe: returns empty HashMap on lock failure
 
         LagMetrics {
             pending_records: pending,
@@ -348,7 +348,7 @@ impl BackpressureController {
 
     /// Get statistics
     pub fn get_stats(&self) -> StreamStats {
-        let dlq_size = self.dlq.read().map(|guard| guard.len()).unwrap_or(0);
+        let dlq_size = self.dlq.read().map(|guard| guard.len()).unwrap_or(0);  // Safe: returns 0 on lock failure
         StreamStats {
             received: self.received.load(Ordering::Relaxed),
             processed: self.processed.load(Ordering::Relaxed),
@@ -519,7 +519,7 @@ impl RateLimiter {
     }
 
     fn refill(&self) {
-        let mut last = self.last_refill.write().unwrap();
+        let Ok(mut last) = self.last_refill.write() else { return; };
         let elapsed = last.elapsed();
 
         if elapsed >= Duration::from_millis(100) {
@@ -566,7 +566,7 @@ impl CircuitBreaker {
     fn record_success(&self) {
         self.success_count.fetch_add(1, Ordering::Relaxed);
 
-        let mut state = self.state.write().unwrap();
+        let Ok(mut state) = self.state.write() else { return; };
         if *state == CircuitState::HalfOpen {
             // Reset on success in half-open
             *state = CircuitState::Closed;
@@ -576,22 +576,32 @@ impl CircuitBreaker {
 
     fn record_failure(&self) {
         let count = self.failure_count.fetch_add(1, Ordering::Relaxed) + 1;
-        *self.last_failure.write().unwrap() = Some(Instant::now());
+        if let Ok(mut last_failure) = self.last_failure.write() {
+            *last_failure = Some(Instant::now());
+        }
 
         if count >= self.failure_threshold {
-            *self.state.write().unwrap() = CircuitState::Open;
+            if let Ok(mut state) = self.state.write() {
+                *state = CircuitState::Open;
+            }
         }
     }
 
     fn is_open(&self) -> bool {
-        let state = *self.state.read().unwrap();
+        let Ok(state_guard) = self.state.read() else { return true; };  // Fail-safe: treat as open
+        let state = *state_guard;
+        drop(state_guard);
 
         match state {
             CircuitState::Open => {
                 // Check if timeout has passed
-                if let Some(last) = *self.last_failure.read().unwrap() {
+                let Ok(last_failure_guard) = self.last_failure.read() else { return true; };
+                if let Some(last) = *last_failure_guard {
                     if last.elapsed() > Duration::from_secs(self.timeout_seconds) {
-                        *self.state.write().unwrap() = CircuitState::HalfOpen;
+                        drop(last_failure_guard);
+                        if let Ok(mut state) = self.state.write() {
+                            *state = CircuitState::HalfOpen;
+                        }
                         return false;
                     }
                 }
@@ -602,8 +612,8 @@ impl CircuitBreaker {
     }
 
     fn should_allow_request(&self) -> bool {
-        let state = *self.state.read().unwrap();
-        state != CircuitState::Open
+        let Ok(state) = self.state.read() else { return false; };  // Fail-safe: deny requests on lock failure
+        *state != CircuitState::Open
     }
 }
 
@@ -632,7 +642,7 @@ impl<T: Clone + Serialize> BatchProcessor<T> {
 
         self.controller.record_received();
 
-        let mut buffer = self.buffer.write().unwrap();
+        let Ok(mut buffer) = self.buffer.write() else { return false; };
         buffer.push(record);
 
         true
@@ -640,12 +650,13 @@ impl<T: Clone + Serialize> BatchProcessor<T> {
 
     /// Check if batch is ready
     pub fn is_batch_ready(&self) -> bool {
-        self.buffer.read().unwrap().len() >= self.batch_size
+        let Ok(buffer) = self.buffer.read() else { return false; };
+        buffer.len() >= self.batch_size
     }
 
     /// Get batch for processing
     pub fn take_batch(&self) -> Vec<StreamRecord<T>> {
-        let mut buffer = self.buffer.write().unwrap();
+        let Ok(mut buffer) = self.buffer.write() else { return Vec::new(); };
         let batch: Vec<_> = buffer.drain(..).collect();
         batch
     }

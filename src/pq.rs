@@ -164,7 +164,7 @@ impl ProductQuantizer {
             ));
         }
 
-        if config.num_centroids > 256 && config.num_centroids > 65536 {
+        if config.num_centroids > 65536 {
             return Err(anyhow!(
                 "num_centroids {} exceeds maximum supported (65536)",
                 config.num_centroids
@@ -379,6 +379,7 @@ impl ProductQuantizer {
     }
 
     /// Apply rotation matrix to vector
+    #[inline]
     fn apply_rotation(&self, vector: &[f32], rotation: &[Vec<f32>]) -> Vec<f32> {
         let mut result = vec![0.0; vector.len()];
         for (i, row) in rotation.iter().enumerate() {
@@ -529,6 +530,7 @@ impl ProductQuantizer {
     }
 
     /// Encode a vector to PQ codes
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if !self.is_trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -576,6 +578,7 @@ impl ProductQuantizer {
     }
 
     /// Decode PQ codes back to approximate vector
+    #[inline]
     pub fn decode(&self, codes: &[u8]) -> Result<Vec<f32>> {
         if !self.is_trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -612,6 +615,7 @@ impl ProductQuantizer {
     ///
     /// This is faster than decoding + distance because we precompute
     /// query-to-centroid distances in a lookup table.
+    #[inline]
     pub fn asymmetric_distance(&self, query: &[f32], codes: &[u8]) -> Result<f32> {
         if !self.is_trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -652,6 +656,7 @@ impl ProductQuantizer {
     /// Build distance lookup table for a query (faster batch search)
     ///
     /// Returns table[m][k] = distance from query subvector m to centroid k
+    #[inline]
     pub fn build_distance_table(&self, query: &[f32]) -> Result<Vec<Vec<f32>>> {
         if !self.is_trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -940,6 +945,7 @@ impl IVFPQ {
         Ok((centroids, 0.0))
     }
 
+    #[inline]
     fn find_nearest_in(&self, vector: &[f32], centroids: &[Vec<f32>]) -> usize {
         let mut best_idx = 0;
         let mut best_dist = f32::INFINITY;
@@ -956,6 +962,7 @@ impl IVFPQ {
     }
 
     /// Find nearest coarse centroid
+    #[inline]
     fn find_nearest_coarse(&self, vector: &[f32]) -> usize {
         self.find_nearest_in(vector, &self.coarse_centroids)
     }

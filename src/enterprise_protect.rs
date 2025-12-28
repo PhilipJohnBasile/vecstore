@@ -174,7 +174,8 @@ impl EncryptionManager {
     pub fn initialize(&self) -> Result<()> {
         let dek = self.generate_dek()?;
 
-        let mut current = self.current_dek.write().unwrap();
+        let mut current = self.current_dek.write()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         *current = Some(dek);
 
         Ok(())
@@ -215,18 +216,22 @@ impl EncryptionManager {
 
     /// Rotate encryption key
     pub fn rotate_key(&self) -> Result<KeyRotationResult> {
-        let old_dek = self.current_dek.read().unwrap().clone();
+        let old_dek = self.current_dek.read()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?
+            .clone();
         let new_dek = self.generate_dek()?;
 
         // Store old key in cache for decryption
         if let Some(ref old) = old_dek {
-            let mut cache = self.dek_cache.write().unwrap();
+            let mut cache = self.dek_cache.write()
+                .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             cache.insert(old.key_id.clone(), old.clone());
         }
 
         // Set new key as current
         {
-            let mut current = self.current_dek.write().unwrap();
+            let mut current = self.current_dek.write()
+                .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             *current = Some(new_dek.clone());
         }
 
@@ -256,14 +261,16 @@ impl EncryptionManager {
     }
 
     fn get_current_dek(&self) -> Result<DataEncryptionKey> {
-        let dek = self.current_dek.read().unwrap();
+        let dek = self.current_dek.read()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         dek.clone().ok_or_else(|| VecStoreError::EncryptionError("DEK not initialized".to_string()))
     }
 
     fn get_dek(&self, key_id: &str) -> Result<DataEncryptionKey> {
         // Check current key
         {
-            let current = self.current_dek.read().unwrap();
+            let current = self.current_dek.read()
+                .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             if let Some(dek) = &*current {
                 if dek.key_id == key_id {
                     return Ok(dek.clone());
@@ -272,7 +279,8 @@ impl EncryptionManager {
         }
 
         // Check cache
-        let cache = self.dek_cache.read().unwrap();
+        let cache = self.dek_cache.read()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         cache.get(key_id)
             .cloned()
             .ok_or_else(|| VecStoreError::EncryptionError(format!("DEK not found: {}", key_id)))
@@ -426,7 +434,8 @@ impl BackupManager {
 
         // Store backup metadata
         {
-            let mut backups = self.backups.write().unwrap();
+            let mut backups = self.backups.write()
+                .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             backups.push(metadata.clone());
 
             // Enforce max backups
@@ -439,16 +448,17 @@ impl BackupManager {
     }
 
     /// List backups
-    pub fn list_backups(&self, collection: Option<&str>) -> Vec<BackupMetadata> {
-        let backups = self.backups.read().unwrap();
+    pub fn list_backups(&self, collection: Option<&str>) -> Result<Vec<BackupMetadata>> {
+        let backups = self.backups.read()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
 
         if let Some(col) = collection {
-            backups.iter()
+            Ok(backups.iter()
                 .filter(|b| b.collection == col)
                 .cloned()
-                .collect()
+                .collect())
         } else {
-            backups.clone()
+            Ok(backups.clone())
         }
     }
 
@@ -477,27 +487,29 @@ impl BackupManager {
     }
 
     /// Delete backup
-    pub fn delete_backup(&self, backup_id: &str) -> bool {
-        let mut backups = self.backups.write().unwrap();
+    pub fn delete_backup(&self, backup_id: &str) -> Result<bool> {
+        let mut backups = self.backups.write()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         let len_before = backups.len();
         backups.retain(|b| b.backup_id != backup_id);
-        backups.len() < len_before
+        Ok(backups.len() < len_before)
     }
 
     /// Get backup statistics
-    pub fn stats(&self) -> BackupStats {
-        let backups = self.backups.read().unwrap();
+    pub fn stats(&self) -> Result<BackupStats> {
+        let backups = self.backups.read()
+            .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
 
         let total_size: u64 = backups.iter().map(|b| b.size_bytes).sum();
         let oldest = backups.first().map(|b| b.created_at);
         let newest = backups.last().map(|b| b.created_at);
 
-        BackupStats {
+        Ok(BackupStats {
             backup_count: backups.len(),
             total_size_bytes: total_size,
             oldest_backup: oldest,
             newest_backup: newest,
-        }
+        })
     }
 }
 
@@ -857,7 +869,7 @@ mod tests {
         assert!(!metadata.backup_id.is_empty());
         assert_eq!(metadata.collection, "test_collection");
 
-        let backups = manager.list_backups(Some("test_collection"));
+        let backups = manager.list_backups(Some("test_collection")).unwrap();
         assert_eq!(backups.len(), 1);
     }
 

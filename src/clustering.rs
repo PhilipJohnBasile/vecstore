@@ -257,6 +257,7 @@ impl KMeansClustering {
     }
 
     /// Find nearest centroid for a vector
+    #[inline]
     fn find_nearest_centroid(&self, vector: &[f32], centroids: &[Vec<f32>]) -> usize {
         centroids
             .iter()
@@ -268,6 +269,7 @@ impl KMeansClustering {
     }
 
     /// Update centroids based on current assignment
+    #[inline]
     fn update_centroids(
         &self,
         vectors: &[Vec<f32>],
@@ -297,6 +299,7 @@ impl KMeansClustering {
     }
 
     /// Calculate inertia (within-cluster sum of squares)
+    #[inline]
     fn calculate_inertia(
         &self,
         vectors: &[Vec<f32>],
@@ -428,6 +431,7 @@ impl DBSCANClustering {
     }
 
     /// Find neighbors within eps radius
+    #[inline]
     fn region_query(&self, vectors: &[Vec<f32>], point_idx: usize) -> Vec<usize> {
         vectors
             .iter()
@@ -585,6 +589,7 @@ impl HierarchicalClustering {
     }
 
     /// Calculate distance between two clusters based on linkage method
+    #[inline]
     fn cluster_distance(
         &self,
         cluster1: &[usize],

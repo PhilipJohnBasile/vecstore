@@ -248,7 +248,8 @@ impl Autoscaler {
 
     /// Mark scale down event
     pub fn mark_scale_down(&self) {
-        *self.last_scale_down.write().unwrap() = Some(Instant::now());
+        let Ok(mut guard) = self.last_scale_down.write() else { return; };
+        *guard = Some(Instant::now());
     }
 }
 
@@ -310,7 +311,7 @@ impl LoadBalancer {
                 Some(ready[idx].id.clone())
             }
             LoadBalanceStrategy::LeastConnections => {
-                let conns = self.connections.read().unwrap();
+                let Ok(conns) = self.connections.read() else { return None; };
                 ready.iter()
                     .min_by_key(|r| {
                         conns.get(&r.id)
@@ -320,7 +321,7 @@ impl LoadBalancer {
                     .map(|r| r.id.clone())
             }
             LoadBalanceStrategy::LatencyAware => {
-                let lats = self.latencies.read().unwrap();
+                let Ok(lats) = self.latencies.read() else { return None; };
                 ready.iter()
                     .min_by(|a, b| {
                         let la = lats.get(&a.id).unwrap_or(&f64::MAX);
@@ -344,7 +345,7 @@ impl LoadBalancer {
 
     /// Record connection start
     pub fn connection_start(&self, replica_id: &str) {
-        let mut conns = self.connections.write().unwrap();
+        let Ok(mut conns) = self.connections.write() else { return; };
         conns.entry(replica_id.to_string())
             .or_insert_with(|| AtomicUsize::new(0))
             .fetch_add(1, Ordering::SeqCst);
@@ -353,14 +354,14 @@ impl LoadBalancer {
     /// Record connection end with latency
     pub fn connection_end(&self, replica_id: &str, latency_ms: f64) {
         {
-            let conns = self.connections.read().unwrap();
+            let Ok(conns) = self.connections.read() else { return; };
             if let Some(c) = conns.get(replica_id) {
                 c.fetch_sub(1, Ordering::SeqCst);
             }
         }
 
         // Update latency with exponential moving average
-        let mut lats = self.latencies.write().unwrap();
+        let Ok(mut lats) = self.latencies.write() else { return; };
         let entry = lats.entry(replica_id.to_string()).or_insert(latency_ms);
         *entry = *entry * 0.9 + latency_ms * 0.1;
     }
@@ -405,12 +406,14 @@ impl ServerlessCluster {
 
     /// Get current replica count
     pub fn replica_count(&self) -> usize {
-        self.replicas.read().unwrap().len()
+        let Ok(replicas) = self.replicas.read() else { return 0; };
+        replicas.len()
     }
 
     /// Scale to target replicas
     pub fn scale_to(&self, target: usize) -> Result<()> {
-        let mut replicas = self.replicas.write().unwrap();
+        let mut replicas = self.replicas.write()
+            .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire replicas write lock".into()))?;
         let current = replicas.len();
 
         if target > current {
@@ -438,7 +441,7 @@ impl ServerlessCluster {
 
     /// Simulate replica becoming ready
     pub fn mark_replica_ready(&self, replica_id: &str) {
-        let mut replicas = self.replicas.write().unwrap();
+        let Ok(mut replicas) = self.replicas.write() else { return; };
         if let Some(r) = replicas.iter_mut().find(|r| r.id == replica_id) {
             r.state = ReplicaState::Ready;
         }
@@ -446,7 +449,7 @@ impl ServerlessCluster {
 
     /// Remove stopped replicas
     pub fn cleanup_stopped(&self) {
-        let mut replicas = self.replicas.write().unwrap();
+        let Ok(mut replicas) = self.replicas.write() else { return; };
         replicas.retain(|r| r.state != ReplicaState::Stopped);
     }
 
@@ -456,7 +459,7 @@ impl ServerlessCluster {
 
         // Update cost
         {
-            let mut cost = self.total_cost.write().unwrap();
+            let Ok(mut cost) = self.total_cost.write() else { return; };
             *cost += self.config.cost_per_query;
         }
 
@@ -485,25 +488,63 @@ impl ServerlessCluster {
 
     /// Select replica for query
     pub fn select_replica(&self) -> Option<String> {
-        let replicas = self.replicas.read().unwrap();
+        let Ok(replicas) = self.replicas.read() else { return None; };
         self.load_balancer.select(&replicas)
     }
 
     /// Get cluster statistics
     pub fn stats(&self) -> ServerlessStats {
-        let replicas = self.replicas.read().unwrap();
-        let ready = replicas.iter().filter(|r| r.state == ReplicaState::Ready).count();
         let storage_gb = self.storage_bytes.load(Ordering::SeqCst) as f64 / (1024.0 * 1024.0 * 1024.0);
+        let total_queries = self.query_count.load(Ordering::SeqCst);
+
+        let Ok(replicas) = self.replicas.read() else {
+            let Ok(total_cost) = self.total_cost.read() else {
+                return ServerlessStats {
+                    total_replicas: 0,
+                    ready_replicas: 0,
+                    starting_replicas: 0,
+                    draining_replicas: 0,
+                    total_queries,
+                    total_cost: 0.0,
+                    storage_gb,
+                    estimated_monthly_cost: storage_gb * self.config.cost_per_gb_month,
+                };
+            };
+            return ServerlessStats {
+                total_replicas: 0,
+                ready_replicas: 0,
+                starting_replicas: 0,
+                draining_replicas: 0,
+                total_queries,
+                total_cost: *total_cost,
+                storage_gb,
+                estimated_monthly_cost: *total_cost * 30.0 * 24.0 + storage_gb * self.config.cost_per_gb_month,
+            };
+        };
+
+        let ready = replicas.iter().filter(|r| r.state == ReplicaState::Ready).count();
+        let Ok(total_cost) = self.total_cost.read() else {
+            return ServerlessStats {
+                total_replicas: replicas.len(),
+                ready_replicas: ready,
+                starting_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Starting).count(),
+                draining_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Draining).count(),
+                total_queries,
+                total_cost: 0.0,
+                storage_gb,
+                estimated_monthly_cost: storage_gb * self.config.cost_per_gb_month,
+            };
+        };
 
         ServerlessStats {
             total_replicas: replicas.len(),
             ready_replicas: ready,
             starting_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Starting).count(),
             draining_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Draining).count(),
-            total_queries: self.query_count.load(Ordering::SeqCst),
-            total_cost: *self.total_cost.read().unwrap(),
+            total_queries,
+            total_cost: *total_cost,
             storage_gb,
-            estimated_monthly_cost: *self.total_cost.read().unwrap() * 30.0 * 24.0
+            estimated_monthly_cost: *total_cost * 30.0 * 24.0
                 + storage_gb * self.config.cost_per_gb_month,
         }
     }
@@ -594,18 +635,22 @@ impl ColdStartOptimizer {
 
     /// Create snapshot for fast restore
     pub fn create_snapshot(&self, data: Vec<u8>) {
-        *self.snapshot_data.write().unwrap() = Some(data);
-        *self.last_snapshot.write().unwrap() = Some(Instant::now());
+        let Ok(mut snapshot) = self.snapshot_data.write() else { return; };
+        *snapshot = Some(data);
+        let Ok(mut last) = self.last_snapshot.write() else { return; };
+        *last = Some(Instant::now());
     }
 
     /// Get snapshot for restore
     pub fn get_snapshot(&self) -> Option<Vec<u8>> {
-        self.snapshot_data.read().unwrap().clone()
+        let Ok(snapshot) = self.snapshot_data.read() else { return None; };
+        snapshot.clone()
     }
 
     /// Check if snapshot is fresh enough
     pub fn is_snapshot_valid(&self, max_age_secs: u64) -> bool {
-        if let Some(last) = *self.last_snapshot.read().unwrap() {
+        let Ok(last_snapshot) = self.last_snapshot.read() else { return false; };
+        if let Some(last) = *last_snapshot {
             last.elapsed() < Duration::from_secs(max_age_secs)
         } else {
             false

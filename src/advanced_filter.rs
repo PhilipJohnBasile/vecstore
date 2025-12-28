@@ -143,6 +143,7 @@ impl AdvancedFilter {
 }
 
 /// Builder for advanced filters
+#[must_use = "builders do nothing unless built"]
 pub struct FilterBuilder {
     filters: Vec<AdvancedFilter>,
 }
@@ -204,6 +205,7 @@ impl FilterBuilder {
     }
 
     /// Combine with AND
+    #[inline]
     pub fn and(self) -> Self {
         self
     }

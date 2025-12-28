@@ -6,6 +6,7 @@
 // The approach: spawn blocking tasks for CPU-intensive operations like
 // HNSW search, while keeping the API async-friendly.
 
+use crate::error::VecStoreError;
 use crate::{Collection, HybridQuery, Metadata, Neighbor, Query, VecDatabase, VecStore};
 use anyhow::Result;
 use std::path::PathBuf;
@@ -51,7 +52,9 @@ impl AsyncVecStore {
     pub async fn upsert(&self, id: String, vector: Vec<f32>, metadata: Metadata) -> Result<()> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.upsert(id, vector, metadata)
         })
         .await?
@@ -61,7 +64,9 @@ impl AsyncVecStore {
     pub async fn batch_upsert(&self, records: Vec<crate::Record>) -> Result<()> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.batch_upsert(records)
         })
         .await?
@@ -71,7 +76,9 @@ impl AsyncVecStore {
     pub async fn query(&self, query: Query) -> Result<Vec<Neighbor>> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.query(query)
         })
         .await?
@@ -87,7 +94,9 @@ impl AsyncVecStore {
         let filter = filter.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.query_with_filter(vector, k, &filter)
         })
         .await?
@@ -98,7 +107,9 @@ impl AsyncVecStore {
         let id = id.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.remove(&id)
         })
         .await?
@@ -108,32 +119,36 @@ impl AsyncVecStore {
     pub async fn save(&self) -> Result<()> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.save()
         })
         .await?
     }
 
     /// Get the number of vectors in the store
-    pub async fn count(&self) -> usize {
+    pub async fn count(&self) -> Result<usize> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
-            store.count()
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
+            Ok(store.count())
         })
-        .await
-        .unwrap_or(0)
+        .await?
     }
 
     /// Get the vector dimension
-    pub async fn dimension(&self) -> usize {
+    pub async fn dimension(&self) -> Result<usize> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
-            store.dimension()
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
+            Ok(store.dimension())
         })
-        .await
-        .unwrap_or(0)
+        .await?
     }
 
     /// Create a named snapshot asynchronously
@@ -141,7 +156,9 @@ impl AsyncVecStore {
         let name = name.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.create_snapshot(&name)
         })
         .await?
@@ -151,7 +168,9 @@ impl AsyncVecStore {
     pub async fn list_snapshots(&self) -> Result<Vec<(String, String, usize)>> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.list_snapshots()
         })
         .await?
@@ -162,7 +181,9 @@ impl AsyncVecStore {
         let name = name.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.restore_snapshot(&name)
         })
         .await?
@@ -173,7 +194,9 @@ impl AsyncVecStore {
         let name = name.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.delete_snapshot(&name)
         })
         .await?
@@ -189,7 +212,10 @@ impl AsyncVecStore {
     where
         F: FnOnce(&VecStore) -> Result<R>,
     {
-        let store = self.inner.read().unwrap();
+        let store = self
+            .inner
+            .read()
+            .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
         f(&store)
     }
 
@@ -203,7 +229,10 @@ impl AsyncVecStore {
     where
         F: FnOnce(&mut VecStore) -> Result<R>,
     {
-        let mut store = self.inner.write().unwrap();
+        let mut store = self
+            .inner
+            .write()
+            .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
         f(&mut store)
     }
 
@@ -229,7 +258,9 @@ impl AsyncVecStore {
     pub async fn hybrid_query(&self, query: HybridQuery) -> Result<Vec<Neighbor>> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let store = inner.read().unwrap();
+            let store = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("store read lock poisoned".into()))?;
             store.hybrid_query(query)
         })
         .await?
@@ -241,7 +272,9 @@ impl AsyncVecStore {
         let text = text.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut store = inner.write().unwrap();
+            let mut store = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("store write lock poisoned".into()))?;
             store.index_text(&id, &text)
         })
         .await?
@@ -287,7 +320,9 @@ impl AsyncVecDatabase {
         let name = name.to_string();
         let inner = self.inner.clone();
         let collection = tokio::task::spawn_blocking(move || {
-            let mut db = inner.write().unwrap();
+            let mut db = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("database write lock poisoned".into()))?;
             db.create_collection(&name)
         })
         .await??;
@@ -300,7 +335,9 @@ impl AsyncVecDatabase {
         let name = name.to_string();
         let inner = self.inner.clone();
         let collection_opt = tokio::task::spawn_blocking(move || {
-            let db = inner.read().unwrap();
+            let db = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("database read lock poisoned".into()))?;
             db.get_collection(&name)
         })
         .await??;
@@ -312,7 +349,9 @@ impl AsyncVecDatabase {
     pub async fn list_collections(&self) -> Result<Vec<String>> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let db = inner.read().unwrap();
+            let db = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("database read lock poisoned".into()))?;
             db.list_collections()
                 .map_err(|e| anyhow::anyhow!("List collections failed: {}", e))
         })
@@ -324,7 +363,9 @@ impl AsyncVecDatabase {
         let name = name.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut db = inner.write().unwrap();
+            let mut db = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("database write lock poisoned".into()))?;
             db.delete_collection(&name)
                 .map_err(|e| anyhow::anyhow!("Delete collection failed: {}", e))
         })
@@ -349,7 +390,9 @@ impl AsyncCollection {
     pub async fn upsert(&self, id: String, vector: Vec<f32>, metadata: Metadata) -> Result<()> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut collection = inner.write().unwrap();
+            let mut collection = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("collection write lock poisoned".into()))?;
             collection
                 .upsert(id, vector, metadata)
                 .map_err(|e| anyhow::anyhow!("Collection upsert failed: {}", e))
@@ -361,7 +404,9 @@ impl AsyncCollection {
     pub async fn query(&self, query: Query) -> Result<Vec<Neighbor>> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let collection = inner.read().unwrap();
+            let collection = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("collection read lock poisoned".into()))?;
             collection
                 .query(query)
                 .map_err(|e| anyhow::anyhow!("Collection query failed: {}", e))
@@ -374,7 +419,9 @@ impl AsyncCollection {
         let id = id.to_string();
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let mut collection = inner.write().unwrap();
+            let mut collection = inner
+                .write()
+                .map_err(|_| VecStoreError::LockError("collection write lock poisoned".into()))?;
             collection
                 .delete(&id)
                 .map_err(|e| anyhow::anyhow!("Collection delete failed: {}", e))
@@ -386,7 +433,9 @@ impl AsyncCollection {
     pub async fn count(&self) -> Result<usize> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let collection = inner.read().unwrap();
+            let collection = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("collection read lock poisoned".into()))?;
             collection
                 .count()
                 .map_err(|e| anyhow::anyhow!("Collection count failed: {}", e))
@@ -398,7 +447,9 @@ impl AsyncCollection {
     pub async fn stats(&self) -> Result<crate::namespace_manager::NamespaceStats> {
         let inner = self.inner.clone();
         tokio::task::spawn_blocking(move || {
-            let collection = inner.read().unwrap();
+            let collection = inner
+                .read()
+                .map_err(|_| VecStoreError::LockError("collection read lock poisoned".into()))?;
             collection
                 .stats()
                 .map_err(|e| anyhow::anyhow!("Collection stats failed: {}", e))
@@ -431,7 +482,7 @@ mod tests {
             .unwrap();
 
         // Count
-        assert_eq!(store.count().await, 2);
+        assert_eq!(store.count().await.unwrap(), 2);
 
         // Query
         let results = store
@@ -550,11 +601,11 @@ mod tests {
             .upsert("doc2".into(), vec![2.0, 0.0, 0.0], meta)
             .await
             .unwrap();
-        assert_eq!(store.count().await, 2);
+        assert_eq!(store.count().await.unwrap(), 2);
 
         // Restore
         store.restore_snapshot("test-snapshot").await.unwrap();
-        assert_eq!(store.count().await, 1);
+        assert_eq!(store.count().await.unwrap(), 1);
 
         // List snapshots
         let snapshots = store.list_snapshots().await.unwrap();

@@ -243,6 +243,7 @@ impl ProductQuantizer {
     ///
     /// # Returns
     /// Vector of codes (one per subvector)
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if !self.trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -285,6 +286,7 @@ impl ProductQuantizer {
     ///
     /// # Returns
     /// Reconstructed (approximate) vector
+    #[inline]
     pub fn decode(&self, codes: &[u8]) -> Result<Vec<f32>> {
         if !self.trained {
             return Err(anyhow!("Quantizer not trained"));
@@ -313,6 +315,7 @@ impl ProductQuantizer {
     /// * `query` - Full-precision query vector
     /// * `codes` - PQ codes of database vector
     /// * `distance_table` - Precomputed distances (from compute_distance_table)
+    #[inline]
     pub fn asymmetric_distance(&self, codes: &[u8], distance_table: &[Vec<f32>]) -> f32 {
         codes
             .iter()
@@ -331,6 +334,7 @@ impl ProductQuantizer {
     ///
     /// # Returns
     /// Distance table: \[num_subvectors\]\[num_centroids\]
+    #[inline]
     pub fn compute_distance_table(&self, query: &[f32]) -> Vec<Vec<f32>> {
         let mut table = Vec::with_capacity(self.config.num_subvectors);
 
@@ -353,6 +357,7 @@ impl ProductQuantizer {
     /// Get memory usage reduction factor
     ///
     /// Returns how much smaller PQ codes are compared to full vectors.
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         let original_size = self.dimension * 4; // 4 bytes per float
         let compressed_size = self.config.num_subvectors; // 1 byte per code
@@ -360,11 +365,13 @@ impl ProductQuantizer {
     }
 
     /// Check if quantizer is trained
+    #[inline]
     pub fn is_trained(&self) -> bool {
         self.trained
     }
 
     /// Get configuration
+    #[inline]
     pub fn config(&self) -> &PQConfig {
         &self.config
     }
@@ -455,21 +462,25 @@ impl PQVectorStore {
     }
 
     /// Get number of vectors
+    #[inline]
     pub fn len(&self) -> usize {
         self.codes.len()
     }
 
     /// Check if empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.codes.is_empty()
     }
 
     /// Get compression ratio
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         self.quantizer.compression_ratio()
     }
 
     /// Get memory usage in bytes
+    #[inline]
     pub fn memory_usage(&self) -> usize {
         self.codes.len() * self.quantizer.config.num_subvectors
     }
@@ -477,6 +488,7 @@ impl PQVectorStore {
 
 // Helper functions
 
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b.iter())
@@ -485,6 +497,7 @@ fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
         .sqrt()
 }
 
+#[inline]
 fn compute_mean(vectors: &[&Vec<f32>], dim: usize) -> Vec<f32> {
     let mut mean = vec![0.0; dim];
     let n = vectors.len() as f32;

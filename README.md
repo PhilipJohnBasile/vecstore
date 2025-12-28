@@ -27,7 +27,7 @@
 
 ```toml
 [dependencies]
-vecstore = "0.0.1"
+vecstore = "0.1.0"
 ```
 
 ```rust
@@ -151,7 +151,7 @@ const results = store.query(queryVector, 10);
 
 ## Alpha Notice
 
-VecStore is in active development (0.0.x). APIs and file formats may change. Not recommended for production workloads with data you can't regenerate.
+VecStore is in active development (0.1.x). APIs and file formats may change. Not recommended for production workloads with data you can't regenerate.
 
 ---
 

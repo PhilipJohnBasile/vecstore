@@ -224,22 +224,29 @@ impl Federation {
             avg_latency_ms: RwLock::new(0.0),
         });
 
-        self.members.write().unwrap().insert(member.id.clone(), state);
+        let mut members = self.members.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
+        members.insert(member.id.clone(), state);
         Ok(())
     }
 
     /// Remove a member from the federation
     pub fn remove_member(&self, member_id: &str) -> Result<()> {
-        self.members.write().unwrap().remove(member_id)
+        let mut members = self.members.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
+        members.remove(member_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Member {} not found", member_id)))?;
         Ok(())
     }
 
     /// Update member configuration
     pub fn update_member(&self, member: FederationMember) -> Result<()> {
-        let mut members = self.members.write().unwrap();
+        let mut members = self.members.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
         if let Some(state) = members.get_mut(&member.id) {
             // Create new state preserving runtime info
+            let avg_latency = *state.avg_latency_ms.read()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on avg_latency_ms".into()))?;
             let new_state = Arc::new(MemberState {
                 member,
                 health: state.health.clone(),
@@ -247,7 +254,7 @@ impl Federation {
                 active_queries: AtomicU64::new(state.active_queries.load(Ordering::Relaxed)),
                 total_queries: AtomicU64::new(state.total_queries.load(Ordering::Relaxed)),
                 total_errors: AtomicU64::new(state.total_errors.load(Ordering::Relaxed)),
-                avg_latency_ms: RwLock::new(*state.avg_latency_ms.read().unwrap()),
+                avg_latency_ms: RwLock::new(avg_latency),
             });
             members.insert(new_state.member.id.clone(), new_state);
             Ok(())
@@ -338,7 +345,8 @@ impl Federation {
     }
 
     fn get_eligible_members(&self, query: &FederatedQuery) -> Result<Vec<Arc<MemberState>>> {
-        let members = self.members.read().unwrap();
+        let members = self.members.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on members".into()))?;
         let mut eligible = Vec::new();
 
         for state in members.values() {
@@ -475,14 +483,16 @@ impl Federation {
     }
 
     fn get_member_priority(&self, member_id: &str) -> u32 {
-        self.members.read().unwrap()
+        let Ok(members) = self.members.read() else { return 0; };
+        members
             .get(member_id)
             .map(|s| s.member.priority)
             .unwrap_or(0)
     }
 
     fn get_member_weight(&self, member_id: &str) -> f32 {
-        self.members.read().unwrap()
+        let Ok(members) = self.members.read() else { return 1.0; };
+        members
             .get(member_id)
             .map(|s| s.member.weight)
             .unwrap_or(1.0)
@@ -506,7 +516,7 @@ impl Federation {
     }
 
     fn get_cached(&self, key: &str) -> Option<Vec<FederatedResult>> {
-        let cache = self.cache.read().unwrap();
+        let Ok(cache) = self.cache.read() else { return None; };
         if let Some(cached) = cache.get(key) {
             if cached.cached_at.elapsed() < self.config.cache_ttl {
                 return Some(cached.results.clone());
@@ -516,7 +526,7 @@ impl Federation {
     }
 
     fn cache_result(&self, key: &str, results: Vec<FederatedResult>) {
-        let mut cache = self.cache.write().unwrap();
+        let Ok(mut cache) = self.cache.write() else { return; };
         cache.insert(key.to_string(), CachedResult {
             results,
             cached_at: Instant::now(),
@@ -538,7 +548,8 @@ impl Federation {
 
     /// Update member health status
     pub fn update_health(&self, member_id: &str, _health: MemberHealth) -> Result<()> {
-        let members = self.members.read().unwrap();
+        let members = self.members.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on members".into()))?;
         let Some(_state) = members.get(member_id) else {
             return Err(VecStoreError::NotFound(format!("Member {} not found", member_id)));
         };
@@ -548,19 +559,33 @@ impl Federation {
 
     /// Get federation status
     pub fn get_status(&self) -> FederationStatus {
-        let members = self.members.read().unwrap();
+        let Ok(members) = self.members.read() else {
+            return FederationStatus {
+                name: self.config.name.clone(),
+                total_members: 0,
+                healthy_members: 0,
+                member_statuses: vec![],
+                queries_total: self.stats.queries_total.load(Ordering::Relaxed),
+                queries_succeeded: self.stats.queries_succeeded.load(Ordering::Relaxed),
+                queries_failed: self.stats.queries_failed.load(Ordering::Relaxed),
+                cache_hit_rate: 0.0,
+            };
+        };
 
         let member_statuses: Vec<MemberStatus> = members.values()
-            .map(|s| MemberStatus {
-                id: s.member.id.clone(),
-                name: s.member.name.clone(),
-                endpoint: s.member.endpoint.clone(),
-                health: s.health.clone(),
-                active_queries: s.active_queries.load(Ordering::Relaxed),
-                total_queries: s.total_queries.load(Ordering::Relaxed),
-                total_errors: s.total_errors.load(Ordering::Relaxed),
-                avg_latency_ms: *s.avg_latency_ms.read().unwrap(),
-                collections: s.member.collections.clone(),
+            .map(|s| {
+                let avg_latency = s.avg_latency_ms.read().map(|g| *g).unwrap_or(0.0);
+                MemberStatus {
+                    id: s.member.id.clone(),
+                    name: s.member.name.clone(),
+                    endpoint: s.member.endpoint.clone(),
+                    health: s.health.clone(),
+                    active_queries: s.active_queries.load(Ordering::Relaxed),
+                    total_queries: s.total_queries.load(Ordering::Relaxed),
+                    total_errors: s.total_errors.load(Ordering::Relaxed),
+                    avg_latency_ms: avg_latency,
+                    collections: s.member.collections.clone(),
+                }
             })
             .collect();
 
@@ -590,7 +615,8 @@ impl Federation {
 
     /// List all members
     pub fn list_members(&self) -> Vec<FederationMember> {
-        self.members.read().unwrap()
+        let Ok(members) = self.members.read() else { return vec![]; };
+        members
             .values()
             .map(|s| s.member.clone())
             .collect()
@@ -598,14 +624,16 @@ impl Federation {
 
     /// Get a specific member
     pub fn get_member(&self, member_id: &str) -> Option<FederationMember> {
-        self.members.read().unwrap()
+        let Ok(members) = self.members.read() else { return None; };
+        members
             .get(member_id)
             .map(|s| s.member.clone())
     }
 
     /// Clear cache
     pub fn clear_cache(&self) {
-        self.cache.write().unwrap().clear();
+        let Ok(mut cache) = self.cache.write() else { return; };
+        cache.clear();
     }
 }
 
@@ -669,6 +697,7 @@ pub struct FederationStatus {
 }
 
 /// Federation builder
+#[must_use = "builders do nothing unless built"]
 pub struct FederationBuilder {
     config: FederationConfig,
     members: Vec<FederationMember>,
@@ -685,26 +714,31 @@ impl FederationBuilder {
         }
     }
 
+    #[inline]
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.config.total_timeout = timeout;
         self
     }
 
+    #[inline]
     pub fn with_merge_strategy(mut self, strategy: MergeStrategy) -> Self {
         self.config.merge_strategy = strategy;
         self
     }
 
+    #[inline]
     pub fn with_quorum(mut self, min_quorum: usize) -> Self {
         self.config.min_quorum = min_quorum;
         self
     }
 
+    #[inline]
     pub fn add_member(mut self, member: FederationMember) -> Self {
         self.members.push(member);
         self
     }
 
+    #[must_use]
     pub fn build(self) -> Result<Federation> {
         let federation = Federation::new(self.config);
 

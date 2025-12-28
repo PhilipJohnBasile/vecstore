@@ -2,6 +2,7 @@
 //!
 //! Provides comprehensive audit trails for compliance and security monitoring.
 
+use crate::error::VecStoreError;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::fs::{File, OpenOptions};
@@ -234,18 +235,24 @@ impl MemoryBackend {
         }
     }
 
-    pub fn get_entries(&self) -> Vec<AuditEntry> {
-        self.entries.lock().unwrap().iter().cloned().collect()
+    pub fn get_entries(&self) -> Result<Vec<AuditEntry>, VecStoreError> {
+        let entries = self.entries.lock()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
+        Ok(entries.iter().cloned().collect())
     }
 
-    pub fn clear(&self) {
-        self.entries.lock().unwrap().clear();
+    pub fn clear(&self) -> Result<(), VecStoreError> {
+        self.entries.lock()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .clear();
+        Ok(())
     }
 }
 
 impl AuditBackend for MemoryBackend {
     fn write(&mut self, entry: &AuditEntry) -> Result<(), String> {
-        let mut entries = self.entries.lock().unwrap();
+        let mut entries = self.entries.lock()
+            .map_err(|_| "entries lock poisoned".to_string())?;
         if entries.len() >= self.max_size {
             entries.pop_front();
         }
@@ -291,7 +298,8 @@ impl AuditBackend for FileBackend {
         let json = serde_json::to_string(entry)
             .map_err(|e| format!("Failed to serialize audit entry: {}", e))?;
 
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.lock()
+            .map_err(|_| "buffer lock poisoned".to_string())?;
         buffer.push(json);
 
         if buffer.len() >= self.buffer_size {
@@ -303,12 +311,14 @@ impl AuditBackend for FileBackend {
     }
 
     fn flush(&mut self) -> Result<(), String> {
-        let mut buffer = self.buffer.lock().unwrap();
+        let mut buffer = self.buffer.lock()
+            .map_err(|_| "buffer lock poisoned".to_string())?;
         if buffer.is_empty() {
             return Ok(());
         }
 
-        let mut file = self.file.lock().unwrap();
+        let mut file = self.file.lock()
+            .map_err(|_| "file lock poisoned".to_string())?;
 
         for line in buffer.iter() {
             writeln!(file, "{}", line).map_err(|e| format!("Failed to write audit log: {}", e))?;
@@ -394,8 +404,11 @@ impl AuditLogger {
     }
 
     /// Add a backend
-    pub fn add_backend(&self, backend: Box<dyn AuditBackend>) {
-        self.backends.lock().unwrap().push(backend);
+    pub fn add_backend(&self, backend: Box<dyn AuditBackend>) -> Result<(), VecStoreError> {
+        self.backends.lock()
+            .map_err(|_| VecStoreError::LockError("backends lock poisoned".into()))?
+            .push(backend);
+        Ok(())
     }
 
     /// Log an audit entry
@@ -417,7 +430,8 @@ impl AuditLogger {
         }
 
         // Write to all backends
-        let mut backends = self.backends.lock().unwrap();
+        let mut backends = self.backends.lock()
+            .map_err(|_| "backends lock poisoned".to_string())?;
         for backend in backends.iter_mut() {
             backend.write(&entry)?;
         }
@@ -427,7 +441,8 @@ impl AuditLogger {
 
     /// Flush all backends
     pub fn flush(&self) -> Result<(), String> {
-        let mut backends = self.backends.lock().unwrap();
+        let mut backends = self.backends.lock()
+            .map_err(|_| "backends lock poisoned".to_string())?;
         for backend in backends.iter_mut() {
             backend.flush()?;
         }
@@ -551,7 +566,7 @@ mod tests {
         let entry = AuditEntry::new(AuditEventType::Insert, "test");
         backend.write(&entry).unwrap();
 
-        let entries = backend.get_entries();
+        let entries = backend.get_entries().unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].action, "test");
     }
@@ -565,7 +580,7 @@ mod tests {
             backend.write(&entry).unwrap();
         }
 
-        let entries = backend.get_entries();
+        let entries = backend.get_entries().unwrap();
         assert_eq!(entries.len(), 3);
         // Should have the last 3 entries
         assert_eq!(entries[0].action, "action_2");
@@ -580,12 +595,12 @@ mod tests {
             let ptr = &*backend as *const MemoryBackend;
             &*ptr
         };
-        logger.add_backend(backend);
+        logger.add_backend(backend).unwrap();
 
         let entry = AuditEntry::new(AuditEventType::Query, "test query");
         logger.log(entry).unwrap();
 
-        let entries = backend_ref.get_entries();
+        let entries = backend_ref.get_entries().unwrap();
         assert_eq!(entries.len(), 1);
     }
 
@@ -600,7 +615,7 @@ mod tests {
             let ptr = &*backend as *const MemoryBackend;
             &*ptr
         };
-        logger.add_backend(backend);
+        logger.add_backend(backend).unwrap();
 
         // Info level - should be filtered
         let entry1 =
@@ -612,7 +627,7 @@ mod tests {
             .with_severity(AuditSeverity::Warning);
         logger.log(entry2).unwrap();
 
-        let entries = backend_ref.get_entries();
+        let entries = backend_ref.get_entries().unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0].action, "warning entry");
     }
@@ -628,7 +643,7 @@ mod tests {
             let ptr = &*backend as *const MemoryBackend;
             &*ptr
         };
-        logger.add_backend(backend);
+        logger.add_backend(backend).unwrap();
 
         // Insert - should be logged
         logger.log_insert("vec_1", Some("user_1")).unwrap();
@@ -639,7 +654,7 @@ mod tests {
         // Delete - should be logged
         logger.log_delete("vec_2", Some("user_1")).unwrap();
 
-        let entries = backend_ref.get_entries();
+        let entries = backend_ref.get_entries().unwrap();
         assert_eq!(entries.len(), 2);
     }
 
@@ -651,7 +666,7 @@ mod tests {
             let ptr = &*backend as *const MemoryBackend;
             &*ptr
         };
-        logger.add_backend(backend);
+        logger.add_backend(backend).unwrap();
 
         logger.log_insert("vec_1", Some("user_1")).unwrap();
         logger.log_query("knn", 50, Some("user_2")).unwrap();
@@ -663,7 +678,7 @@ mod tests {
             .log_authz("user_5", "vec_5", "read", AuditOutcome::Denied)
             .unwrap();
 
-        let entries = backend_ref.get_entries();
+        let entries = backend_ref.get_entries().unwrap();
         assert_eq!(entries.len(), 5);
     }
 
@@ -678,11 +693,11 @@ mod tests {
             let ptr = &*backend as *const MemoryBackend;
             &*ptr
         };
-        logger.add_backend(backend);
+        logger.add_backend(backend).unwrap();
 
         logger.log_insert("vec_1", Some("user_1")).unwrap();
 
-        let entries = backend_ref.get_entries();
+        let entries = backend_ref.get_entries().unwrap();
         assert_eq!(entries.len(), 0);
     }
 }

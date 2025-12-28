@@ -33,6 +33,8 @@
 //! ```
 
 #[cfg(feature = "async")]
+use crate::error::VecStoreError;
+#[cfg(feature = "async")]
 use crate::store::{Metadata, Neighbor, VecStore};
 #[cfg(feature = "async")]
 use anyhow::Result;
@@ -101,7 +103,9 @@ impl AsyncVecStore {
         for chunk in chunks {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let mut store = store_clone.lock().unwrap();
+                let mut store = store_clone
+                    .lock()
+                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch upsert".into()))?;
                 for (id, vector, metadata) in chunk {
                     let metadata: Metadata = serde_json::from_value(metadata)?;
                     store.upsert(id, vector, metadata)?;
@@ -150,7 +154,9 @@ impl AsyncVecStore {
         for query_vec in queries {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let store = store_clone.lock().unwrap();
+                let store = store_clone
+                    .lock()
+                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch query".into()))?;
                 let query = Query::new(query_vec).with_limit(k);
                 store.query(query)
             });
@@ -173,7 +179,9 @@ impl AsyncVecStore {
         for id in ids {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let mut store = store_clone.lock().unwrap();
+                let mut store = store_clone
+                    .lock()
+                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch delete".into()))?;
                 store.delete(&id)
             });
             handles.push(handle);
@@ -215,7 +223,9 @@ mod tests {
 
         async_store.batch_upsert(items).await.unwrap();
 
-        let store_guard = async_store.store.lock().unwrap();
+        let Ok(store_guard) = async_store.store.lock() else {
+            panic!("failed to acquire store lock in test");
+        };
         assert_eq!(store_guard.len(), 100);
     }
 

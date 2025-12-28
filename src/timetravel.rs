@@ -253,7 +253,8 @@ impl TimeTravelIndex {
         }
 
         let ts = Timestamp::now();
-        let mut histories = self.histories.write().unwrap();
+        let mut histories = self.histories.write()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         let history = histories.entry(id.to_string()).or_insert_with(|| {
             let mut h = VersionHistory::new(id.to_string());
@@ -279,13 +280,15 @@ impl TimeTravelIndex {
 
         // Update timestamp index
         {
-            let mut ts_idx = self.timestamp_index.write().unwrap();
+            let mut ts_idx = self.timestamp_index.write()
+                .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
             ts_idx.entry(ts).or_insert_with(Vec::new).push(id.to_string());
         }
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write()
+                .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
             stats.total_versions += 1;
             if op == VersionOp::Insert {
                 stats.total_vectors += 1;
@@ -303,7 +306,8 @@ impl TimeTravelIndex {
     /// Delete a vector
     pub fn delete(&self, id: &str) -> Result<Option<Timestamp>> {
         let ts = Timestamp::now();
-        let mut histories = self.histories.write().unwrap();
+        let mut histories = self.histories.write()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         if let Some(history) = histories.get_mut(id) {
             let prev = history.versions.first().map(|v| v.timestamp);
@@ -318,13 +322,15 @@ impl TimeTravelIndex {
 
             // Update timestamp index
             {
-                let mut ts_idx = self.timestamp_index.write().unwrap();
+                let mut ts_idx = self.timestamp_index.write()
+                    .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
                 ts_idx.entry(ts).or_insert_with(Vec::new).push(id.to_string());
             }
 
             // Update stats
             {
-                let mut stats = self.stats.write().unwrap();
+                let mut stats = self.stats.write()
+                    .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
                 stats.total_versions += 1;
                 stats.total_vectors = stats.total_vectors.saturating_sub(1);
             }
@@ -336,9 +342,10 @@ impl TimeTravelIndex {
     }
 
     /// Get current vector
-    pub fn get(&self, id: &str) -> Option<(Vec<f32>, Option<serde_json::Value>)> {
-        let histories = self.histories.read().unwrap();
-        histories.get(id).and_then(|h| {
+    pub fn get(&self, id: &str) -> Result<Option<(Vec<f32>, Option<serde_json::Value>)>> {
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
+        Ok(histories.get(id).and_then(|h| {
             h.versions.first().and_then(|v| {
                 if v.op != VersionOp::Delete {
                     Some((v.vector.clone()?, v.metadata.clone()))
@@ -346,13 +353,14 @@ impl TimeTravelIndex {
                     None
                 }
             })
-        })
+        }))
     }
 
     /// Get vector at specific timestamp
-    pub fn get_at(&self, id: &str, ts: Timestamp) -> Option<(Vec<f32>, Option<serde_json::Value>)> {
-        let histories = self.histories.read().unwrap();
-        histories.get(id).and_then(|h| {
+    pub fn get_at(&self, id: &str, ts: Timestamp) -> Result<Option<(Vec<f32>, Option<serde_json::Value>)>> {
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
+        Ok(histories.get(id).and_then(|h| {
             h.get_at(ts).and_then(|v| {
                 if v.op != VersionOp::Delete {
                     Some((v.vector.clone()?, v.metadata.clone()))
@@ -360,17 +368,18 @@ impl TimeTravelIndex {
                     None
                 }
             })
-        })
+        }))
     }
 
     /// Get all vectors that existed at timestamp
-    pub fn get_all_at(&self, ts: Timestamp) -> Vec<(String, Vec<f32>)> {
-        let histories = self.histories.read().unwrap();
-        histories.iter()
+    pub fn get_all_at(&self, ts: Timestamp) -> Result<Vec<(String, Vec<f32>)>> {
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
+        Ok(histories.iter()
             .filter_map(|(id, h)| {
                 h.vector_at(ts).map(|v| (id.clone(), v.clone()))
             })
-            .collect()
+            .collect())
     }
 
     /// Search current state
@@ -392,7 +401,8 @@ impl TimeTravelIndex {
             });
         }
 
-        let histories = self.histories.read().unwrap();
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         let mut results: Vec<_> = histories.iter()
             .filter_map(|(id, h)| {
@@ -417,8 +427,10 @@ impl TimeTravelIndex {
     }
 
     /// Get version history for a vector
-    pub fn get_history(&self, id: &str) -> Option<VersionHistory> {
-        self.histories.read().unwrap().get(id).cloned()
+    pub fn get_history(&self, id: &str) -> Result<Option<VersionHistory>> {
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
+        Ok(histories.get(id).cloned())
     }
 
     /// Get changes between two timestamps
@@ -426,9 +438,11 @@ impl TimeTravelIndex {
         &self,
         from: Timestamp,
         to: Timestamp,
-    ) -> Vec<ChangeRecord> {
-        let ts_idx = self.timestamp_index.read().unwrap();
-        let histories = self.histories.read().unwrap();
+    ) -> Result<Vec<ChangeRecord>> {
+        let ts_idx = self.timestamp_index.read()
+            .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
+        let histories = self.histories.read()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         let mut changes = Vec::new();
 
@@ -446,14 +460,16 @@ impl TimeTravelIndex {
             }
         }
 
-        changes
+        Ok(changes)
     }
 
     /// Run garbage collection
-    pub fn gc(&self) -> GCResult {
+    pub fn gc(&self) -> Result<GCResult> {
         let cutoff = Timestamp::hours_ago(self.config.max_version_age_hours as i64);
-        let mut histories = self.histories.write().unwrap();
-        let mut ts_idx = self.timestamp_index.write().unwrap();
+        let mut histories = self.histories.write()
+            .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
+        let mut ts_idx = self.timestamp_index.write()
+            .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
 
         let mut versions_removed = 0;
 
@@ -472,16 +488,18 @@ impl TimeTravelIndex {
         // Clean timestamp index
         ts_idx.retain(|ts, _| *ts >= cutoff);
 
-        GCResult {
+        Ok(GCResult {
             versions_removed,
             vectors_removed,
             cutoff_timestamp: cutoff,
-        }
+        })
     }
 
     /// Get statistics
-    pub fn stats(&self) -> TimeTravelStats {
-        self.stats.read().unwrap().clone()
+    pub fn stats(&self) -> Result<TimeTravelStats> {
+        let stats = self.stats.read()
+            .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
+        Ok(stats.clone())
     }
 }
 
@@ -549,7 +567,7 @@ impl SnapshotManager {
     }
 
     /// Create a named snapshot at current time
-    pub fn create(&self, description: Option<String>, vector_count: usize) -> Snapshot {
+    pub fn create(&self, description: Option<String>, vector_count: usize) -> Result<Snapshot> {
         let snapshot = Snapshot {
             id: format!("snap-{}", uuid_simple()),
             timestamp: Timestamp::now(),
@@ -557,29 +575,36 @@ impl SnapshotManager {
             description,
         };
 
-        self.snapshots.write().unwrap().push(snapshot.clone());
-        snapshot
+        self.snapshots.write()
+            .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?
+            .push(snapshot.clone());
+        Ok(snapshot)
     }
 
     /// List all snapshots
-    pub fn list(&self) -> Vec<Snapshot> {
-        self.snapshots.read().unwrap().clone()
+    pub fn list(&self) -> Result<Vec<Snapshot>> {
+        let snapshots = self.snapshots.read()
+            .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
+        Ok(snapshots.clone())
     }
 
     /// Get snapshot by ID
-    pub fn get(&self, id: &str) -> Option<Snapshot> {
-        self.snapshots.read().unwrap()
+    pub fn get(&self, id: &str) -> Result<Option<Snapshot>> {
+        let snapshots = self.snapshots.read()
+            .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
+        Ok(snapshots
             .iter()
             .find(|s| s.id == id)
-            .cloned()
+            .cloned())
     }
 
     /// Delete snapshot
-    pub fn delete(&self, id: &str) -> bool {
-        let mut snapshots = self.snapshots.write().unwrap();
+    pub fn delete(&self, id: &str) -> Result<bool> {
+        let mut snapshots = self.snapshots.write()
+            .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
         let before = snapshots.len();
         snapshots.retain(|s| s.id != id);
-        snapshots.len() < before
+        Ok(snapshots.len() < before)
     }
 }
 
@@ -640,15 +665,15 @@ mod tests {
         let ts2 = index.upsert("doc1", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
 
         // Current should return updated
-        let current = index.get("doc1").unwrap();
+        let current = index.get("doc1").unwrap().unwrap();
         assert_eq!(current.0, vec![0.0, 1.0, 0.0, 0.0]);
 
         // Historical should return original
-        let historical = index.get_at("doc1", ts1).unwrap();
+        let historical = index.get_at("doc1", ts1).unwrap().unwrap();
         assert_eq!(historical.0, vec![1.0, 0.0, 0.0, 0.0]);
 
         // History should have 2 versions
-        let history = index.get_history("doc1").unwrap();
+        let history = index.get_history("doc1").unwrap().unwrap();
         assert_eq!(history.versions.len(), 2);
     }
 

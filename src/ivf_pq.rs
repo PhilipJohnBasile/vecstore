@@ -306,6 +306,7 @@ impl IVFPQIndex {
     ///
     /// # Returns
     /// List of (id, distance) pairs sorted by distance
+    #[inline]
     pub fn search(&self, query: &[f32], k: usize, nprobe: usize) -> Result<Vec<(String, f32)>> {
         if !self.is_trained {
             return Err(anyhow!("Index must be trained before searching"));
@@ -414,6 +415,7 @@ impl IVFPQIndex {
     }
 
     /// Find the nearest cluster for a vector
+    #[inline]
     fn find_nearest_cluster(&self, vector: &[f32]) -> usize {
         let mut min_distance = f32::INFINITY;
         let mut nearest_cluster = 0;
@@ -430,6 +432,7 @@ impl IVFPQIndex {
     }
 
     /// Find nprobe nearest clusters for a query
+    #[inline]
     fn find_nearest_clusters(&self, query: &[f32], nprobe: usize) -> Vec<usize> {
         let mut distances: Vec<(usize, f32)> = self
             .cluster_centroids
@@ -448,26 +451,31 @@ impl IVFPQIndex {
     }
 
     /// Get the number of vectors in the index
+    #[inline]
     pub fn len(&self) -> usize {
         self.inverted_lists.iter().map(|list| list.len()).sum()
     }
 
     /// Check if the index is empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     /// Check if the index is trained
+    #[inline]
     pub fn is_trained(&self) -> bool {
         self.is_trained
     }
 
     /// Get the dimension
+    #[inline]
     pub fn dimension(&self) -> usize {
         self.dimension
     }
 
     /// Get the configuration
+    #[inline]
     pub fn config(&self) -> &IVFPQConfig {
         &self.config
     }
@@ -487,6 +495,7 @@ pub struct IVFPQStats {
 }
 
 /// Helper function: Euclidean distance
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b.iter())

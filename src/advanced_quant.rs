@@ -812,11 +812,13 @@ impl QuantizedIndex {
             _ => self.four_bit_quantizer.encode(vector),
         };
 
-        let mut vectors = self.vectors.write().unwrap();
+        let mut vectors = self.vectors.write()
+            .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire write lock on vectors".into()))?;
         vectors.insert(id.to_string(), quantized);
 
         if self.config.rescore {
-            let mut originals = self.original_vectors.write().unwrap();
+            let mut originals = self.original_vectors.write()
+                .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire write lock on original_vectors".into()))?;
             originals.insert(id.to_string(), vector.to_vec());
         }
 
@@ -825,7 +827,7 @@ impl QuantizedIndex {
 
     /// Search with quantized comparison
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<(String, f32)> {
-        let vectors = self.vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else { return Vec::new(); };
 
         // First pass: approximate search with quantized vectors
         let candidates_k = if self.config.rescore {
@@ -860,7 +862,7 @@ impl QuantizedIndex {
 
         // Second pass: rescore with original vectors
         if self.config.rescore {
-            let originals = self.original_vectors.read().unwrap();
+            let Ok(originals) = self.original_vectors.read() else { return candidates; };
 
             candidates = candidates
                 .into_iter()
@@ -881,8 +883,24 @@ impl QuantizedIndex {
 
     /// Get statistics
     pub fn stats(&self) -> QuantizedIndexStats {
-        let vectors = self.vectors.read().unwrap();
-        let originals = self.original_vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else {
+            return QuantizedIndexStats {
+                vector_count: 0,
+                quantized_bytes: 0,
+                original_bytes: 0,
+                compression_ratio: 0.0,
+                bit_width: self.config.stored_bits,
+            };
+        };
+        let Ok(originals) = self.original_vectors.read() else {
+            return QuantizedIndexStats {
+                vector_count: vectors.len(),
+                quantized_bytes: vectors.values().map(|v| v.size_bytes()).sum(),
+                original_bytes: 0,
+                compression_ratio: 0.0,
+                bit_width: self.config.stored_bits,
+            };
+        };
 
         let total_quantized: usize = vectors.values().map(|v| v.size_bytes()).sum();
         let total_original: usize = originals.values().map(|v| v.len() * 4).sum();

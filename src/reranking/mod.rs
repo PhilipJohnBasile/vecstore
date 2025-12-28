@@ -42,7 +42,8 @@ pub use cross_encoder::{CrossEncoderModel, CrossEncoderReranker};
 // ColBERT late interaction reranking
 pub mod colbert;
 pub use colbert::{
-    ColBERTBatchReranker, ColBERTConfig, ColBERTReranker, SimilarityMetric, TokenEmbeddings,
+    CacheStats as ColBERTCacheStats, ColBERTBatchReranker, ColBERTConfig, ColBERTModel,
+    ColBERTReranker, SimilarityMetric, TokenEmbeddings,
 };
 
 use crate::store::Neighbor;

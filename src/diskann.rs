@@ -317,6 +317,7 @@ impl PQQuantizer {
     }
 
     /// Fast distance lookup using precomputed table
+    #[inline]
     pub fn table_distance(&self, table: &[Vec<f32>], codes: &[u8]) -> f32 {
         codes
             .iter()
@@ -561,6 +562,7 @@ impl DiskANN {
     }
 
     /// Greedy search during build (uses full vectors)
+    #[inline]
     fn greedy_search_build(
         &self,
         vectors: &[Vec<f32>],
@@ -619,6 +621,7 @@ impl DiskANN {
     }
 
     /// RobustPrune: Select neighbors using α-RNG rule
+    #[inline]
     fn robust_prune(
         &self,
         vectors: &[Vec<f32>],
@@ -672,6 +675,7 @@ impl DiskANN {
     }
 
     /// Search for k nearest neighbors
+    #[inline]
     pub fn search(&self, query: &[f32], k: usize, beam_width: Option<usize>) -> Result<Vec<DiskANNResult>> {
         self.stats.total_searches.fetch_add(1, Ordering::Relaxed);
 

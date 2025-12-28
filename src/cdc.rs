@@ -506,7 +506,9 @@ impl EventBroadcaster {
 
         // Add to subscribers list
         {
-            let mut subs = self.inner.subscribers.write().unwrap();
+            let Ok(mut subs) = self.inner.subscribers.write() else {
+                return ChangeStream::new(receiver, filter);
+            };
             subs.push(sender);
             self.inner
                 .stats
@@ -516,18 +518,18 @@ impl EventBroadcaster {
 
         // If filter has from_sequence, replay buffered events
         if let Some(from_seq) = filter.from_sequence {
-            let buffer = self.inner.buffer.read().unwrap();
+            let Ok(buffer) = self.inner.buffer.read() else {
+                return ChangeStream::new(receiver, filter);
+            };
             for event in buffer.iter() {
                 if event.sequence >= from_seq {
                     // Already filtered by the stream
-                    let _ = self
-                        .inner
-                        .subscribers
-                        .read()
-                        .unwrap()
-                        .last()
-                        .unwrap()
-                        .send(event.clone());
+                    let Ok(subs) = self.inner.subscribers.read() else {
+                        continue;
+                    };
+                    if let Some(last_sub) = subs.last() {
+                        let _ = last_sub.send(event.clone());
+                    }
                 }
             }
         }
@@ -542,7 +544,9 @@ impl EventBroadcaster {
 
         // Buffer the event
         {
-            let mut buffer = self.inner.buffer.write().unwrap();
+            let Ok(mut buffer) = self.inner.buffer.write() else {
+                return;
+            };
             if buffer.len() >= self.inner.buffer_capacity {
                 buffer.remove(0);
             }
@@ -550,7 +554,9 @@ impl EventBroadcaster {
         }
 
         // Broadcast to subscribers
-        let mut subs = self.inner.subscribers.write().unwrap();
+        let Ok(mut subs) = self.inner.subscribers.write() else {
+            return;
+        };
         subs.retain(|sender| {
             match sender.send(event.clone()) {
                 Ok(_) => {
@@ -577,12 +583,21 @@ impl EventBroadcaster {
 
     /// Get broadcaster statistics
     pub fn stats(&self) -> BroadcasterStatsSnapshot {
+        let Ok(buffer) = self.inner.buffer.read() else {
+            return BroadcasterStatsSnapshot {
+                published: self.inner.stats.published.load(Ordering::Relaxed),
+                dropped: self.inner.stats.dropped.load(Ordering::Relaxed),
+                active_subscribers: self.inner.stats.active_subscribers.load(Ordering::Relaxed),
+                current_sequence: self.current_sequence(),
+                buffer_size: 0,
+            };
+        };
         BroadcasterStatsSnapshot {
             published: self.inner.stats.published.load(Ordering::Relaxed),
             dropped: self.inner.stats.dropped.load(Ordering::Relaxed),
             active_subscribers: self.inner.stats.active_subscribers.load(Ordering::Relaxed),
             current_sequence: self.current_sequence(),
-            buffer_size: self.inner.buffer.read().unwrap().len(),
+            buffer_size: buffer.len(),
         }
     }
 }

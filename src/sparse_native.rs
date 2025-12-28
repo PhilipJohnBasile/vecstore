@@ -58,6 +58,7 @@ pub struct SparseVector {
 
 impl SparseVector {
     /// Create from (index, value) pairs
+    #[inline]
     pub fn new(mut pairs: Vec<(u32, f32)>) -> Self {
         // Sort by index and filter zero values
         pairs.retain(|(_, v)| *v != 0.0);
@@ -68,6 +69,7 @@ impl SparseVector {
     }
 
     /// Create from dense vector (keeping non-zero elements)
+    #[inline]
     pub fn from_dense(dense: &[f32], threshold: f32) -> Self {
         let pairs: Vec<(u32, f32)> = dense.iter()
             .enumerate()
@@ -114,6 +116,7 @@ impl SparseVector {
     }
 
     /// Normalize to unit length
+    #[inline]
     pub fn normalize(&mut self) {
         let norm = self.norm();
         if norm > 0.0 {
@@ -237,6 +240,7 @@ impl InvertedSparseIndex {
     }
 
     /// Compute IDF for a term
+    #[inline]
     fn idf(&self, term: u32) -> f32 {
         let df = self.doc_freqs.get(&term).copied().unwrap_or(0) as f32;
         let n = self.total_docs as f32;
@@ -250,6 +254,7 @@ impl InvertedSparseIndex {
     }
 
     /// Search with sparse query
+    #[inline]
     pub fn search(&self, query: &SparseVector, top_k: usize) -> Vec<(u32, f32)> {
         let mut scores: HashMap<u32, f32> = HashMap::new();
 
@@ -409,6 +414,7 @@ impl HybridSparseIndex {
     }
 
     /// Sparse-only search
+    #[inline]
     pub fn sparse_search(&self, query: &SparseVector, top_k: usize) -> Vec<SparseSearchResult> {
         self.sparse_index.search(query, top_k)
             .into_iter()
@@ -424,6 +430,7 @@ impl HybridSparseIndex {
     }
 
     /// Dense-only search (brute force)
+    #[inline]
     pub fn dense_search(&self, query: &[f32], top_k: usize) -> Vec<SparseSearchResult> {
         let mut results: Vec<_> = self.dense_vectors.iter()
             .map(|(&doc_id, vec)| {
@@ -450,6 +457,7 @@ impl HybridSparseIndex {
     /// Hybrid search with alpha blending
     ///
     /// Final score = alpha * dense_score + (1 - alpha) * sparse_score
+    #[inline]
     pub fn hybrid_search(
         &self,
         sparse_query: Option<&SparseVector>,
@@ -599,6 +607,7 @@ impl SpladeEncoder {
 // HELPER FUNCTIONS
 // ============================================================================
 
+#[inline]
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
     let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
     let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();

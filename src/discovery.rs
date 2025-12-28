@@ -266,10 +266,12 @@ impl DiscoveryIndex {
             });
         }
 
-        let mut vectors = self.vectors.write().unwrap();
+        let mut vectors = self.vectors.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on vectors".into()))?;
         vectors.insert(id.to_string(), vector.to_vec());
 
-        let mut meta = self.metadata.write().unwrap();
+        let mut meta = self.metadata.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on metadata".into()))?;
         meta.insert(id.to_string(), metadata);
 
         Ok(())
@@ -277,14 +279,16 @@ impl DiscoveryIndex {
 
     /// Get vector by ID
     pub fn get(&self, id: &str) -> Option<Vec<f32>> {
-        let vectors = self.vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else { return None; };
         vectors.get(id).cloned()
     }
 
     /// Execute discovery query
     pub fn discover(&self, query: DiscoveryQuery) -> Result<Vec<DiscoveryResult>> {
-        let vectors = self.vectors.read().unwrap();
-        let metadata = self.metadata.read().unwrap();
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on vectors".into()))?;
+        let metadata = self.metadata.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on metadata".into()))?;
 
         // Get positive vectors
         let positive_vecs: Vec<Vec<f32>> = query.positive_ids
@@ -432,8 +436,10 @@ impl DiscoveryIndex {
 
     /// Explore from a starting point
     pub fn explore(&self, start_id: &str, radius: f32, max_results: usize) -> Result<Vec<DiscoveryResult>> {
-        let vectors = self.vectors.read().unwrap();
-        let metadata = self.metadata.read().unwrap();
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on vectors".into()))?;
+        let metadata = self.metadata.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on metadata".into()))?;
 
         let start_vec = vectors.get(start_id)
             .ok_or_else(|| VecStoreError::NotFound(start_id.to_string()))?;
@@ -465,8 +471,8 @@ impl DiscoveryIndex {
 
     /// Find boundary vectors (transition points between clusters)
     pub fn find_boundaries(&self, num_boundaries: usize) -> Vec<DiscoveryResult> {
-        let vectors = self.vectors.read().unwrap();
-        let metadata = self.metadata.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else { return Vec::new(); };
+        let Ok(metadata) = self.metadata.read() else { return Vec::new(); };
 
         if vectors.len() < 3 {
             return Vec::new();
@@ -516,7 +522,13 @@ impl DiscoveryIndex {
 
     /// Find clusters and their representatives
     pub fn find_clusters(&self) -> ExplorationResult {
-        let vectors = self.vectors.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else {
+            return ExplorationResult {
+                regions: Vec::new(),
+                representatives: HashMap::new(),
+                diversity_score: 0.0,
+            };
+        };
 
         if vectors.is_empty() {
             return ExplorationResult {
@@ -655,8 +667,20 @@ impl DiscoveryIndex {
 
     /// Get statistics
     pub fn stats(&self) -> DiscoveryStats {
-        let vectors = self.vectors.read().unwrap();
-        let clusters = self.clusters.read().unwrap();
+        let Ok(vectors) = self.vectors.read() else {
+            return DiscoveryStats {
+                vector_count: 0,
+                dimension: self.config.dimension,
+                cluster_count: 0,
+            };
+        };
+        let Ok(clusters) = self.clusters.read() else {
+            return DiscoveryStats {
+                vector_count: vectors.len(),
+                dimension: self.config.dimension,
+                cluster_count: 0,
+            };
+        };
 
         DiscoveryStats {
             vector_count: vectors.len(),

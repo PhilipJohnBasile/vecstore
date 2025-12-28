@@ -325,7 +325,9 @@ impl VecStoreOperator {
         };
 
         let key = format!("{}/{}", namespace, name);
-        self.clusters.write().unwrap().insert(key.clone(), cluster);
+        self.clusters.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?
+            .insert(key.clone(), cluster);
 
         // Queue reconciliation
         self.queue_reconcile(name, namespace, ReconcileTrigger::Create);
@@ -336,7 +338,8 @@ impl VecStoreOperator {
     /// Handle cluster update
     pub fn handle_update(&self, name: &str, namespace: &str, spec: VecStoreClusterSpec) -> Result<()> {
         let key = format!("{}/{}", namespace, name);
-        let mut clusters = self.clusters.write().unwrap();
+        let mut clusters = self.clusters.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?;
 
         if let Some(cluster) = clusters.get_mut(&key) {
             cluster.spec = spec;
@@ -354,7 +357,10 @@ impl VecStoreOperator {
         self.queue_reconcile(name, namespace, ReconcileTrigger::Delete);
 
         // Mark for deletion (actual removal after cleanup)
-        if let Some(cluster) = self.clusters.write().unwrap().get_mut(&key) {
+        if let Some(cluster) = self.clusters.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?
+            .get_mut(&key)
+        {
             cluster.status.phase = ClusterPhase::Terminating;
         }
 
@@ -369,7 +375,8 @@ impl VecStoreOperator {
             trigger,
             queued_at: Instant::now(),
         };
-        self.reconcile_queue.write().unwrap().push(request);
+        let Ok(mut queue) = self.reconcile_queue.write() else { return; };
+        queue.push(request);
     }
 
     /// Run the reconciliation loop
@@ -395,7 +402,8 @@ impl VecStoreOperator {
     }
 
     fn do_reconcile(&self, key: &str) -> Result<ReconcileResult> {
-        let mut clusters = self.clusters.write().unwrap();
+        let mut clusters = self.clusters.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?;
         let cluster = clusters.get_mut(key)
             .ok_or_else(|| VecStoreError::NotFound(format!("Cluster {} not found", key)))?;
 
@@ -563,14 +571,14 @@ impl VecStoreOperator {
     /// Get cluster status
     pub fn get_status(&self, name: &str, namespace: &str) -> Option<VecStoreClusterStatus> {
         let key = format!("{}/{}", namespace, name);
-        self.clusters.read().unwrap()
-            .get(&key)
-            .map(|c| c.status.clone())
+        let Ok(clusters) = self.clusters.read() else { return None; };
+        clusters.get(&key).map(|c| c.status.clone())
     }
 
     /// List all managed clusters
     pub fn list_clusters(&self) -> Vec<(String, String, VecStoreClusterStatus)> {
-        self.clusters.read().unwrap()
+        let Ok(clusters) = self.clusters.read() else { return Vec::new(); };
+        clusters
             .iter()
             .map(|(_, c)| (c.namespace.clone(), c.name.clone(), c.status.clone()))
             .collect()
@@ -579,6 +587,14 @@ impl VecStoreOperator {
     /// Get operator metrics
     pub fn get_metrics(&self) -> OperatorMetricsSnapshot {
         use std::sync::atomic::Ordering;
+        let Ok(clusters) = self.clusters.read() else {
+            return OperatorMetricsSnapshot {
+                reconcile_total: 0,
+                reconcile_errors: 0,
+                avg_reconcile_duration_ms: 0,
+                clusters_managed: 0,
+            };
+        };
         OperatorMetricsSnapshot {
             reconcile_total: self.metrics.reconcile_total.load(Ordering::Relaxed),
             reconcile_errors: self.metrics.reconcile_errors.load(Ordering::Relaxed),
@@ -587,7 +603,7 @@ impl VecStoreOperator {
                 let sum = self.metrics.reconcile_duration_sum.load(Ordering::Relaxed);
                 if total > 0 { sum / total } else { 0 }
             },
-            clusters_managed: self.clusters.read().unwrap().len() as u64,
+            clusters_managed: clusters.len() as u64,
         }
     }
 }

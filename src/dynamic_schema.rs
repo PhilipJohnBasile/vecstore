@@ -246,6 +246,7 @@ impl Schema {
 }
 
 /// Schema builder
+#[must_use = "builders do nothing unless built"]
 pub struct SchemaBuilder {
     fields: HashMap<String, FieldDef>,
     primary_key: Option<String>,
@@ -265,16 +266,19 @@ impl SchemaBuilder {
         }
     }
 
+    #[inline]
     pub fn add_field(mut self, name: &str, field_type: FieldType) -> Self {
         self.fields.insert(name.to_string(), FieldDef::new(name, field_type));
         self
     }
 
+    #[inline]
     pub fn add_field_def(mut self, field: FieldDef) -> Self {
         self.fields.insert(field.name.clone(), field);
         self
     }
 
+    #[inline]
     pub fn add_vector(mut self, name: &str, dimension: usize) -> Self {
         self.fields.insert(
             name.to_string(),
@@ -285,11 +289,13 @@ impl SchemaBuilder {
         self
     }
 
+    #[inline]
     pub fn primary_key(mut self, name: &str) -> Self {
         self.primary_key = Some(name.to_string());
         self
     }
 
+    #[inline]
     pub fn allow_dynamic(mut self, allow: bool) -> Self {
         self.allow_dynamic = allow;
         self

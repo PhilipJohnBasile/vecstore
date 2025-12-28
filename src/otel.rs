@@ -399,7 +399,7 @@ impl VecStoreMetrics {
         self.query_latency_sum.fetch_add((latency_ms * 1000.0) as u64, Ordering::Relaxed);
 
         // Update histogram
-        let buckets = self.histogram_buckets.read().unwrap();
+        let Ok(buckets) = self.histogram_buckets.read() else { return; };
         for (i, &boundary) in self.histogram_boundaries.iter().enumerate() {
             if latency_ms <= boundary {
                 buckets[i].fetch_add(1, Ordering::Relaxed);
@@ -505,7 +505,7 @@ impl VecStoreMetrics {
         output.push_str("# HELP vecstore_query_latency_ms Query latency in milliseconds\n\
                         # TYPE vecstore_query_latency_ms histogram\n");
 
-        let buckets = self.histogram_buckets.read().unwrap();
+        let Ok(buckets) = self.histogram_buckets.read() else { return output; };
         let mut cumulative = 0u64;
         for (i, boundary) in self.histogram_boundaries.iter().enumerate() {
             cumulative += buckets[i].load(Ordering::Relaxed);
@@ -600,12 +600,12 @@ impl TelemetryProvider {
         let span_id = span.span_id.clone();
 
         {
-            let mut current = self.current_trace.write().unwrap();
+            let Ok(mut current) = self.current_trace.write() else { return span_id; };
             *current = Some(trace_id.clone());
         }
 
         {
-            let mut spans = self.spans.write().unwrap();
+            let Ok(mut spans) = self.spans.write() else { return span_id; };
             spans.insert(span_id.clone(), span);
         }
 
@@ -614,15 +614,16 @@ impl TelemetryProvider {
 
     /// Start child span
     pub fn start_span(&self, name: &str, parent_id: Option<&str>) -> String {
-        let trace_id = self.current_trace.read().unwrap()
-            .clone()
+        let trace_id = self.current_trace.read()
+            .ok()
+            .and_then(|guard| guard.clone())
             .unwrap_or_else(generate_trace_id);
 
         let span = Span::new(name, &trace_id, parent_id.map(String::from));
         let span_id = span.span_id.clone();
 
         {
-            let mut spans = self.spans.write().unwrap();
+            let Ok(mut spans) = self.spans.write() else { return span_id; };
             spans.insert(span_id.clone(), span);
         }
 
@@ -632,20 +633,20 @@ impl TelemetryProvider {
     /// End span
     pub fn end_span(&self, span_id: &str) {
         let span = {
-            let mut spans = self.spans.write().unwrap();
+            let Ok(mut spans) = self.spans.write() else { return; };
             spans.remove(span_id)
         };
 
         if let Some(mut span) = span {
             span.end();
-            let mut completed = self.completed_spans.write().unwrap();
+            let Ok(mut completed) = self.completed_spans.write() else { return; };
             completed.push(span);
         }
     }
 
     /// Set span attribute
     pub fn set_span_attribute(&self, span_id: &str, key: &str, value: SpanAttribute) {
-        let mut spans = self.spans.write().unwrap();
+        let Ok(mut spans) = self.spans.write() else { return; };
         if let Some(span) = spans.get_mut(span_id) {
             span.set_attribute(key, value);
         }
@@ -653,7 +654,7 @@ impl TelemetryProvider {
 
     /// Set span error
     pub fn set_span_error(&self, span_id: &str, message: &str) {
-        let mut spans = self.spans.write().unwrap();
+        let Ok(mut spans) = self.spans.write() else { return; };
         if let Some(span) = spans.get_mut(span_id) {
             span.set_error(message);
         }
@@ -673,7 +674,7 @@ impl TelemetryProvider {
 
     /// Flush completed spans
     pub fn flush(&self) -> Vec<Span> {
-        let mut completed = self.completed_spans.write().unwrap();
+        let Ok(mut completed) = self.completed_spans.write() else { return Vec::new(); };
         std::mem::take(&mut *completed)
     }
 

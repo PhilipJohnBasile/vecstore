@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Analytics configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -332,14 +332,14 @@ impl QueryAnalytics {
 
         // Update running average latency
         {
-            let mut avg = self.stats.avg_latency_ms.write().unwrap();
+            let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
             let count = self.stats.total_events.load(Ordering::Relaxed) as f64;
             *avg = (*avg * (count - 1.0) + event.latency_ms) / count;
         }
 
         // Store event
         {
-            let mut events = self.events.write().unwrap();
+            let Ok(mut events) = self.events.write() else { return; };
             if events.len() >= self.config.max_events {
                 events.pop_front();
             }
@@ -372,7 +372,7 @@ impl QueryAnalytics {
     }
 
     fn update_aggregates(&self, event: &QueryEvent) {
-        let mut aggregates = self.aggregates.write().unwrap();
+        let Ok(mut aggregates) = self.aggregates.write() else { return; };
 
         // Overall aggregate
         let overall = aggregates.entry("overall".to_string())
@@ -414,7 +414,7 @@ impl QueryAnalytics {
     }
 
     fn update_patterns(&self, event: &QueryEvent) {
-        let mut patterns = self.patterns.write().unwrap();
+        let Ok(mut patterns) = self.patterns.write() else { return; };
 
         // Track dimension distribution
         *patterns.dimension_distribution
@@ -441,7 +441,7 @@ impl QueryAnalytics {
     }
 
     fn update_timeseries(&self, event: &QueryEvent) {
-        let mut ts = self.timeseries.write().unwrap();
+        let Ok(mut ts) = self.timeseries.write() else { return; };
         let bucket = event.timestamp / 60; // Minute buckets
 
         // Latency series
@@ -503,8 +503,12 @@ impl QueryAnalytics {
 
     /// Get dashboard data
     pub fn get_dashboard(&self) -> DashboardData {
-        let events = self.events.read().unwrap();
-        let aggregates = self.aggregates.read().unwrap();
+        let Ok(events) = self.events.read() else {
+            return self.empty_dashboard();
+        };
+        let Ok(aggregates) = self.aggregates.read() else {
+            return self.empty_dashboard();
+        };
 
         let overall = aggregates.get("overall").cloned().unwrap_or_default();
 
@@ -568,8 +572,32 @@ impl QueryAnalytics {
         }
     }
 
+    fn empty_dashboard(&self) -> DashboardData {
+        DashboardData {
+            summary: DashboardSummary {
+                total_queries: 0,
+                queries_per_second: 0.0,
+                avg_latency_ms: 0.0,
+                p99_latency_ms: 0.0,
+                cache_hit_rate: 0.0,
+                error_rate: 0.0,
+                active_collections: 0,
+                uptime: self.stats.started_at.elapsed(),
+            },
+            recent_queries: vec![],
+            performance_trends: vec![],
+            top_collections: vec![],
+            error_summary: ErrorSummary {
+                total_errors: 0,
+                error_rate: 0.0,
+                top_errors: vec![],
+            },
+            alerts: vec![],
+        }
+    }
+
     fn get_performance_trends(&self) -> Vec<TrendData> {
-        let ts = self.timeseries.read().unwrap();
+        let Ok(ts) = self.timeseries.read() else { return vec![]; };
         let mut trends = Vec::new();
 
         for (metric_name, points) in &ts.series {
@@ -653,12 +681,13 @@ impl QueryAnalytics {
 
     /// Get aggregate statistics
     pub fn get_aggregates(&self) -> HashMap<String, AggregateStats> {
-        self.aggregates.read().unwrap().clone()
+        let Ok(aggregates) = self.aggregates.read() else { return HashMap::new(); };
+        aggregates.clone()
     }
 
     /// Get time series data
     pub fn get_timeseries(&self, metric: &str, last_n_minutes: usize) -> Vec<TimeSeriesPoint> {
-        let ts = self.timeseries.read().unwrap();
+        let Ok(ts) = self.timeseries.read() else { return vec![]; };
         let cutoff = current_timestamp() / 60 - last_n_minutes as u64;
 
         ts.series.get(metric)
@@ -673,7 +702,8 @@ impl QueryAnalytics {
 
     /// Generate a report
     pub fn generate_report(&self, config: &ReportConfig) -> Result<String> {
-        let events = self.events.read().unwrap();
+        let events = self.events.read()
+            .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
 
         let filtered: Vec<_> = events.iter()
             .filter(|e| e.timestamp >= config.time_range.start && e.timestamp <= config.time_range.end)
@@ -712,7 +742,8 @@ impl QueryAnalytics {
                 Ok(html)
             }
             ReportFormat::Prometheus => {
-                let aggregates = self.aggregates.read().unwrap();
+                let aggregates = self.aggregates.read()
+                    .map_err(|_| VecStoreError::LockError("aggregates lock poisoned".into()))?;
                 let mut output = String::new();
 
                 if let Some(overall) = aggregates.get("overall") {
@@ -739,7 +770,13 @@ impl QueryAnalytics {
 
     /// Get query patterns
     pub fn get_patterns(&self) -> QueryPatterns {
-        let patterns = self.patterns.read().unwrap();
+        let Ok(patterns) = self.patterns.read() else {
+            return QueryPatterns {
+                frequent_patterns: vec![],
+                dimension_distribution: vec![],
+                k_distribution: vec![],
+            };
+        };
 
         let mut frequent: Vec<(String, u64)> = patterns.frequent_patterns.iter()
             .map(|(k, v)| (k.clone(), *v))
@@ -766,7 +803,18 @@ impl QueryAnalytics {
 
     /// Export metrics for monitoring
     pub fn export_metrics(&self) -> Metrics {
-        let aggregates = self.aggregates.read().unwrap();
+        let Ok(aggregates) = self.aggregates.read() else {
+            return Metrics {
+                total_queries: 0,
+                avg_latency_ms: 0.0,
+                p50_latency_ms: 0.0,
+                p95_latency_ms: 0.0,
+                p99_latency_ms: 0.0,
+                cache_hit_rate: 0.0,
+                error_rate: 0.0,
+                queries_per_second: 0.0,
+            };
+        };
         let overall = aggregates.get("overall").cloned().unwrap_or_default();
 
         Metrics {
@@ -786,20 +834,31 @@ impl QueryAnalytics {
 
     /// Reset analytics
     pub fn reset(&self) {
-        self.events.write().unwrap().clear();
-        self.aggregates.write().unwrap().clear();
-        *self.patterns.write().unwrap() = PatternAnalyzer {
+        let Ok(mut events) = self.events.write() else { return; };
+        events.clear();
+        drop(events);
+
+        let Ok(mut aggregates) = self.aggregates.write() else { return; };
+        aggregates.clear();
+        drop(aggregates);
+
+        let Ok(mut patterns) = self.patterns.write() else { return; };
+        *patterns = PatternAnalyzer {
             frequent_patterns: HashMap::new(),
             temporal_patterns: BTreeMap::new(),
             dimension_distribution: HashMap::new(),
             k_distribution: HashMap::new(),
         };
+        drop(patterns);
+
         self.stats.total_events.store(0, Ordering::Relaxed);
         self.stats.search_events.store(0, Ordering::Relaxed);
         self.stats.insert_events.store(0, Ordering::Relaxed);
         self.stats.update_events.store(0, Ordering::Relaxed);
         self.stats.delete_events.store(0, Ordering::Relaxed);
-        *self.stats.avg_latency_ms.write().unwrap() = 0.0;
+
+        let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
+        *avg = 0.0;
     }
 }
 
@@ -982,6 +1041,7 @@ pub enum Impact {
 }
 
 /// Builder for QueryAnalytics
+#[must_use = "builders do nothing unless built"]
 pub struct QueryAnalyticsBuilder {
     config: AnalyticsConfig,
 }
@@ -993,21 +1053,25 @@ impl QueryAnalyticsBuilder {
         }
     }
 
+    #[inline]
     pub fn sample_rate(mut self, rate: f64) -> Self {
         self.config.sample_rate = rate;
         self
     }
 
+    #[inline]
     pub fn retention(mut self, retention: Duration) -> Self {
         self.config.retention = retention;
         self
     }
 
+    #[inline]
     pub fn max_events(mut self, max: usize) -> Self {
         self.config.max_events = max;
         self
     }
 
+    #[inline]
     pub fn privacy_mode(mut self, enabled: bool) -> Self {
         self.config.privacy_mode = enabled;
         self

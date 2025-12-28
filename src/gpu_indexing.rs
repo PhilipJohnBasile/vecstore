@@ -229,7 +229,8 @@ impl MemoryPool {
     fn allocate(&self, size: usize) -> Result<usize> {
         // Try to reuse existing buffer
         {
-            let mut buffers = self.buffers.write().unwrap();
+            let mut buffers = self.buffers.write()
+                .map_err(|_| VecStoreError::LockError("failed to acquire write lock on GPU memory pool buffers".into()))?;
             for buffer in &mut *buffers {
                 if !buffer.in_use && buffer.size >= size {
                     buffer.in_use = true;
@@ -254,14 +255,15 @@ impl MemoryPool {
             in_use: true,
         };
 
-        let mut buffers = self.buffers.write().unwrap();
+        let mut buffers = self.buffers.write()
+            .map_err(|_| VecStoreError::LockError("failed to acquire write lock on GPU memory pool buffers for allocation".into()))?;
         buffers.push(buffer);
 
         Ok(id)
     }
 
     fn free(&self, id: usize) {
-        let mut buffers = self.buffers.write().unwrap();
+        let Ok(mut buffers) = self.buffers.write() else { return; };
         for buffer in &mut *buffers {
             if buffer.id == id {
                 buffer.in_use = false;
@@ -271,7 +273,14 @@ impl MemoryPool {
     }
 
     fn stats(&self) -> MemoryPoolStats {
-        let buffers = self.buffers.read().unwrap();
+        let Ok(buffers) = self.buffers.read() else {
+            return MemoryPoolStats {
+                total_allocated: self.total_allocated.load(Ordering::Relaxed),
+                in_use: 0,
+                buffer_count: 0,
+                max_memory: self.max_memory,
+            };
+        };
         let in_use: usize = buffers.iter().filter(|b| b.in_use).map(|b| b.size).sum();
 
         MemoryPoolStats {

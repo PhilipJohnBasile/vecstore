@@ -92,7 +92,7 @@ impl RateLimiter {
     }
 
     async fn wait_if_needed(&self) {
-        let mut requests = self.last_requests.lock().unwrap();
+        let Ok(mut requests) = self.last_requests.lock() else { return; };
 
         // Remove requests older than 1 minute
         let now = std::time::Instant::now();
@@ -108,7 +108,8 @@ impl RateLimiter {
                 if wait_time > Duration::from_secs(0) {
                     drop(requests); // Release lock before sleeping
                     tokio::time::sleep(wait_time).await;
-                    requests = self.last_requests.lock().unwrap();
+                    let Ok(reacquired) = self.last_requests.lock() else { return; };
+                    requests = reacquired;
                 }
             }
         }

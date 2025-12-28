@@ -837,6 +837,7 @@ impl Default for GraphVectorEngine {
 }
 
 /// Builder for constructing graphs
+#[must_use = "builders do nothing unless built"]
 pub struct GraphBuilder {
     nodes: Vec<GraphNode>,
     edges: Vec<Edge>,
@@ -852,12 +853,14 @@ impl GraphBuilder {
     }
 
     /// Add a node
+    #[inline]
     pub fn node(mut self, id: impl Into<String>, vector: Vec<f32>) -> Self {
         self.nodes.push(GraphNode::new(id, vector));
         self
     }
 
     /// Add an edge
+    #[inline]
     pub fn edge(
         mut self,
         from: impl Into<String>,
@@ -869,6 +872,7 @@ impl GraphBuilder {
     }
 
     /// Build the graph
+    #[must_use]
     pub fn build(self) -> Result<GraphVectorEngine, VecStoreError> {
         let mut engine = GraphVectorEngine::new();
 

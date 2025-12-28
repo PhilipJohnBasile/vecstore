@@ -381,7 +381,7 @@ impl QueryRouter {
     }
 
     fn is_available(&self, node: &ReplicaNode) -> bool {
-        let state = node.state.read().unwrap();
+        let Ok(state) = node.state.read() else { return false; };
 
         // Check circuit breaker
         if state.circuit_state == CircuitState::Open {
@@ -419,7 +419,9 @@ impl QueryRouter {
 
     fn least_connections(&self, nodes: &[Arc<ReplicaNode>]) -> (Arc<ReplicaNode>, RoutingReason) {
         let selected = nodes.iter()
-            .min_by_key(|n| n.state.read().unwrap().active_connections)
+            .min_by_key(|n| {
+                n.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX)
+            })
             .unwrap();
 
         (selected.clone(), RoutingReason::LeastConnections)
@@ -438,7 +440,7 @@ impl QueryRouter {
     }
 
     fn avg_latency(&self, node: &ReplicaNode) -> Duration {
-        let state = node.state.read().unwrap();
+        let Ok(state) = node.state.read() else { return Duration::from_millis(100); };
         if state.latencies.is_empty() {
             Duration::from_millis(100) // Default estimate
         } else {
@@ -461,7 +463,8 @@ impl QueryRouter {
     {
         // Check for cache affinity via consistent hash (Rust 1.92 if-let chain)
         if let Some(hash) = query.query_hash
-            && let Some(node_id) = self.hash_ring.read().unwrap().get_node(hash)
+            && let Ok(ring) = self.hash_ring.read()
+            && let Some(node_id) = ring.get_node(hash)
             && let Some(node) = nodes.iter().find(|n| n.id == node_id)
         {
             self.metrics.cache_affinity_hits.fetch_add(1, Ordering::Relaxed);
@@ -489,7 +492,7 @@ impl QueryRouter {
     }
 
     fn compute_adaptive_score(&self, node: &ReplicaNode, query: &QueryCharacteristics) -> f64 {
-        let state = node.state.read().unwrap();
+        let Ok(state) = node.state.read() else { return 0.0; };
         let mut score = 100.0;
 
         // Penalize based on connections (0-30 points)
@@ -551,11 +554,13 @@ impl QueryRouter {
             if !local_nodes.is_empty() {
                 // Pick the least loaded local node
                 let local = local_nodes.iter()
-                    .min_by_key(|n| n.state.read().unwrap().active_connections)
+                    .min_by_key(|n| {
+                        n.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX)
+                    })
                     .unwrap();
 
-                let local_load = local.state.read().unwrap().active_connections;
-                let selected_load = selected.state.read().unwrap().active_connections;
+                let local_load = local.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX);
+                let selected_load = selected.state.read().map(|s| s.active_connections).unwrap_or(0);
 
                 // Only prefer local if load difference is within 20%
                 if local_load as f64 <= selected_load as f64 * 1.2 {
@@ -571,10 +576,10 @@ impl QueryRouter {
     fn build_fallbacks(&self, selected: &ReplicaNode, all_nodes: &[Arc<ReplicaNode>]) -> Vec<String> {
         let mut fallbacks: Vec<_> = all_nodes.iter()
             .filter(|n| n.id != selected.id)
-            .map(|n| {
-                let state = n.state.read().unwrap();
+            .filter_map(|n| {
+                let state = n.state.read().ok()?;
                 let score = -(state.active_connections as i64);
-                (n.id.clone(), score)
+                Some((n.id.clone(), score))
             })
             .collect();
 
@@ -584,9 +589,9 @@ impl QueryRouter {
 
     /// Record request result (for metrics and circuit breaker)
     pub fn record_result(&self, node_id: &str, success: bool, latency: Duration) {
-        let nodes = self.nodes.read().unwrap();
+        let Ok(nodes) = self.nodes.read() else { return; };
         if let Some(node) = nodes.get(node_id) {
-            let mut state = node.state.write().unwrap();
+            let Ok(mut state) = node.state.write() else { return; };
 
             // Update latency window
             state.latencies.push_back(latency);
@@ -623,18 +628,18 @@ impl QueryRouter {
 
     /// Increment active connections for a node
     pub fn increment_connections(&self, node_id: &str) {
-        let nodes = self.nodes.read().unwrap();
+        let Ok(nodes) = self.nodes.read() else { return; };
         if let Some(node) = nodes.get(node_id) {
-            let mut state = node.state.write().unwrap();
+            let Ok(mut state) = node.state.write() else { return; };
             state.active_connections += 1;
         }
     }
 
     /// Update node health status
     pub fn update_health(&self, node_id: &str, health: HealthStatus) {
-        let nodes = self.nodes.read().unwrap();
+        let Ok(nodes) = self.nodes.read() else { return; };
         if let Some(node) = nodes.get(node_id) {
-            let mut state = node.state.write().unwrap();
+            let Ok(mut state) = node.state.write() else { return; };
             state.health = health;
             state.last_health_check = Instant::now();
         }
@@ -642,27 +647,29 @@ impl QueryRouter {
 
     /// Get router statistics
     pub fn get_stats(&self) -> RouterStats {
-        let nodes = self.nodes.read().unwrap();
-
-        let node_stats: Vec<NodeStats> = nodes.values()
-            .map(|n| {
-                let state = n.state.read().unwrap();
-                NodeStats {
-                    node_id: n.id.clone(),
-                    address: n.address.clone(),
-                    zone: n.zone.clone(),
-                    health: state.health.clone(),
-                    active_connections: state.active_connections,
-                    avg_latency_ms: if state.latencies.is_empty() {
-                        0.0
-                    } else {
-                        state.latencies.iter().sum::<Duration>().as_millis() as f64
-                            / state.latencies.len() as f64
-                    },
-                    circuit_state: state.circuit_state.clone(),
-                }
-            })
-            .collect();
+        let node_stats: Vec<NodeStats> = if let Ok(nodes) = self.nodes.read() {
+            nodes.values()
+                .filter_map(|n| {
+                    let state = n.state.read().ok()?;
+                    Some(NodeStats {
+                        node_id: n.id.clone(),
+                        address: n.address.clone(),
+                        zone: n.zone.clone(),
+                        health: state.health.clone(),
+                        active_connections: state.active_connections,
+                        avg_latency_ms: if state.latencies.is_empty() {
+                            0.0
+                        } else {
+                            state.latencies.iter().sum::<Duration>().as_millis() as f64
+                                / state.latencies.len() as f64
+                        },
+                        circuit_state: state.circuit_state.clone(),
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         RouterStats {
             total_requests: self.metrics.requests_total.load(Ordering::Relaxed),

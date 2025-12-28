@@ -138,6 +138,7 @@ pub struct BinaryCode {
 
 impl BinaryCode {
     /// Create a new binary code
+    #[inline]
     pub fn new(dimension: usize) -> Self {
         let num_u64s = (dimension + 63) / 64;
         Self {
@@ -303,6 +304,7 @@ impl RaBitQ {
     }
 
     /// Encode a single vector
+    #[inline]
     pub fn encode_one(&self, vector: &[f32]) -> Result<BinaryCode> {
         if !self.is_trained {
             return Err(VecStoreError::InvalidInput("Quantizer not trained".to_string()));
@@ -339,6 +341,7 @@ impl RaBitQ {
     }
 
     /// Encode multiple vectors
+    #[inline]
     pub fn encode(&self, vectors: &[Vec<f32>]) -> Result<Vec<BinaryCode>> {
         let codes: Result<Vec<_>> = vectors.iter()
             .map(|v| self.encode_one(v))
@@ -353,6 +356,7 @@ impl RaBitQ {
     }
 
     /// Compute asymmetric distance (full query, binary code)
+    #[inline]
     pub fn asymmetric_distance(&self, query: &[f32], code: &BinaryCode) -> f32 {
         if !self.is_trained {
             return f32::MAX;
@@ -394,6 +398,7 @@ impl RaBitQ {
     }
 
     /// Search for nearest neighbors
+    #[inline]
     pub fn search(
         &self,
         query: &[f32],
@@ -422,16 +427,19 @@ impl RaBitQ {
     }
 
     /// Get compression statistics
+    #[inline]
     pub fn stats(&self) -> &RaBitQStats {
         &self.stats
     }
 
     /// Get compression ratio
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         self.config.compression_ratio()
     }
 
     /// Memory usage in bytes for N vectors
+    #[inline]
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
         num_vectors * (self.config.bytes_per_code() + 8) // code + norm + mean
     }
@@ -509,21 +517,25 @@ impl RaBitQIndex {
     }
 
     /// Get index size
+    #[inline]
     pub fn len(&self) -> usize {
         self.codes.len()
     }
 
     /// Check if empty
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.codes.is_empty()
     }
 
     /// Memory usage
+    #[inline]
     pub fn memory_usage(&self) -> usize {
         self.quantizer.memory_usage(self.codes.len())
     }
 
     /// Compression ratio
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         self.quantizer.compression_ratio()
     }
@@ -588,6 +600,7 @@ impl RaBitQPQ {
     }
 
     /// Encode a vector using product quantization
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<BinaryCode>> {
         let mut codes = Vec::with_capacity(self.config.num_subvectors);
 
@@ -602,6 +615,7 @@ impl RaBitQPQ {
     }
 
     /// Compute distance using product quantization codes
+    #[inline]
     pub fn distance(&self, query: &[f32], codes: &[BinaryCode]) -> f32 {
         let mut total_distance = 0.0f32;
 
@@ -616,6 +630,7 @@ impl RaBitQPQ {
     }
 
     /// Compression ratio
+    #[inline]
     pub fn compression_ratio(&self) -> f32 {
         self.config.compression_ratio()
     }

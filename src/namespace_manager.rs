@@ -149,7 +149,7 @@ impl NamespaceManager {
 
     /// Update namespace quotas
     pub fn update_quotas(&self, id: &NamespaceId, quotas: NamespaceQuotas) -> Result<()> {
-        let mut namespaces = self.namespaces.write().unwrap();
+        let mut namespaces = self.namespaces.write().map_lock_err()?;
         let namespace = namespaces
             .get_mut(id)
             .ok_or_else(|| anyhow!("Namespace not found: {}", id))?;
@@ -167,7 +167,7 @@ impl NamespaceManager {
 
     /// Update namespace status
     pub fn update_status(&self, id: &NamespaceId, status: NamespaceStatus) -> Result<()> {
-        let mut namespaces = self.namespaces.write().unwrap();
+        let mut namespaces = self.namespaces.write().map_lock_err()?;
         let namespace = namespaces
             .get_mut(id)
             .ok_or_else(|| anyhow!("Namespace not found: {}", id))?;
@@ -189,8 +189,8 @@ impl NamespaceManager {
         self.update_status(id, NamespaceStatus::PendingDeletion)?;
 
         // Remove from in-memory maps
-        let mut namespaces = self.namespaces.write().unwrap();
-        let mut stores = self.stores.write().unwrap();
+        let mut namespaces = self.namespaces.write().map_lock_err()?;
+        let mut stores = self.stores.write().map_lock_err()?;
 
         namespaces.remove(id);
         stores.remove(id);
@@ -212,7 +212,7 @@ impl NamespaceManager {
     ) -> Result<()> {
         // Check namespace status and quotas
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             let namespace = namespaces
                 .get_mut(namespace_id)
                 .ok_or_else(|| anyhow!("Namespace not found: {}", namespace_id))?;
@@ -223,7 +223,7 @@ impl NamespaceManager {
         }
 
         // Perform upsert
-        let mut stores = self.stores.write().unwrap();
+        let mut stores = self.stores.write().map_lock_err()?;
         let store = stores
             .get_mut(namespace_id)
             .ok_or_else(|| anyhow!("Store not found for namespace: {}", namespace_id))?;
@@ -235,7 +235,7 @@ impl NamespaceManager {
 
         // Update usage stats
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             if let Some(namespace) = namespaces.get_mut(namespace_id) {
                 namespace.usage.vector_count = store.len();
                 // Note: storage_bytes would need to be calculated from disk usage
@@ -249,7 +249,7 @@ impl NamespaceManager {
     pub fn query(&self, namespace_id: &NamespaceId, query: Query) -> Result<Vec<Neighbor>> {
         // Check namespace status and quotas
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             let namespace = namespaces
                 .get_mut(namespace_id)
                 .ok_or_else(|| anyhow!("Namespace not found: {}", namespace_id))?;
@@ -261,7 +261,7 @@ impl NamespaceManager {
 
         // Perform query
         let result = {
-            let stores = self.stores.read().unwrap();
+            let stores = self.stores.read().map_lock_err()?;
             let store = stores
                 .get(namespace_id)
                 .ok_or_else(|| anyhow!("Store not found for namespace: {}", namespace_id))?;
@@ -271,7 +271,7 @@ impl NamespaceManager {
 
         // Update usage stats
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             if let Some(namespace) = namespaces.get_mut(namespace_id) {
                 namespace.usage.end_query();
             }
@@ -284,7 +284,7 @@ impl NamespaceManager {
     pub fn remove(&self, namespace_id: &NamespaceId, id: &str) -> Result<()> {
         // Check namespace status
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             let namespace = namespaces
                 .get_mut(namespace_id)
                 .ok_or_else(|| anyhow!("Namespace not found: {}", namespace_id))?;
@@ -298,7 +298,7 @@ impl NamespaceManager {
         }
 
         // Perform delete
-        let mut stores = self.stores.write().unwrap();
+        let mut stores = self.stores.write().map_lock_err()?;
         let store = stores
             .get_mut(namespace_id)
             .ok_or_else(|| anyhow!("Store not found for namespace: {}", namespace_id))?;
@@ -310,7 +310,7 @@ impl NamespaceManager {
 
         // Update usage stats
         {
-            let mut namespaces = self.namespaces.write().unwrap();
+            let mut namespaces = self.namespaces.write().map_lock_err()?;
             if let Some(namespace) = namespaces.get_mut(namespace_id) {
                 namespace.usage.vector_count = store.len();
             }
@@ -321,8 +321,8 @@ impl NamespaceManager {
 
     /// Get statistics for a namespace
     pub fn get_stats(&self, namespace_id: &NamespaceId) -> Result<NamespaceStats> {
-        let namespaces = self.namespaces.read().unwrap();
-        let stores = self.stores.read().unwrap();
+        let namespaces = self.namespaces.read().map_lock_err()?;
+        let stores = self.stores.read().map_lock_err()?;
 
         let namespace = namespaces
             .get(namespace_id)
@@ -348,9 +348,9 @@ impl NamespaceManager {
     }
 
     /// Get aggregate stats across all namespaces
-    pub fn get_aggregate_stats(&self) -> AggregateStats {
-        let namespaces = self.namespaces.read().unwrap();
-        let stores = self.stores.read().unwrap();
+    pub fn get_aggregate_stats(&self) -> Result<AggregateStats> {
+        let namespaces = self.namespaces.read().map_lock_err()?;
+        let stores = self.stores.read().map_lock_err()?;
 
         let total_namespaces = namespaces.len();
         let mut total_vectors = 0;
@@ -369,17 +369,17 @@ impl NamespaceManager {
             }
         }
 
-        AggregateStats {
+        Ok(AggregateStats {
             total_namespaces,
             active_namespaces,
             total_vectors,
             total_requests,
-        }
+        })
     }
 
     /// Persist all namespace metadata
     pub fn save_all(&self) -> Result<()> {
-        let namespaces = self.namespaces.read().unwrap();
+        let namespaces = self.namespaces.read().map_lock_err()?;
 
         for (id, namespace) in namespaces.iter() {
             let ns_path = self.root_path.join(id);

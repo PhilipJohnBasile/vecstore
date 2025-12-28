@@ -27,7 +27,7 @@ VecStore addresses the complexity and overhead of deploying vector databases for
 ### 1.2. Identified Technology Stack
 
 **Core Language & Runtime:**
-- **Rust 2021 Edition** - Primary implementation language
+- **Rust 2024 Edition** - Primary implementation language
 - **Tokio** - Async runtime (optional, for server mode)
 
 **Vector Search & Indexing:**

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Anomaly detection configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,8 +255,10 @@ impl AnomalyDetector {
             }
         };
 
-        *self.model.write().unwrap() = Some(model);
-        *self.stats.last_training.write().unwrap() = Some(Instant::now());
+        *self.model.write()
+            .map_err(|_| VecStoreError::LockError("model lock poisoned".into()))? = Some(model);
+        *self.stats.last_training.write()
+            .map_err(|_| VecStoreError::LockError("last_training lock poisoned".into()))? = Some(Instant::now());
 
         Ok(())
     }
@@ -422,9 +424,10 @@ impl AnomalyDetector {
     pub fn detect(&self, vector_id: &str, vector: &[f32]) -> Result<DetectionResult> {
         self.stats.total_samples.fetch_add(1, Ordering::Relaxed);
 
-        let model = self.model.read().unwrap();
+        let model = self.model.read()
+            .map_err(|_| VecStoreError::LockError("model lock poisoned".into()))?;
         let model = model.as_ref().ok_or_else(|| {
-            crate::error::VecStoreError::IndexNotInitialized
+            VecStoreError::IndexNotInitialized
         })?;
 
         let (score, method_scores) = match model {
@@ -477,7 +480,9 @@ impl AnomalyDetector {
                 explanation: self.generate_explanation(model, vector, score),
             };
 
-            self.anomalies.write().unwrap().push(record);
+            self.anomalies.write()
+                .map_err(|_| VecStoreError::LockError("anomalies lock poisoned".into()))?
+                .push(record);
         }
 
         Ok(DetectionResult {
@@ -670,13 +675,23 @@ impl AnomalyDetector {
                 let anomalies = self.stats.anomalies_detected.load(Ordering::Relaxed);
                 if total > 0 { anomalies as f64 / total as f64 } else { 0.0 }
             },
-            last_training: self.stats.last_training.read().unwrap().map(|t| t.elapsed()),
+            last_training: {
+                let Ok(guard) = self.stats.last_training.read() else { return DetectionStats {
+                    total_samples: self.stats.total_samples.load(Ordering::Relaxed),
+                    anomalies_detected: self.stats.anomalies_detected.load(Ordering::Relaxed),
+                    false_positives: self.stats.false_positives.load(Ordering::Relaxed),
+                    true_positives: self.stats.true_positives.load(Ordering::Relaxed),
+                    detection_rate: 0.0,
+                    last_training: None,
+                }; };
+                guard.map(|t| t.elapsed())
+            },
         }
     }
 
     /// Get recent anomalies
     pub fn get_recent_anomalies(&self, limit: usize) -> Vec<AnomalyRecord> {
-        let anomalies = self.anomalies.read().unwrap();
+        let Ok(anomalies) = self.anomalies.read() else { return vec![]; };
         anomalies.iter()
             .rev()
             .take(limit)
@@ -695,7 +710,8 @@ impl AnomalyDetector {
 
     /// Online update with new sample
     pub fn update(&self, vector: &[f32]) -> Result<()> {
-        let mut history = self.history.write().unwrap();
+        let mut history = self.history.write()
+            .map_err(|_| VecStoreError::LockError("history lock poisoned".into()))?;
 
         if history.len() >= self.config.window_size {
             history.pop_front();
@@ -814,13 +830,14 @@ impl DriftDetector {
     /// Set reference distribution from data
     pub fn set_reference(&self, vectors: &[Vec<f32>]) -> Result<()> {
         let stats = self.compute_distribution_stats(vectors)?;
-        *self.reference_distribution.write().unwrap() = Some(stats);
+        *self.reference_distribution.write()
+            .map_err(|_| VecStoreError::LockError("reference_distribution lock poisoned".into()))? = Some(stats);
         Ok(())
     }
 
     /// Add sample to detection window
     pub fn add_sample(&self, vector: Vec<f32>) -> Option<DriftEvent> {
-        let mut window = self.current_window.write().unwrap();
+        let Ok(mut window) = self.current_window.write() else { return None; };
         window.push_back(vector);
 
         if window.len() > self.config.detection_size {
@@ -840,7 +857,8 @@ impl DriftDetector {
 
     /// Check for drift
     fn check_drift(&self, current_samples: &[Vec<f32>]) -> Result<Option<DriftEvent>> {
-        let reference = self.reference_distribution.read().unwrap();
+        let reference = self.reference_distribution.read()
+            .map_err(|_| VecStoreError::LockError("reference_distribution lock poisoned".into()))?;
         let reference = match reference.as_ref() {
             Some(r) => r,
             None => return Ok(None),
@@ -871,7 +889,9 @@ impl DriftDetector {
                 ),
             };
 
-            self.drift_events.write().unwrap().push(event.clone());
+            self.drift_events.write()
+                .map_err(|_| VecStoreError::LockError("drift_events lock poisoned".into()))?
+                .push(event.clone());
             return Ok(Some(event));
         }
 
@@ -1034,12 +1054,13 @@ impl DriftDetector {
 
     /// Get recent drift events
     pub fn get_drift_events(&self, limit: usize) -> Vec<DriftEvent> {
-        let events = self.drift_events.read().unwrap();
+        let Ok(events) = self.drift_events.read() else { return vec![]; };
         events.iter().rev().take(limit).cloned().collect()
     }
 }
 
 /// Builder for AnomalyDetector
+#[must_use = "builders do nothing unless built"]
 pub struct AnomalyDetectorBuilder {
     config: AnomalyConfig,
 }

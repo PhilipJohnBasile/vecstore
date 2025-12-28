@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Cost optimizer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -280,7 +280,7 @@ impl CostOptimizer {
             latency_ms: usage.latency_ms,
         };
 
-        let mut history = self.resource_usage.write().unwrap();
+        let Ok(mut history) = self.resource_usage.write() else { return; };
         if history.samples.len() >= history.max_samples {
             history.samples.pop_front();
         }
@@ -309,7 +309,8 @@ impl CostOptimizer {
 
     /// Analyze current costs and generate recommendations
     pub fn analyze(&self) -> Result<CostAnalysis> {
-        let history = self.resource_usage.read().unwrap();
+        let history = self.resource_usage.read()
+            .map_err(|_| VecStoreError::LockError("resource_usage lock poisoned".into()))?;
 
         if history.samples.is_empty() {
             return Ok(CostAnalysis {
@@ -348,7 +349,8 @@ impl CostOptimizer {
             .sum();
 
         // Store recommendations
-        *self.recommendations.write().unwrap() = recommendations.clone();
+        *self.recommendations.write()
+            .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))? = recommendations.clone();
 
         Ok(CostAnalysis {
             current_costs,
@@ -630,7 +632,17 @@ impl CostOptimizer {
     pub fn get_budget_status(&self) -> BudgetStatus {
         let total_cost = self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0;
         let _projected = {
-            let history = self.resource_usage.read().unwrap();
+            let Ok(history) = self.resource_usage.read() else {
+                return BudgetStatus {
+                    monthly_budget: self.config.max_monthly_budget,
+                    current_spend: total_cost,
+                    projected_spend: 0.0,
+                    remaining: (self.config.max_monthly_budget - total_cost).max(0.0),
+                    on_track: true,
+                    projected_overage: 0.0,
+                    days_remaining: 30,
+                };
+            };
             self.project_monthly_cost(&history.samples)
         };
 
@@ -652,7 +664,8 @@ impl CostOptimizer {
 
     /// Apply a recommendation
     pub fn apply_recommendation(&self, recommendation_id: &str) -> Result<bool> {
-        let mut recommendations = self.recommendations.write().unwrap();
+        let mut recommendations = self.recommendations.write()
+            .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))?;
 
         if let Some(rec) = recommendations.iter_mut().find(|r| r.id == recommendation_id) {
             if rec.status != RecommendationStatus::Pending {
@@ -661,7 +674,8 @@ impl CostOptimizer {
 
             rec.status = RecommendationStatus::Applied;
             self.stats.recommendations_applied.fetch_add(1, Ordering::Relaxed);
-            *self.stats.savings_achieved.write().unwrap() += rec.estimated_savings;
+            *self.stats.savings_achieved.write()
+                .map_err(|_| VecStoreError::LockError("savings_achieved lock poisoned".into()))? += rec.estimated_savings;
 
             Ok(true)
         } else {
@@ -671,7 +685,8 @@ impl CostOptimizer {
 
     /// Dismiss a recommendation
     pub fn dismiss_recommendation(&self, recommendation_id: &str) -> Result<bool> {
-        let mut recommendations = self.recommendations.write().unwrap();
+        let mut recommendations = self.recommendations.write()
+            .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))?;
 
         if let Some(rec) = recommendations.iter_mut().find(|r| r.id == recommendation_id) {
             rec.status = RecommendationStatus::Dismissed;
@@ -683,7 +698,8 @@ impl CostOptimizer {
 
     /// Get pending recommendations
     pub fn get_recommendations(&self) -> Vec<CostRecommendation> {
-        self.recommendations.read().unwrap()
+        let Ok(recommendations) = self.recommendations.read() else { return Vec::new(); };
+        recommendations
             .iter()
             .filter(|r| r.status == RecommendationStatus::Pending)
             .cloned()
@@ -692,6 +708,16 @@ impl CostOptimizer {
 
     /// Get optimizer statistics
     pub fn get_stats(&self) -> OptimizerStatsSummary {
+        let Ok(savings) = self.stats.savings_achieved.read() else {
+            return OptimizerStatsSummary {
+                total_cost: self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0,
+                total_queries: self.stats.total_queries.load(Ordering::Relaxed),
+                cost_per_query: 0.0,
+                recommendations_generated: self.stats.recommendations_generated.load(Ordering::Relaxed),
+                recommendations_applied: self.stats.recommendations_applied.load(Ordering::Relaxed),
+                savings_achieved: 0.0,
+            };
+        };
         OptimizerStatsSummary {
             total_cost: self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0,
             total_queries: self.stats.total_queries.load(Ordering::Relaxed),
@@ -702,13 +728,20 @@ impl CostOptimizer {
             },
             recommendations_generated: self.stats.recommendations_generated.load(Ordering::Relaxed),
             recommendations_applied: self.stats.recommendations_applied.load(Ordering::Relaxed),
-            savings_achieved: *self.stats.savings_achieved.read().unwrap(),
+            savings_achieved: *savings,
         }
     }
 
     /// Forecast costs for future period
     pub fn forecast(&self, days: u32) -> CostForecast {
-        let history = self.resource_usage.read().unwrap();
+        let default_forecast = CostForecast {
+            period_days: days,
+            base_forecast: 0.0,
+            optimistic_forecast: 0.0,
+            pessimistic_forecast: 0.0,
+            with_recommendations: 0.0,
+        };
+        let Ok(history) = self.resource_usage.read() else { return default_forecast; };
         let monthly_cost = self.project_monthly_cost(&history.samples);
         let daily_cost = monthly_cost / 30.0;
 
@@ -720,7 +753,16 @@ impl CostOptimizer {
             optimistic_forecast: daily_cost * days as f64 * 0.85,
             pessimistic_forecast: daily_cost * days as f64 * 1.15,
             with_recommendations: {
-                let savings: f64 = self.recommendations.read().unwrap()
+                let Ok(recommendations) = self.recommendations.read() else {
+                    return CostForecast {
+                        period_days: days,
+                        base_forecast: daily_cost * days as f64,
+                        optimistic_forecast: daily_cost * days as f64 * 0.85,
+                        pessimistic_forecast: daily_cost * days as f64 * 1.15,
+                        with_recommendations: daily_cost * days as f64,
+                    };
+                };
+                let savings: f64 = recommendations
                     .iter()
                     .filter(|r| r.status == RecommendationStatus::Pending)
                     .map(|r| r.estimated_savings * days as f64 / 30.0)
@@ -850,7 +892,15 @@ impl CostAwareAutoScaler {
 
     /// Evaluate and return scaling decision
     pub fn evaluate(&self, current_load: f64, _current_latency: f64) -> ScalingDecision {
-        let state = self.current_scale.read().unwrap();
+        let Ok(state) = self.current_scale.read() else {
+            return ScalingDecision {
+                action: ScaleAction::NoChange,
+                current_replicas: 1,
+                target_replicas: 1,
+                reason: "Lock error".to_string(),
+                cost_impact: 0.0,
+            };
+        };
 
         // Check cooldown
         if let Some(last_action) = state.last_scale_action {
@@ -936,7 +986,7 @@ impl CostAwareAutoScaler {
             return false;
         }
 
-        let mut state = self.current_scale.write().unwrap();
+        let Ok(mut state) = self.current_scale.write() else { return false; };
         state.replicas = decision.target_replicas;
         state.last_scale_action = Some(Instant::now());
 
@@ -945,6 +995,7 @@ impl CostAwareAutoScaler {
 }
 
 /// Builder for CostOptimizer
+#[must_use = "builders do nothing unless built"]
 pub struct CostOptimizerBuilder {
     config: CostOptimizerConfig,
 }

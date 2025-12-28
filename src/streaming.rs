@@ -222,9 +222,11 @@ impl StreamingIndex {
                 thread::sleep(interval);
 
                 // Check shutdown
-                if *shutdown.read().unwrap() {
+                let Ok(shutdown_guard) = shutdown.read() else { break; };
+                if *shutdown_guard {
                     break;
                 }
+                drop(shutdown_guard);
 
                 // Flush pending operations
                 let start = Instant::now();
@@ -237,9 +239,10 @@ impl StreamingIndex {
                 );
 
                 if ops_count > 0 {
-                    let mut stats = stats.write().unwrap();
+                    let Ok(mut stats) = stats.write() else { continue; };
                     stats.total_flushes += 1;
-                    stats.vectors_in_index = index.read().unwrap().len();
+                    let Ok(index_guard) = index.read() else { continue; };
+                    stats.vectors_in_index = index_guard.len();
 
                     let latency = start.elapsed().as_secs_f64() * 1000.0;
                     stats.avg_flush_latency_ms =
@@ -264,7 +267,7 @@ impl StreamingIndex {
 
         // Drain up to batch_size operations
         {
-            let mut pending = pending.lock().unwrap();
+            let Ok(mut pending) = pending.lock() else { return 0; };
             for _ in 0..batch_size {
                 if let Some(op) = pending.pop_front() {
                     ops.push(op);
@@ -281,8 +284,8 @@ impl StreamingIndex {
         let count = ops.len();
 
         // Apply operations
-        let mut index = index.write().unwrap();
-        let mut version = version.write().unwrap();
+        let Ok(mut index) = index.write() else { return 0; };
+        let Ok(mut version) = version.write() else { return 0; };
 
         for op in ops {
             match op {
@@ -351,15 +354,22 @@ impl StreamingIndex {
         };
 
         {
-            let mut pending = self.pending.lock().unwrap();
+            let mut pending = self.pending.lock()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?;
             if pending.len() >= self.config.buffer_size {
                 return Err(VecStoreError::InvalidInput("Buffer full".to_string()));
             }
             pending.push_back(op);
         }
 
-        self.stats.write().unwrap().total_upserts += 1;
-        self.stats.write().unwrap().pending_operations = self.pending.lock().unwrap().len();
+        self.stats.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
+            .total_upserts += 1;
+        self.stats.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
+            .pending_operations = self.pending.lock()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?
+                .len();
 
         Ok(())
     }
@@ -372,11 +382,14 @@ impl StreamingIndex {
         };
 
         {
-            let mut pending = self.pending.lock().unwrap();
+            let mut pending = self.pending.lock()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?;
             pending.push_back(op);
         }
 
-        self.stats.write().unwrap().total_deletes += 1;
+        self.stats.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
+            .total_deletes += 1;
 
         Ok(())
     }
@@ -398,8 +411,14 @@ impl StreamingIndex {
             }
         }
 
-        self.stats.write().unwrap().pending_operations = 0;
-        self.stats.write().unwrap().vectors_in_index = self.index.read().unwrap().len();
+        self.stats.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
+            .pending_operations = 0;
+        self.stats.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
+            .vectors_in_index = self.index.read()
+                .map_err(|_| VecStoreError::LockError("Failed to acquire index read lock".into()))?
+                .len();
 
         Ok(total)
     }
@@ -413,7 +432,8 @@ impl StreamingIndex {
             });
         }
 
-        let index = self.index.read().unwrap();
+        let index = self.index.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire index read lock".into()))?;
 
         let mut results: Vec<StreamSearchResult> = index.values()
             .map(|v| {
@@ -435,7 +455,7 @@ impl StreamingIndex {
 
     /// Get a vector by ID
     pub fn get(&self, id: &str) -> Option<StreamSearchResult> {
-        let index = self.index.read().unwrap();
+        let Ok(index) = self.index.read() else { return None; };
         index.get(id).map(|v| StreamSearchResult {
             id: v.id.clone(),
             score: 1.0,
@@ -446,22 +466,26 @@ impl StreamingIndex {
 
     /// Get statistics
     pub fn stats(&self) -> StreamingStats {
-        self.stats.read().unwrap().clone()
+        let Ok(stats) = self.stats.read() else { return StreamingStats::default(); };
+        stats.clone()
     }
 
     /// Get number of vectors in index
     pub fn len(&self) -> usize {
-        self.index.read().unwrap().len()
+        let Ok(index) = self.index.read() else { return 0; };
+        index.len()
     }
 
     /// Check if index is empty
     pub fn is_empty(&self) -> bool {
-        self.index.read().unwrap().is_empty()
+        let Ok(index) = self.index.read() else { return true; };
+        index.is_empty()
     }
 
     /// Get current version
     pub fn version(&self) -> u64 {
-        *self.version.read().unwrap()
+        let Ok(version) = self.version.read() else { return 0; };
+        *version
     }
 
     /// Calculate cosine similarity
@@ -479,7 +503,8 @@ impl StreamingIndex {
 
     /// Shutdown the streaming index
     pub fn shutdown(&self) {
-        *self.shutdown.write().unwrap() = true;
+        let Ok(mut shutdown) = self.shutdown.write() else { return; };
+        *shutdown = true;
     }
 }
 

@@ -231,6 +231,7 @@ impl HnswBackend {
         }
     }
 
+    #[inline]
     pub fn search(&self, vector: &[f32], k: usize) -> Vec<(Id, f32)> {
         if self.id_to_idx.is_empty() {
             return Vec::new();
@@ -292,10 +293,12 @@ impl HnswBackend {
     // Note: Index persistence is handled via save_index/restore pattern
     // Direct index loading is not supported due to distance metric polymorphism
 
+    #[inline]
     pub fn get_id_to_idx_map(&self) -> &HashMap<Id, usize> {
         &self.id_to_idx
     }
 
+    #[inline]
     pub fn get_idx_to_id_map(&self) -> &HashMap<usize, Id> {
         &self.idx_to_id
     }
@@ -361,6 +364,7 @@ impl HnswBackend {
         })
     }
 
+    #[inline]
     pub fn get_next_idx(&self) -> usize {
         self.next_idx
     }
@@ -452,6 +456,7 @@ impl HnswBackend {
         Ok(ghost_count)
     }
 
+    #[inline]
     pub fn search_with_ef(
         &self,
         vector: &[f32],
@@ -506,6 +511,7 @@ impl HnswBackend {
         ))
     }
 
+    #[inline]
     pub fn distance(&self) -> Distance {
         self.distance
     }

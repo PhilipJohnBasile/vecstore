@@ -79,6 +79,7 @@ impl ScalarQuantizer8 {
     }
 
     /// Encode a vector to 8-bit representation
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -99,6 +100,7 @@ impl ScalarQuantizer8 {
     }
 
     /// Decode 8-bit representation back to float32
+    #[inline]
     pub fn decode(&self, quantized: &[u8]) -> Result<Vec<f32>> {
         if quantized.len() != self.dimension {
             return Err(anyhow!("Quantized vector dimension mismatch"));
@@ -119,6 +121,7 @@ impl ScalarQuantizer8 {
     }
 
     /// Compute distance between quantized vectors (approximate)
+    #[inline]
     pub fn distance_quantized(&self, a: &[u8], b: &[u8]) -> f32 {
         let mut sum = 0.0;
         for (i, (&qa, &qb)) in a.iter().zip(b.iter()).enumerate() {
@@ -188,6 +191,7 @@ impl ScalarQuantizer4 {
     /// Encode a vector to 4-bit representation (packed)
     ///
     /// Each byte stores two 4-bit values
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -212,6 +216,7 @@ impl ScalarQuantizer4 {
     }
 
     /// Decode 4-bit representation back to float32
+    #[inline]
     pub fn decode(&self, quantized: &[u8]) -> Result<Vec<f32>> {
         let mut decoded = Vec::with_capacity(self.dimension);
 
@@ -293,6 +298,7 @@ impl BinaryQuantizer {
     /// Encode a vector to binary representation
     ///
     /// Returns packed bits: each byte stores 8 dimensions
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -315,6 +321,7 @@ impl BinaryQuantizer {
     /// Hamming distance between binary vectors
     ///
     /// Counts differing bits (fast XOR + popcount)
+    #[inline]
     pub fn hamming_distance(&self, a: &[u8], b: &[u8]) -> u32 {
         let mut distance = 0;
         for (&byte_a, &byte_b) in a.iter().zip(b.iter()) {
@@ -326,6 +333,7 @@ impl BinaryQuantizer {
     /// Approximate cosine similarity from Hamming distance
     ///
     /// cos(θ) ≈ 1 - 2 * (hamming_distance / dimension)
+    #[inline]
     pub fn approximate_cosine(&self, a: &[u8], b: &[u8]) -> f32 {
         let hamming = self.hamming_distance(a, b) as f32;
         1.0 - 2.0 * (hamming / self.dimension as f32)
@@ -630,6 +638,7 @@ impl ScalarQuantizer2 {
     }
 
     /// Encode a vector to 2-bit representation
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -660,6 +669,7 @@ impl ScalarQuantizer2 {
     }
 
     /// Decode 2-bit representation back to float32
+    #[inline]
     pub fn decode(&self, quantized: &[u8]) -> Result<Vec<f32>> {
         let mut decoded = Vec::with_capacity(self.dimension);
 
@@ -674,6 +684,7 @@ impl ScalarQuantizer2 {
     }
 
     /// Compute distance between quantized vectors
+    #[inline]
     pub fn distance_quantized(&self, a: &[u8], b: &[u8]) -> f32 {
         let decoded_a = self.decode(a).unwrap();
         let decoded_b = self.decode(b).unwrap();
@@ -752,6 +763,7 @@ impl TernaryQuantizer {
     /// Encode to ternary representation
     ///
     /// Uses 2 bits per value: 00 = 0, 01 = +1, 10 = -1, 11 = unused
+    #[inline]
     pub fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         if vector.len() != self.dimension {
             return Err(anyhow!("Vector dimension mismatch"));
@@ -779,6 +791,7 @@ impl TernaryQuantizer {
     }
 
     /// Decode ternary representation
+    #[inline]
     pub fn decode(&self, encoded: &[u8]) -> Result<Vec<f32>> {
         let mut decoded = Vec::with_capacity(self.dimension);
 
@@ -800,6 +813,7 @@ impl TernaryQuantizer {
     }
 
     /// Compute inner product using ternary values (very fast)
+    #[inline]
     pub fn ternary_inner_product(&self, encoded_a: &[u8], encoded_b: &[u8]) -> f32 {
         let mut sum = 0.0f32;
 
@@ -903,6 +917,7 @@ pub trait Quantizer {
 }
 
 impl Quantizer for ScalarQuantizer8 {
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
         query.iter()
@@ -912,16 +927,19 @@ impl Quantizer for ScalarQuantizer8 {
             .sqrt()
     }
 
+    #[inline]
     fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         ScalarQuantizer8::encode(self, vector)
     }
 
+    #[inline]
     fn decode(&self, encoded: &[u8]) -> Result<Vec<f32>> {
         ScalarQuantizer8::decode(self, encoded)
     }
 }
 
 impl Quantizer for ScalarQuantizer4 {
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
         query.iter()
@@ -931,16 +949,19 @@ impl Quantizer for ScalarQuantizer4 {
             .sqrt()
     }
 
+    #[inline]
     fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         ScalarQuantizer4::encode(self, vector)
     }
 
+    #[inline]
     fn decode(&self, encoded: &[u8]) -> Result<Vec<f32>> {
         ScalarQuantizer4::decode(self, encoded)
     }
 }
 
 impl Quantizer for ScalarQuantizer2 {
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
         query.iter()
@@ -950,16 +971,19 @@ impl Quantizer for ScalarQuantizer2 {
             .sqrt()
     }
 
+    #[inline]
     fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         ScalarQuantizer2::encode(self, vector)
     }
 
+    #[inline]
     fn decode(&self, encoded: &[u8]) -> Result<Vec<f32>> {
         ScalarQuantizer2::decode(self, encoded)
     }
 }
 
 impl Quantizer for BinaryQuantizer {
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         // For binary, compute distance to the centroid represented by the binary code
         let mut distance = 0.0f32;
@@ -982,10 +1006,12 @@ impl Quantizer for BinaryQuantizer {
         distance.sqrt()
     }
 
+    #[inline]
     fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         BinaryQuantizer::encode(self, vector)
     }
 
+    #[inline]
     fn decode(&self, _encoded: &[u8]) -> Result<Vec<f32>> {
         // Binary can't meaningfully decode
         Err(anyhow!("Binary quantization cannot decode"))
@@ -993,6 +1019,7 @@ impl Quantizer for BinaryQuantizer {
 }
 
 impl Quantizer for TernaryQuantizer {
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
         query.iter()
@@ -1002,10 +1029,12 @@ impl Quantizer for TernaryQuantizer {
             .sqrt()
     }
 
+    #[inline]
     fn encode(&self, vector: &[f32]) -> Result<Vec<u8>> {
         TernaryQuantizer::encode(self, vector)
     }
 
+    #[inline]
     fn decode(&self, encoded: &[u8]) -> Result<Vec<f32>> {
         TernaryQuantizer::decode(self, encoded)
     }

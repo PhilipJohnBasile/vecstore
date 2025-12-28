@@ -9,7 +9,7 @@ use std::cmp::Ordering as CmpOrdering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Auto-tuning engine configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -317,7 +317,8 @@ impl AutoTuner {
 
             let params = self.sample_random();
             let _result = self.evaluate_trial(&params, &objective_fn)?;
-            improvement_history.push(*self.stats.best_objective.read().unwrap());
+            improvement_history.push(*self.stats.best_objective.read()
+                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?);
         }
 
         // Main optimization loop
@@ -338,9 +339,11 @@ impl AutoTuner {
                 SearchStrategy::PopulationBasedTraining => self.sample_random(),
             };
 
-            let prev_best = *self.stats.best_objective.read().unwrap();
+            let prev_best = *self.stats.best_objective.read()
+                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
             let _result = self.evaluate_trial(&params, &objective_fn)?;
-            let new_best = *self.stats.best_objective.read().unwrap();
+            let new_best = *self.stats.best_objective.read()
+                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
 
             improvement_history.push(new_best);
 
@@ -356,10 +359,13 @@ impl AutoTuner {
         }
 
         let total_time = start.elapsed();
-        *self.stats.total_time.write().unwrap() = total_time;
+        *self.stats.total_time.write()
+            .map_err(|_| VecStoreError::LockError("total_time lock poisoned".into()))? = total_time;
 
-        let trials = self.trials.read().unwrap().clone();
-        let best_trial = self.best_trial.read().unwrap().clone();
+        let trials = self.trials.read()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?.clone();
+        let best_trial = self.best_trial.read()
+            .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))?.clone();
 
         Ok(TuneResult {
             best_params: best_trial.as_ref()
@@ -409,14 +415,18 @@ impl AutoTuner {
                 self.stats.completed_trials.fetch_add(1, Ordering::Relaxed);
 
                 // Update best
+                let current_best = *self.stats.best_objective.read()
+                    .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
                 let is_better = match self.config.direction {
-                    OptimizeDirection::Maximize => objective > *self.stats.best_objective.read().unwrap(),
-                    OptimizeDirection::Minimize => objective < *self.stats.best_objective.read().unwrap(),
+                    OptimizeDirection::Maximize => objective > current_best,
+                    OptimizeDirection::Minimize => objective < current_best,
                 };
 
                 if is_better {
-                    *self.stats.best_objective.write().unwrap() = objective;
-                    *self.best_trial.write().unwrap() = Some(trial.clone());
+                    *self.stats.best_objective.write()
+                        .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))? = objective;
+                    *self.best_trial.write()
+                        .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))? = Some(trial.clone());
                 }
 
                 // Update surrogate model
@@ -429,7 +439,8 @@ impl AutoTuner {
             }
         }
 
-        self.trials.write().unwrap().push(trial.clone());
+        self.trials.write()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?.push(trial.clone());
         Ok(trial)
     }
 
@@ -520,7 +531,8 @@ impl AutoTuner {
 
     /// Sample using Bayesian optimization
     fn sample_bayesian(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read().unwrap();
+        let trials = self.trials.read()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < self.config.n_initial_samples {
             return Ok(self.sample_random());
@@ -546,13 +558,15 @@ impl AutoTuner {
 
     /// Compute acquisition value for a point
     fn compute_acquisition(&self, params: &HashMap<String, ParameterValue>) -> Result<f64> {
-        let surrogate = self.surrogate_model.read().unwrap();
+        let surrogate = self.surrogate_model.read()
+            .map_err(|_| VecStoreError::LockError("surrogate_model lock poisoned".into()))?;
 
         if let Some(model) = surrogate.as_ref() {
             let x = self.params_to_vector(params);
             let (mean, std) = model.predict(&x);
 
-            let best_f = *self.stats.best_objective.read().unwrap();
+            let best_f = *self.stats.best_objective.read()
+                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
 
             // Expected Improvement
             let z = (mean - best_f) / (std + 1e-9);
@@ -566,7 +580,8 @@ impl AutoTuner {
 
     /// Sample using TPE
     fn sample_tpe(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read().unwrap();
+        let trials = self.trials.read()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < self.config.n_initial_samples {
             return Ok(self.sample_random());
@@ -633,7 +648,8 @@ impl AutoTuner {
 
     /// Sample using genetic algorithm
     fn sample_genetic(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read().unwrap();
+        let trials = self.trials.read()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < 2 {
             return Ok(self.sample_random());
@@ -703,7 +719,8 @@ impl AutoTuner {
     fn sample_annealing(&self, iteration: usize) -> Result<HashMap<String, ParameterValue>> {
         let temperature = 1.0 / (1.0 + iteration as f64 * 0.01);
 
-        let best = self.best_trial.read().unwrap();
+        let best = self.best_trial.read()
+            .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))?;
         if let Some(best_trial) = best.as_ref() {
             let mut params = best_trial.params.clone();
 
@@ -733,7 +750,8 @@ impl AutoTuner {
         let x = self.params_to_vector(&trial.params);
         let y = trial.objective.unwrap();
 
-        let mut surrogate = self.surrogate_model.write().unwrap();
+        let mut surrogate = self.surrogate_model.write()
+            .map_err(|_| VecStoreError::LockError("surrogate_model lock poisoned".into()))?;
         if surrogate.is_none() {
             *surrogate = Some(SurrogateModel {
                 observations: Vec::new(),
@@ -824,15 +842,17 @@ impl AutoTuner {
     }
 
     /// Get current statistics
-    pub fn get_stats(&self) -> TunerStatsSummary {
-        TunerStatsSummary {
+    pub fn get_stats(&self) -> Result<TunerStatsSummary> {
+        Ok(TunerStatsSummary {
             total_trials: self.stats.total_trials.load(Ordering::Relaxed),
             completed_trials: self.stats.completed_trials.load(Ordering::Relaxed),
             failed_trials: self.stats.failed_trials.load(Ordering::Relaxed),
             pruned_trials: self.stats.pruned_trials.load(Ordering::Relaxed),
-            best_objective: *self.stats.best_objective.read().unwrap(),
-            total_time: *self.stats.total_time.read().unwrap(),
-        }
+            best_objective: *self.stats.best_objective.read()
+                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?,
+            total_time: *self.stats.total_time.read()
+                .map_err(|_| VecStoreError::LockError("total_time lock poisoned".into()))?,
+        })
     }
 }
 
@@ -1007,12 +1027,13 @@ impl WorkloadAnalyzer {
     }
 
     /// Record a query
-    pub fn record_query(&self, latency_ms: f64, result_count: usize, filter_complexity: usize) {
+    pub fn record_query(&self, latency_ms: f64, result_count: usize, filter_complexity: usize) -> Result<()> {
         if random_f64(0.0, 1.0) > self.config.sample_rate {
-            return;
+            return Ok(());
         }
 
-        let mut queries = self.queries.write().unwrap();
+        let mut queries = self.queries.write()
+            .map_err(|_| VecStoreError::LockError("queries lock poisoned".into()))?;
         if queries.len() >= self.config.max_samples {
             queries.remove(0);
         }
@@ -1023,20 +1044,22 @@ impl WorkloadAnalyzer {
             filter_complexity,
             timestamp: current_timestamp(),
         });
+        Ok(())
     }
 
     /// Analyze workload and recommend parameters
-    pub fn recommend(&self) -> WorkloadRecommendation {
-        let queries = self.queries.read().unwrap();
+    pub fn recommend(&self) -> Result<WorkloadRecommendation> {
+        let queries = self.queries.read()
+            .map_err(|_| VecStoreError::LockError("queries lock poisoned".into()))?;
 
         if queries.is_empty() {
-            return WorkloadRecommendation {
+            return Ok(WorkloadRecommendation {
                 latency_sensitive: false,
                 throughput_focused: false,
                 filter_heavy: false,
                 recommended_ef_search: 50,
                 recommended_nprobe: 8,
-            };
+            });
         }
 
         let avg_latency: f64 = queries.iter().map(|q| q.latency_ms).sum::<f64>() / queries.len() as f64;
@@ -1045,13 +1068,13 @@ impl WorkloadAnalyzer {
         let latency_sensitive = avg_latency > 100.0;
         let filter_heavy = avg_filter_complexity > 2.0;
 
-        WorkloadRecommendation {
+        Ok(WorkloadRecommendation {
             latency_sensitive,
             throughput_focused: queries.len() > 1000,
             filter_heavy,
             recommended_ef_search: if latency_sensitive { 30 } else { 100 },
             recommended_nprobe: if filter_heavy { 16 } else { 8 },
-        }
+        })
     }
 }
 
@@ -1126,6 +1149,7 @@ fn erf(x: f64) -> f64 {
 }
 
 /// Builder for AutoTuner
+#[must_use = "builders do nothing unless built"]
 pub struct AutoTunerBuilder {
     config: AutoTuneConfig,
     parameter_space: Option<ParameterSpace>,
@@ -1139,31 +1163,37 @@ impl AutoTunerBuilder {
         }
     }
 
+    #[inline]
     pub fn strategy(mut self, strategy: SearchStrategy) -> Self {
         self.config.strategy = strategy;
         self
     }
 
+    #[inline]
     pub fn max_iterations(mut self, iterations: usize) -> Self {
         self.config.max_iterations = iterations;
         self
     }
 
+    #[inline]
     pub fn time_budget(mut self, duration: Duration) -> Self {
         self.config.time_budget = duration;
         self
     }
 
+    #[inline]
     pub fn target_metric(mut self, metric: TuneMetric) -> Self {
         self.config.target_metric = metric;
         self
     }
 
+    #[inline]
     pub fn direction(mut self, direction: OptimizeDirection) -> Self {
         self.config.direction = direction;
         self
     }
 
+    #[inline]
     pub fn parameter_space(mut self, space: ParameterSpace) -> Self {
         self.parameter_space = Some(space);
         self
@@ -1194,7 +1224,7 @@ mod tests {
             .max_iterations(10)
             .build();
 
-        let stats = tuner.get_stats();
+        let stats = tuner.get_stats().unwrap();
         assert_eq!(stats.total_trials, 0);
     }
 
@@ -1251,10 +1281,10 @@ mod tests {
             max_samples: 100,
         });
 
-        analyzer.record_query(50.0, 10, 1);
-        analyzer.record_query(150.0, 20, 3);
+        analyzer.record_query(50.0, 10, 1).unwrap();
+        analyzer.record_query(150.0, 20, 3).unwrap();
 
-        let recommendation = analyzer.recommend();
+        let recommendation = analyzer.recommend().unwrap();
         assert!(recommendation.recommended_ef_search > 0);
     }
 }

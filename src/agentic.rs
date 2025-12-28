@@ -933,14 +933,18 @@ impl AgentExecutor {
     /// Create or get agent state
     pub fn get_or_create_state(&self, agent_id: &str, session_id: &str) -> AgentState {
         let key = format!("{}:{}", agent_id, session_id);
-        let states = self.states.read().unwrap();
+        let Ok(states) = self.states.read() else {
+            return AgentState::new(agent_id, session_id);
+        };
 
         if let Some(state) = states.get(&key) {
             state.clone()
         } else {
             drop(states);
             let state = AgentState::new(agent_id, session_id);
-            let mut states = self.states.write().unwrap();
+            let Ok(mut states) = self.states.write() else {
+                return state;
+            };
             states.insert(key, state.clone());
             state
         }
@@ -949,7 +953,7 @@ impl AgentExecutor {
     /// Save agent state
     pub fn save_state(&self, state: &AgentState) {
         let key = format!("{}:{}", state.agent_id, state.session_id);
-        let mut states = self.states.write().unwrap();
+        let Ok(mut states) = self.states.write() else { return; };
         states.insert(key, state.clone());
     }
 
@@ -1003,7 +1007,7 @@ impl AgentExecutor {
     /// Register a tool
     pub fn register_tool(&self, agent_id: &str, session_id: &str, tool: ToolDefinition) {
         let key = format!("{}:{}", agent_id, session_id);
-        let mut states = self.states.write().unwrap();
+        let Ok(mut states) = self.states.write() else { return; };
 
         if let Some(state) = states.get_mut(&key) {
             state.register_tool(tool);
@@ -1012,8 +1016,20 @@ impl AgentExecutor {
 
     /// Get statistics
     pub fn stats(&self) -> AgentStats {
-        let states = self.states.read().unwrap();
-        let cache = self.cache.read().unwrap();
+        let Ok(states) = self.states.read() else {
+            return AgentStats {
+                active_agents: 0,
+                cached_queries: 0,
+                total_executions: 0,
+            };
+        };
+        let Ok(cache) = self.cache.read() else {
+            return AgentStats {
+                active_agents: states.len(),
+                cached_queries: 0,
+                total_executions: states.values().map(|s| s.history.len()).sum(),
+            };
+        };
 
         let total_executions: usize = states.values().map(|s| s.history.len()).sum();
 

@@ -245,32 +245,47 @@ impl<V: Clone> SharedQueryCache<V> {
 
     /// Get a cached value
     pub fn get(&self, key: &[f32]) -> Option<V> {
-        self.inner.lock().unwrap().get(key)
+        let Ok(mut guard) = self.inner.lock() else { return None; };
+        guard.get(key)
     }
 
     /// Insert a value
     pub fn insert(&self, key: &[f32], value: V) {
-        self.inner.lock().unwrap().insert(key, value);
+        let Ok(mut guard) = self.inner.lock() else { return; };
+        guard.insert(key, value);
     }
 
     /// Clear the cache
     pub fn clear(&self) {
-        self.inner.lock().unwrap().clear();
+        let Ok(mut guard) = self.inner.lock() else { return; };
+        guard.clear();
     }
 
     /// Get statistics
     pub fn stats(&self) -> CacheStats {
-        self.inner.lock().unwrap().stats()
+        let Ok(guard) = self.inner.lock() else {
+            return CacheStats {
+                entries: 0,
+                capacity: 0,
+                utilization: 0.0,
+                hits: 0,
+                misses: 0,
+                hit_rate: 0.0,
+            };
+        };
+        guard.stats()
     }
 
     /// Evict expired entries
     pub fn evict_expired(&self) -> usize {
-        self.inner.lock().unwrap().evict_expired()
+        let Ok(mut guard) = self.inner.lock() else { return 0; };
+        guard.evict_expired()
     }
 
     /// Get cache hit rate
     pub fn hit_rate(&self) -> f32 {
-        self.inner.lock().unwrap().hit_rate()
+        let Ok(guard) = self.inner.lock() else { return 0.0; };
+        guard.hit_rate()
     }
 
     /// Clone the inner Arc for sharing across threads

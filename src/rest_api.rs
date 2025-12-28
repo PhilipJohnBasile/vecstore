@@ -731,7 +731,7 @@ impl ApiRateLimiter {
 
     /// Check if request is allowed
     pub fn allow(&self, client_id: &str) -> bool {
-        let mut clients = self.clients.write().unwrap();
+        let Ok(mut clients) = self.clients.write() else { return false; };
 
         let client = clients.entry(client_id.to_string()).or_insert_with(|| {
             ClientLimit {

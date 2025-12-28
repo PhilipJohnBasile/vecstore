@@ -36,7 +36,7 @@ use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::Result;
+use crate::error::{Result, VecStoreError};
 
 /// Hybrid pipeline configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -595,26 +595,30 @@ impl HybridPipeline {
     pub fn index(&self, doc: HybridDocument) -> Result<()> {
         // Index in dense index
         {
-            let mut dense = self.dense_index.write().unwrap();
+            let mut dense = self.dense_index.write()
+                .map_err(|_| VecStoreError::LockError("dense_index lock poisoned".into()))?;
             dense.add_document(&doc.id, &doc.dense_vector);
         }
 
         // Index in sparse index if available
         if let Some(sparse) = &doc.sparse_vector {
-            let mut sparse_idx = self.sparse_index.write().unwrap();
+            let mut sparse_idx = self.sparse_index.write()
+                .map_err(|_| VecStoreError::LockError("sparse_index lock poisoned".into()))?;
             sparse_idx.add_document(&doc.id, sparse);
         }
 
         // Index in BM25
         {
             let terms = tokenize(&doc.text);
-            let mut bm25 = self.bm25_index.write().unwrap();
+            let mut bm25 = self.bm25_index.write()
+                .map_err(|_| VecStoreError::LockError("bm25_index lock poisoned".into()))?;
             bm25.add_document(&doc.id, &terms);
         }
 
         // Store document
         {
-            let mut docs = self.documents.write().unwrap();
+            let mut docs = self.documents.write()
+                .map_err(|_| VecStoreError::LockError("documents lock poisoned".into()))?;
             docs.insert(doc.id.clone(), doc);
         }
 
@@ -631,7 +635,8 @@ impl HybridPipeline {
         // Dense search
         if let Some(ref vector) = query.dense_vector {
             if weights.0 > 0.0 {
-                let dense = self.dense_index.read().unwrap();
+                let dense = self.dense_index.read()
+                    .map_err(|_| VecStoreError::LockError("dense_index lock poisoned".into()))?;
                 let results = dense.search(vector, self.config.max_candidates);
                 let signal_results: Vec<SignalResult> = results
                     .into_iter()
@@ -650,7 +655,8 @@ impl HybridPipeline {
         // Sparse search
         if let Some(ref sparse) = query.sparse_vector {
             if weights.1 > 0.0 {
-                let sparse_idx = self.sparse_index.read().unwrap();
+                let sparse_idx = self.sparse_index.read()
+                    .map_err(|_| VecStoreError::LockError("sparse_index lock poisoned".into()))?;
                 let results = sparse_idx.search(sparse, self.config.max_candidates);
                 let signal_results: Vec<SignalResult> = results
                     .into_iter()
@@ -669,7 +675,8 @@ impl HybridPipeline {
         // BM25 search
         if weights.2 > 0.0 && !query.text.is_empty() {
             let query_terms = tokenize(&query.text);
-            let mut bm25 = self.bm25_index.write().unwrap();
+            let mut bm25 = self.bm25_index.write()
+                .map_err(|_| VecStoreError::LockError("bm25_index lock poisoned".into()))?;
             let results = bm25.search_bm25(&query_terms, 1.2, 0.75, self.config.max_candidates);
             let signal_results: Vec<SignalResult> = results
                 .into_iter()
@@ -685,11 +692,12 @@ impl HybridPipeline {
         }
 
         // Fuse results
-        let mut fused = self.fuse_results(&all_signals, weights);
+        let mut fused = self.fuse_results(&all_signals, weights)?;
 
         // Apply reranking if configured
         if let Some(reranker) = &self.reranker {
-            let docs = self.documents.read().unwrap();
+            let docs = self.documents.read()
+                .map_err(|_| VecStoreError::LockError("documents lock poisoned".into()))?;
             fused = reranker.rerank(&query.text, fused, &docs);
         }
 
@@ -714,7 +722,7 @@ impl HybridPipeline {
         }
     }
 
-    fn fuse_results(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Vec<HybridResult> {
+    fn fuse_results(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Result<Vec<HybridResult>> {
         match &self.config.fusion_strategy {
             FusionMethod::RRF { k } => self.fuse_rrf(signals, *k),
             FusionMethod::WeightedSum => self.fuse_weighted_sum(signals, weights),
@@ -727,7 +735,7 @@ impl HybridPipeline {
         }
     }
 
-    fn fuse_rrf(&self, signals: &[Vec<SignalResult>], k: f32) -> Vec<HybridResult> {
+    fn fuse_rrf(&self, signals: &[Vec<SignalResult>], k: f32) -> Result<Vec<HybridResult>> {
         let mut doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, usize>)> = HashMap::new();
 
         for signal_results in signals {
@@ -747,7 +755,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "RRF")
     }
 
-    fn fuse_weighted_sum(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Vec<HybridResult> {
+    fn fuse_weighted_sum(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Result<Vec<HybridResult>> {
         let weight_map: HashMap<SignalType, f32> = [
             (SignalType::Dense, weights.0),
             (SignalType::Sparse, weights.1),
@@ -774,7 +782,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "WeightedSum")
     }
 
-    fn fuse_max_score(&self, signals: &[Vec<SignalResult>]) -> Vec<HybridResult> {
+    fn fuse_max_score(&self, signals: &[Vec<SignalResult>]) -> Result<Vec<HybridResult>> {
         let mut doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, usize>)> = HashMap::new();
 
         for signal_results in signals {
@@ -794,7 +802,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "MaxScore")
     }
 
-    fn fuse_geometric_mean(&self, signals: &[Vec<SignalResult>]) -> Vec<HybridResult> {
+    fn fuse_geometric_mean(&self, signals: &[Vec<SignalResult>]) -> Result<Vec<HybridResult>> {
         let mut doc_data: HashMap<String, (Vec<f32>, HashMap<String, f32>, HashMap<String, usize>)> = HashMap::new();
 
         for signal_results in signals {
@@ -821,7 +829,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "GeometricMean")
     }
 
-    fn fuse_harmonic_mean(&self, signals: &[Vec<SignalResult>]) -> Vec<HybridResult> {
+    fn fuse_harmonic_mean(&self, signals: &[Vec<SignalResult>]) -> Result<Vec<HybridResult>> {
         let mut doc_data: HashMap<String, (Vec<f32>, HashMap<String, f32>, HashMap<String, usize>)> = HashMap::new();
 
         for signal_results in signals {
@@ -848,7 +856,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "HarmonicMean")
     }
 
-    fn fuse_voting(&self, signals: &[Vec<SignalResult>], min_votes: usize) -> Vec<HybridResult> {
+    fn fuse_voting(&self, signals: &[Vec<SignalResult>], min_votes: usize) -> Result<Vec<HybridResult>> {
         let mut doc_votes: HashMap<String, (usize, HashMap<String, f32>, HashMap<String, usize>)> = HashMap::new();
 
         for signal_results in signals {
@@ -874,7 +882,7 @@ impl HybridPipeline {
         self.build_results(doc_scores, "Voting")
     }
 
-    fn fuse_distribution(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Vec<HybridResult> {
+    fn fuse_distribution(&self, signals: &[Vec<SignalResult>], weights: (f32, f32, f32)) -> Result<Vec<HybridResult>> {
         // Normalize scores within each signal, then combine
         let mut normalized_signals = Vec::new();
 
@@ -907,8 +915,9 @@ impl HybridPipeline {
         &self,
         doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, usize>)>,
         method: &str,
-    ) -> Vec<HybridResult> {
-        let docs = self.documents.read().unwrap();
+    ) -> Result<Vec<HybridResult>> {
+        let docs = self.documents.read()
+            .map_err(|_| VecStoreError::LockError("documents lock poisoned".into()))?;
 
         let mut results: Vec<HybridResult> = doc_scores
             .into_iter()
@@ -941,22 +950,25 @@ impl HybridPipeline {
             .collect();
 
         results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
-        results
+        Ok(results)
     }
 
     /// Get pipeline statistics
-    pub fn stats(&self) -> PipelineStats {
-        let dense = self.dense_index.read().unwrap();
-        let sparse = self.sparse_index.read().unwrap();
-        let bm25 = self.bm25_index.read().unwrap();
+    pub fn stats(&self) -> Result<PipelineStats> {
+        let dense = self.dense_index.read()
+            .map_err(|_| VecStoreError::LockError("dense_index lock poisoned".into()))?;
+        let sparse = self.sparse_index.read()
+            .map_err(|_| VecStoreError::LockError("sparse_index lock poisoned".into()))?;
+        let bm25 = self.bm25_index.read()
+            .map_err(|_| VecStoreError::LockError("bm25_index lock poisoned".into()))?;
 
-        PipelineStats {
+        Ok(PipelineStats {
             dense_vectors: dense.vectors.len(),
             sparse_terms: sparse.postings.len(),
             bm25_terms: bm25.postings.len(),
             bm25_documents: bm25.doc_count,
             avg_doc_length: bm25.avg_doc_length,
-        }
+        })
     }
 }
 

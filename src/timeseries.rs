@@ -84,7 +84,7 @@ impl DecayFunction {
             DecayFunction::None => score,
 
             DecayFunction::Exponential { half_life } => {
-                let lambda = 0.693147 / half_life; // ln(2) / half_life
+                let lambda = std::f64::consts::LN_2 / half_life;
                 score * (-lambda * age_seconds).exp() as f32
             }
 

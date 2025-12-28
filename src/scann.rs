@@ -189,6 +189,7 @@ impl AnisotropicQuantizer {
     }
 
     /// Quantize a vector
+    #[inline]
     fn quantize(&self, vector: &[f32]) -> Vec<u8> {
         let mut quantized = Vec::with_capacity(vector.len());
 
@@ -213,6 +214,7 @@ impl AnisotropicQuantizer {
     }
 
     /// Dequantize a vector (approximate reconstruction)
+    #[inline]
     fn dequantize(&self, quantized: &[u8]) -> Vec<f32> {
         let mut vector = Vec::with_capacity(quantized.len());
 
@@ -238,6 +240,7 @@ impl AnisotropicQuantizer {
     }
 
     /// Asymmetric distance (query in full precision, db in quantized)
+    #[inline]
     fn asymmetric_distance(&self, query: &[f32], quantized: &[u8]) -> f32 {
         let reconstructed = self.dequantize(quantized);
         euclidean_distance(query, &reconstructed)
@@ -396,6 +399,7 @@ impl ScaNNIndex {
     }
 
     /// Search for nearest neighbors
+    #[inline]
     pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<(String, f32)>> {
         if !self.is_trained {
             return Err(anyhow!("Index must be trained before searching"));
@@ -445,6 +449,7 @@ impl ScaNNIndex {
     }
 
     /// Find nearest leaf for a vector
+    #[inline]
     fn find_nearest_leaf(&self, vector: &[f32]) -> usize {
         let mut min_distance = f32::INFINITY;
         let mut nearest_leaf = 0;
@@ -461,6 +466,7 @@ impl ScaNNIndex {
     }
 
     /// Find k nearest leaves for a query
+    #[inline]
     fn find_nearest_leaves(&self, query: &[f32], k: usize) -> Vec<usize> {
         let mut distances: Vec<(usize, f32)> = self
             .tree
@@ -568,6 +574,7 @@ pub struct ScaNNStats {
 }
 
 /// Helper: Euclidean distance
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b.iter())

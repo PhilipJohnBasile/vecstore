@@ -616,7 +616,8 @@ impl EmbeddingService {
 
         // Check cache for each text
         if self.config.enable_cache && !request.skip_cache {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write()
+                .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
 
             for (i, text) in request.texts.iter().enumerate() {
                 let cache_key = self.cache_key(text, &model.model, request.task_type.as_ref());
@@ -624,10 +625,14 @@ impl EmbeddingService {
                 if let Some(cached) = cache.get(&cache_key) {
                     embeddings.push((i, cached));
                     cache_hits += 1;
-                    self.usage.write().unwrap().record_cache_hit();
+                    self.usage.write()
+                        .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
+                        .record_cache_hit();
                 } else {
                     texts_to_embed.push((i, text.clone()));
-                    self.usage.write().unwrap().record_cache_miss();
+                    self.usage.write()
+                        .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
+                        .record_cache_miss();
                 }
             }
         } else {
@@ -639,7 +644,8 @@ impl EmbeddingService {
         if !texts_to_embed.is_empty() {
             // Rate limiting
             {
-                let mut limiter = self.rate_limiter.write().unwrap();
+                let mut limiter = self.rate_limiter.write()
+                    .map_err(|_| VecStoreError::LockError("rate_limiter lock poisoned".into()))?;
                 if !limiter.acquire(1.0) {
                     // Would need to wait in real async implementation
                 }
@@ -652,7 +658,8 @@ impl EmbeddingService {
 
             // Store in cache
             if self.config.enable_cache && !request.skip_cache {
-                let mut cache = self.cache.write().unwrap();
+                let mut cache = self.cache.write()
+                    .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
                 for ((i, text), emb) in texts_to_embed.iter().zip(&new_embeddings) {
                     let cache_key = self.cache_key(text, &model.model, request.task_type.as_ref());
                     cache.put(cache_key, emb.clone(), &model.model);
@@ -688,14 +695,16 @@ impl EmbeddingService {
         // Record usage
         if self.config.track_usage && total_tokens > 0 {
             let provider_name = format!("{:?}", model.provider);
-            self.usage.write().unwrap().record(
-                &provider_name,
-                &model.model,
-                total_tokens,
-                final_embeddings.len(),
-                cost,
-                processing_time_ms,
-            );
+            self.usage.write()
+                .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
+                .record(
+                    &provider_name,
+                    &model.model,
+                    total_tokens,
+                    final_embeddings.len(),
+                    cost,
+                    processing_time_ms,
+                );
         }
 
         Ok(EmbeddingResponse {
@@ -736,14 +745,18 @@ impl EmbeddingService {
     }
 
     /// Get usage statistics
-    pub fn usage(&self) -> UsageStats {
-        self.usage.read().unwrap().stats()
+    pub fn usage(&self) -> Result<UsageStats> {
+        let usage = self.usage.read()
+            .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?;
+        Ok(usage.stats())
     }
 
     /// Reset usage tracking
-    pub fn reset_usage(&self) {
-        let mut usage = self.usage.write().unwrap();
+    pub fn reset_usage(&self) -> Result<()> {
+        let mut usage = self.usage.write()
+            .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?;
         *usage = UsageTracker::new();
+        Ok(())
     }
 
     /// Get current model
@@ -757,16 +770,19 @@ impl EmbeddingService {
     }
 
     /// Clear embedding cache
-    pub fn clear_cache(&self) {
-        let mut cache = self.cache.write().unwrap();
+    pub fn clear_cache(&self) -> Result<()> {
+        let mut cache = self.cache.write()
+            .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
         *cache = EmbeddingCache::new(self.config.max_cache_entries, self.config.cache_ttl_seconds);
+        Ok(())
     }
 
     /// Get cache statistics
-    pub fn cache_stats(&self) -> (usize, u64) {
-        let cache = self.cache.read().unwrap();
+    pub fn cache_stats(&self) -> Result<(usize, u64)> {
+        let cache = self.cache.read()
+            .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
         let stats = cache.stats();
-        (stats.entries, stats.total_hits)
+        Ok((stats.entries, stats.total_hits))
     }
 
     // Internal methods
@@ -879,10 +895,12 @@ impl EmbeddingCollection {
     pub fn add(&self, id: &str, text: &str, metadata: HashMap<String, serde_json::Value>) -> Result<()> {
         let embedding = self.service.embed_one(text)?;
 
-        let mut vectors = self.vectors.write().unwrap();
+        let mut vectors = self.vectors.write()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
         vectors.insert(id.to_string(), (embedding, metadata));
 
-        let mut texts = self.texts.write().unwrap();
+        let mut texts = self.texts.write()
+            .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
         texts.insert(id.to_string(), text.to_string());
 
         Ok(())
@@ -893,8 +911,10 @@ impl EmbeddingCollection {
         let texts: Vec<String> = documents.iter().map(|(_, t, _)| t.clone()).collect();
         let embeddings = self.service.embed_documents(texts.clone())?;
 
-        let mut vectors = self.vectors.write().unwrap();
-        let mut text_store = self.texts.write().unwrap();
+        let mut vectors = self.vectors.write()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
+        let mut text_store = self.texts.write()
+            .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
 
         for ((id, text, metadata), embedding) in documents.into_iter().zip(embeddings) {
             vectors.insert(id.clone(), (embedding, metadata));
@@ -908,8 +928,10 @@ impl EmbeddingCollection {
     pub fn query(&self, text: &str, top_k: usize) -> Result<Vec<QueryResult>> {
         let query_embedding = self.service.embed_query(text)?;
 
-        let vectors = self.vectors.read().unwrap();
-        let texts = self.texts.read().unwrap();
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
+        let texts = self.texts.read()
+            .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
 
         let mut results: Vec<QueryResult> = vectors
             .iter()
@@ -931,22 +953,27 @@ impl EmbeddingCollection {
     }
 
     /// Get vector by ID
-    pub fn get(&self, id: &str) -> Option<Vec<f32>> {
-        let vectors = self.vectors.read().unwrap();
-        vectors.get(id).map(|(v, _)| v.clone())
+    pub fn get(&self, id: &str) -> Result<Option<Vec<f32>>> {
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
+        Ok(vectors.get(id).map(|(v, _)| v.clone()))
     }
 
     /// Delete by ID
-    pub fn delete(&self, id: &str) -> bool {
-        let mut vectors = self.vectors.write().unwrap();
-        let mut texts = self.texts.write().unwrap();
+    pub fn delete(&self, id: &str) -> Result<bool> {
+        let mut vectors = self.vectors.write()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
+        let mut texts = self.texts.write()
+            .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
         texts.remove(id);
-        vectors.remove(id).is_some()
+        Ok(vectors.remove(id).is_some())
     }
 
     /// Count documents
-    pub fn count(&self) -> usize {
-        self.vectors.read().unwrap().len()
+    pub fn count(&self) -> Result<usize> {
+        let vectors = self.vectors.read()
+            .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
+        Ok(vectors.len())
     }
 }
 
@@ -1019,7 +1046,7 @@ mod tests {
 
         service.embed(EmbeddingRequest::new(vec!["Test".to_string()])).unwrap();
 
-        let usage = service.usage();
+        let usage = service.usage().unwrap();
         assert!(usage.total_requests > 0);
     }
 

@@ -390,8 +390,10 @@ impl NeuralRanker {
             max_length: self.config.max_seq_length,
         };
 
-        *self.model.write().unwrap() = Some(model);
-        *self.tokenizer.write().unwrap() = Some(tokenizer);
+        *self.model.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire model write lock".into()))? = Some(model);
+        *self.tokenizer.write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire tokenizer write lock".into()))? = Some(tokenizer);
 
         Ok(())
     }
@@ -469,7 +471,8 @@ impl NeuralRanker {
 
             // Check cache
             let neural_score = {
-                let cache = self.cache.read().unwrap();
+                let cache = self.cache.read()
+                    .map_err(|_| VecStoreError::LockError("Failed to acquire cache read lock".into()))?;
                 if let Some(entry) = cache.entries.get(&cache_key) {
                     cache_hit = true;
                     self.stats.cache_hits.fetch_add(1, Ordering::Relaxed);
@@ -482,7 +485,8 @@ impl NeuralRanker {
                     let score = self.compute_score(query, &candidate.text)?;
 
                     // Cache result
-                    let mut cache = self.cache.write().unwrap();
+                    let mut cache = self.cache.write()
+                        .map_err(|_| VecStoreError::LockError("Failed to acquire cache write lock".into()))?;
                     if cache.entries.len() < cache.max_size {
                         cache.entries.insert(cache_key, CacheEntry {
                             embedding: vec![score],
@@ -646,7 +650,8 @@ impl NeuralRanker {
 
     /// Tokenize text
     fn tokenize(&self, text: &str) -> Result<Vec<u32>> {
-        let tokenizer = self.tokenizer.read().unwrap();
+        let tokenizer = self.tokenizer.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire tokenizer read lock".into()))?;
         let tokenizer = tokenizer.as_ref()
             .ok_or_else(|| VecStoreError::IndexNotInitialized)?;
 
@@ -685,7 +690,7 @@ impl NeuralRanker {
 
     /// Update running average latency
     fn update_latency(&self, latency_ms: f64) {
-        let mut avg = self.stats.avg_latency_ms.write().unwrap();
+        let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
         let count = self.stats.total_reranks.load(Ordering::Relaxed) as f64;
         *avg = (*avg * (count - 1.0) + latency_ms) / count;
     }
@@ -702,7 +707,7 @@ impl NeuralRanker {
                 let misses = self.stats.cache_misses.load(Ordering::Relaxed) as f64;
                 if hits + misses > 0.0 { hits / (hits + misses) } else { 0.0 }
             },
-            avg_latency_ms: *self.stats.avg_latency_ms.read().unwrap(),
+            avg_latency_ms: self.stats.avg_latency_ms.read().map(|g| *g).unwrap_or(0.0),
             gpu_inferences: self.stats.gpu_inferences.load(Ordering::Relaxed),
             cpu_inferences: self.stats.cpu_inferences.load(Ordering::Relaxed),
         }
@@ -710,7 +715,7 @@ impl NeuralRanker {
 
     /// Clear embedding cache
     pub fn clear_cache(&self) {
-        let mut cache = self.cache.write().unwrap();
+        let Ok(mut cache) = self.cache.write() else { return; };
         cache.entries.clear();
         cache.hits = 0;
         cache.misses = 0;
@@ -886,13 +891,15 @@ impl LateInteractionModel {
 
     /// Index document embeddings
     pub fn index_document(&self, doc_id: &str, embeddings: Vec<Vec<f32>>) {
-        self.doc_embeddings.write().unwrap().insert(doc_id.to_string(), embeddings);
+        let Ok(mut doc_emb) = self.doc_embeddings.write() else { return; };
+        doc_emb.insert(doc_id.to_string(), embeddings);
     }
 
     /// Retrieve and score against indexed documents
     pub fn retrieve(&self, query: &str, top_k: usize) -> Result<Vec<(String, f32)>> {
         let query_embeddings = self.encode_query(query)?;
-        let docs = self.doc_embeddings.read().unwrap();
+        let docs = self.doc_embeddings.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire doc_embeddings read lock".into()))?;
 
         let mut scores: Vec<(String, f32)> = docs.iter()
             .map(|(id, emb)| (id.clone(), self.score(&query_embeddings, emb)))
@@ -918,7 +925,8 @@ impl LearnedSparseModel {
     /// Encode text to sparse representation
     pub fn encode(&self, text: &str) -> Result<SparseRepresentation> {
         let tokens: Vec<&str> = text.split_whitespace().collect();
-        let vocab = self.vocab.read().unwrap();
+        let vocab = self.vocab.read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire vocab read lock".into()))?;
 
         let mut term_ids = Vec::new();
         let mut weights = Vec::new();
@@ -1105,6 +1113,7 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
 }
 
 /// Builder for NeuralRanker
+#[must_use = "builders do nothing unless built"]
 pub struct NeuralRankerBuilder {
     config: NeuralRankerConfig,
 }

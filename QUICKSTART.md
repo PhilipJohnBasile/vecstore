@@ -2,7 +2,7 @@
 
 Get running with VecStore in 5 minutes or less.
 
-> **Status:** Instructions target the 0.0.1 alpha release. Expect breaking changes.
+> **Status:** Instructions target the 0.1.0 release. Expect breaking changes.
 
 ---
 
@@ -14,7 +14,7 @@ Add VecStore to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecstore = "0.0.1"
+vecstore = "0.1.0"
 ```
 
 Or use cargo:

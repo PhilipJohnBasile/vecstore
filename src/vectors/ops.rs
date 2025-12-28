@@ -13,6 +13,7 @@ pub struct VectorOps;
 
 impl VectorOps {
     /// Add two vectors element-wise
+    #[inline]
     pub fn add(a: &[f32], b: &[f32]) -> Result<Vec<f32>> {
         if a.len() != b.len() {
             anyhow::bail!("Vector dimensions must match: {} vs {}", a.len(), b.len());
@@ -21,6 +22,7 @@ impl VectorOps {
     }
 
     /// Subtract two vectors element-wise
+    #[inline]
     pub fn subtract(a: &[f32], b: &[f32]) -> Result<Vec<f32>> {
         if a.len() != b.len() {
             anyhow::bail!("Vector dimensions must match");
@@ -29,11 +31,13 @@ impl VectorOps {
     }
 
     /// Multiply vector by scalar
+    #[inline]
     pub fn scale(v: &[f32], scalar: f32) -> Vec<f32> {
         v.iter().map(|x| x * scalar).collect()
     }
 
     /// Calculate mean/centroid of multiple vectors
+    #[inline]
     pub fn centroid(vectors: &[Vec<f32>]) -> Result<Vec<f32>> {
         if vectors.is_empty() {
             anyhow::bail!("Cannot calculate centroid of empty vector set");
@@ -60,6 +64,7 @@ impl VectorOps {
     }
 
     /// Normalize vector to unit length (L2 norm = 1)
+    #[inline]
     pub fn normalize(v: &[f32]) -> Vec<f32> {
         let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
         if norm == 0.0 {
@@ -70,11 +75,13 @@ impl VectorOps {
     }
 
     /// L2 norm (Euclidean length)
+    #[inline]
     pub fn norm(v: &[f32]) -> f32 {
         v.iter().map(|x| x * x).sum::<f32>().sqrt()
     }
 
     /// Dot product
+    #[inline]
     pub fn dot(a: &[f32], b: &[f32]) -> Result<f32> {
         if a.len() != b.len() {
             anyhow::bail!("Vector dimensions must match");
@@ -116,6 +123,7 @@ impl VectorOps {
     /// // Result: 1.0*1.5 + 3.0*1.0 = 4.5 (indices 5 and 500 match)
     /// assert_eq!(dot, 4.5);
     /// ```
+    #[inline]
     pub fn sparse_dot(
         a_indices: &[usize],
         a_values: &[f32],
@@ -161,6 +169,7 @@ impl VectorOps {
     /// let norm = VectorOps::sparse_norm(&values);
     /// assert_eq!(norm, 5.0); // sqrt(3^2 + 4^2) = 5
     /// ```
+    #[inline]
     pub fn sparse_norm(values: &[f32]) -> f32 {
         values.iter().map(|x| x * x).sum::<f32>().sqrt()
     }
@@ -187,6 +196,7 @@ impl VectorOps {
     /// // Should be close to 1.0 / sqrt(2) ≈ 0.707
     /// assert!((sim - 0.707).abs() < 0.01);
     /// ```
+    #[inline]
     pub fn sparse_cosine(
         a_indices: &[usize],
         a_values: &[f32],
@@ -296,6 +306,7 @@ impl KMeans {
     }
 }
 
+#[inline]
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
     a.iter()
         .zip(b.iter())

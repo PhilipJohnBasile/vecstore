@@ -362,13 +362,15 @@ impl MultimodalIndex {
 
         // Add to documents
         {
-            let mut docs = self.documents.write().unwrap();
+            let mut docs = self.documents.write()
+                .map_err(|_| VecStoreError::LockError("failed to acquire documents write lock".into()))?;
             docs.insert(id.clone(), doc);
         }
 
         // Add to modality index
         {
-            let mut indexes = self.modality_indexes.write().unwrap();
+            let mut indexes = self.modality_indexes.write()
+                .map_err(|_| VecStoreError::LockError("failed to acquire modality_indexes write lock".into()))?;
             indexes.entry(modality).or_insert_with(Vec::new).push(id);
         }
 
@@ -430,8 +432,10 @@ impl MultimodalIndex {
             return Err(VecStoreError::InvalidInput("No query provided".to_string()));
         };
 
-        let docs = self.documents.read().unwrap();
-        let indexes = self.modality_indexes.read().unwrap();
+        let docs = self.documents.read()
+            .map_err(|_| VecStoreError::LockError("failed to acquire documents read lock".into()))?;
+        let indexes = self.modality_indexes.read()
+            .map_err(|_| VecStoreError::LockError("failed to acquire modality_indexes read lock".into()))?;
 
         // Determine which documents to search
         let candidate_ids: Vec<&String> = if let Some(target) = &query.target_modality {
@@ -549,16 +553,16 @@ impl MultimodalIndex {
 
     /// Get document by ID
     pub fn get(&self, id: &str) -> Option<MultimodalDocument> {
-        let docs = self.documents.read().unwrap();
+        let Ok(docs) = self.documents.read() else { return None; };
         docs.get(id).cloned()
     }
 
     /// Delete document
     pub fn delete(&self, id: &str) -> bool {
-        let mut docs = self.documents.write().unwrap();
+        let Ok(mut docs) = self.documents.write() else { return false; };
 
         if let Some(doc) = docs.remove(id) {
-            let mut indexes = self.modality_indexes.write().unwrap();
+            let Ok(mut indexes) = self.modality_indexes.write() else { return false; };
             if let Some(ids) = indexes.get_mut(&doc.modality) {
                 ids.retain(|x| x != id);
             }
@@ -570,8 +574,20 @@ impl MultimodalIndex {
 
     /// Get statistics
     pub fn stats(&self) -> MultimodalStats {
-        let docs = self.documents.read().unwrap();
-        let indexes = self.modality_indexes.read().unwrap();
+        let Ok(docs) = self.documents.read() else {
+            return MultimodalStats {
+                total_documents: 0,
+                by_modality: HashMap::new(),
+                dimension: self.config.dimension,
+            };
+        };
+        let Ok(indexes) = self.modality_indexes.read() else {
+            return MultimodalStats {
+                total_documents: docs.len(),
+                by_modality: HashMap::new(),
+                dimension: self.config.dimension,
+            };
+        };
 
         let mut by_modality = HashMap::new();
         for (modality, ids) in indexes.iter() {

@@ -1,7 +1,8 @@
 //! Raft Consensus Implementation
 //!
 //! Provides distributed consensus for VecStore clusters using the Raft algorithm.
-//! Implements leader election, log replication, and fault tolerance.
+//! Implements leader election, log replication, and fault tolerance with actual
+//! gRPC-based RPC communication using tonic.
 
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -9,6 +10,15 @@ use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::sync::{Mutex, RwLock};
 use tokio::time;
+use tracing::{debug, error, info, warn};
+
+#[cfg(feature = "server")]
+use tonic::{transport::Channel, Request, Response, Status};
+
+#[cfg(feature = "server")]
+pub mod pb {
+    tonic::include_proto!("raft");
+}
 
 /// Node ID type
 pub type NodeId = String;
@@ -113,6 +123,17 @@ pub struct AppendEntriesResponse {
     /// For fast log backtracking
     pub conflict_index: Option<LogIndex>,
     pub conflict_term: Option<Term>,
+    /// The match index after successful append
+    pub match_index: LogIndex,
+}
+
+/// Peer node information
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PeerInfo {
+    /// Node ID
+    pub node_id: NodeId,
+    /// gRPC address (e.g., "127.0.0.1:50051")
+    pub address: String,
 }
 
 /// Raft node configuration
@@ -120,8 +141,10 @@ pub struct AppendEntriesResponse {
 pub struct RaftConfig {
     /// This node's ID
     pub node_id: NodeId,
-    /// Peer node IDs
-    pub peers: Vec<NodeId>,
+    /// This node's gRPC address
+    pub address: String,
+    /// Peer nodes with their addresses
+    pub peers: Vec<PeerInfo>,
     /// Election timeout range (milliseconds)
     pub election_timeout_min_ms: u64,
     pub election_timeout_max_ms: u64,
@@ -129,30 +152,52 @@ pub struct RaftConfig {
     pub heartbeat_interval_ms: u64,
     /// Maximum entries per AppendEntries RPC
     pub max_entries_per_batch: usize,
+    /// RPC timeout in milliseconds
+    pub rpc_timeout_ms: u64,
+    /// Maximum retry attempts for RPC calls
+    pub max_retries: u32,
+    /// Base delay for exponential backoff (milliseconds)
+    pub retry_base_delay_ms: u64,
+    /// Enable TLS for RPC communication
+    pub tls_enabled: bool,
+    /// Path to TLS certificate file (if TLS enabled)
+    pub tls_cert_path: Option<String>,
+    /// Path to TLS key file (if TLS enabled)
+    pub tls_key_path: Option<String>,
+    /// Path to CA certificate for verifying peers (if TLS enabled)
+    pub tls_ca_path: Option<String>,
 }
 
 impl Default for RaftConfig {
     fn default() -> Self {
         Self {
             node_id: "node-0".to_string(),
+            address: "127.0.0.1:50051".to_string(),
             peers: vec![],
             election_timeout_min_ms: 150,
             election_timeout_max_ms: 300,
             heartbeat_interval_ms: 50,
             max_entries_per_batch: 100,
+            rpc_timeout_ms: 500,
+            max_retries: 3,
+            retry_base_delay_ms: 50,
+            tls_enabled: false,
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_path: None,
         }
     }
 }
 
 /// Raft persistent state
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct PersistentState {
+pub struct PersistentState {
     /// Latest term server has seen
-    current_term: Term,
+    pub current_term: Term,
     /// Candidate that received vote in current term
-    voted_for: Option<NodeId>,
+    pub voted_for: Option<NodeId>,
     /// Log entries
-    log: Vec<LogEntry>,
+    pub log: Vec<LogEntry>,
 }
 
 impl Default for PersistentState {
@@ -167,11 +212,11 @@ impl Default for PersistentState {
 
 /// Raft volatile state
 #[derive(Debug, Clone)]
-struct VolatileState {
+pub struct VolatileState {
     /// Index of highest log entry known to be committed
-    commit_index: LogIndex,
+    pub commit_index: LogIndex,
     /// Index of highest log entry applied to state machine
-    last_applied: LogIndex,
+    pub last_applied: LogIndex,
 }
 
 impl Default for VolatileState {
@@ -185,12 +230,412 @@ impl Default for VolatileState {
 
 /// Leader volatile state
 #[derive(Debug, Clone)]
-struct LeaderState {
+pub struct LeaderState {
     /// For each server, index of next log entry to send
-    next_index: HashMap<NodeId, LogIndex>,
+    pub next_index: HashMap<NodeId, LogIndex>,
     /// For each server, index of highest log entry known to be replicated
-    match_index: HashMap<NodeId, LogIndex>,
+    pub match_index: HashMap<NodeId, LogIndex>,
 }
+
+// ============================================================================
+// RPC Client with Connection Pooling
+// ============================================================================
+
+#[cfg(feature = "server")]
+mod rpc {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use tokio::sync::RwLock as TokioRwLock;
+    use tonic::transport::{Certificate, ClientTlsConfig, Endpoint, Uri};
+
+    /// Connection pool entry
+    struct PooledConnection {
+        client: pb::raft_service_client::RaftServiceClient<Channel>,
+        last_used: Instant,
+        failures: u32,
+    }
+
+    /// RPC client with connection pooling and retry logic
+    pub struct RaftRpcClient {
+        /// Connection pool: node_id -> connection
+        connections: Arc<TokioRwLock<HashMap<NodeId, PooledConnection>>>,
+        /// Peer addresses: node_id -> address
+        peer_addresses: Arc<TokioRwLock<HashMap<NodeId, String>>>,
+        /// Configuration
+        config: RaftConfig,
+        /// Metrics: total RPC calls
+        rpc_calls: AtomicU64,
+        /// Metrics: failed RPC calls
+        rpc_failures: AtomicU64,
+    }
+
+    impl RaftRpcClient {
+        /// Create a new RPC client
+        pub fn new(config: RaftConfig) -> Self {
+            let mut peer_addresses = HashMap::new();
+            for peer in &config.peers {
+                peer_addresses.insert(peer.node_id.clone(), peer.address.clone());
+            }
+
+            Self {
+                connections: Arc::new(TokioRwLock::new(HashMap::new())),
+                peer_addresses: Arc::new(TokioRwLock::new(peer_addresses)),
+                config,
+                rpc_calls: AtomicU64::new(0),
+                rpc_failures: AtomicU64::new(0),
+            }
+        }
+
+        /// Get or create a connection to a peer
+        async fn get_connection(
+            &self,
+            node_id: &NodeId,
+        ) -> Result<pb::raft_service_client::RaftServiceClient<Channel>, RpcError> {
+            // Check if we have a valid cached connection
+            {
+                let connections = self.connections.read().await;
+                if let Some(conn) = connections.get(node_id) {
+                    // Return cached connection if it's been used recently and hasn't failed too much
+                    if conn.last_used.elapsed() < Duration::from_secs(60) && conn.failures < 3 {
+                        return Ok(conn.client.clone());
+                    }
+                }
+            }
+
+            // Get peer address
+            let address = {
+                let addresses = self.peer_addresses.read().await;
+                addresses
+                    .get(node_id)
+                    .cloned()
+                    .ok_or_else(|| RpcError::UnknownPeer(node_id.clone()))?
+            };
+
+            // Create new connection
+            let endpoint = self.create_endpoint(&address).await?;
+            let channel = endpoint
+                .connect()
+                .await
+                .map_err(|e| RpcError::ConnectionFailed(format!("{}: {}", node_id, e)))?;
+
+            let client = pb::raft_service_client::RaftServiceClient::new(channel);
+
+            // Cache the connection
+            {
+                let mut connections = self.connections.write().await;
+                connections.insert(
+                    node_id.clone(),
+                    PooledConnection {
+                        client: client.clone(),
+                        last_used: Instant::now(),
+                        failures: 0,
+                    },
+                );
+            }
+
+            Ok(client)
+        }
+
+        /// Create an endpoint with optional TLS
+        async fn create_endpoint(&self, address: &str) -> Result<Endpoint, RpcError> {
+            let uri: Uri = format!("http://{}", address)
+                .parse()
+                .map_err(|e| RpcError::InvalidAddress(format!("{}: {}", address, e)))?;
+
+            let mut endpoint = Endpoint::from(uri)
+                .timeout(Duration::from_millis(self.config.rpc_timeout_ms))
+                .connect_timeout(Duration::from_millis(self.config.rpc_timeout_ms * 2));
+
+            // Configure TLS if enabled
+            if self.config.tls_enabled {
+                if let Some(ca_path) = &self.config.tls_ca_path {
+                    let ca_cert = tokio::fs::read(ca_path)
+                        .await
+                        .map_err(|e| RpcError::TlsError(format!("Failed to read CA cert: {}", e)))?;
+                    let ca = Certificate::from_pem(ca_cert);
+
+                    let tls_config = ClientTlsConfig::new().ca_certificate(ca);
+                    endpoint = endpoint.tls_config(tls_config).map_err(|e| {
+                        RpcError::TlsError(format!("TLS configuration failed: {}", e))
+                    })?;
+                }
+            }
+
+            Ok(endpoint)
+        }
+
+        /// Mark a connection as failed
+        async fn mark_connection_failed(&self, node_id: &NodeId) {
+            let mut connections = self.connections.write().await;
+            if let Some(conn) = connections.get_mut(node_id) {
+                conn.failures += 1;
+                if conn.failures >= 3 {
+                    // Remove failed connection to force reconnection
+                    connections.remove(node_id);
+                }
+            }
+        }
+
+        /// Reset connection failure count on success
+        async fn mark_connection_success(&self, node_id: &NodeId) {
+            let mut connections = self.connections.write().await;
+            if let Some(conn) = connections.get_mut(node_id) {
+                conn.failures = 0;
+                conn.last_used = Instant::now();
+            }
+        }
+
+        /// Send RequestVote RPC with retry logic
+        pub async fn send_request_vote(
+            &self,
+            node_id: &NodeId,
+            request: RequestVoteRequest,
+        ) -> Result<RequestVoteResponse, RpcError> {
+            self.rpc_calls.fetch_add(1, Ordering::Relaxed);
+
+            let mut last_error = None;
+            let mut delay = self.config.retry_base_delay_ms;
+
+            for attempt in 0..=self.config.max_retries {
+                if attempt > 0 {
+                    debug!(
+                        "Retrying RequestVote to {} (attempt {}/{})",
+                        node_id, attempt, self.config.max_retries
+                    );
+                    time::sleep(Duration::from_millis(delay)).await;
+                    delay = (delay * 2).min(5000); // Exponential backoff, max 5s
+                }
+
+                match self.try_send_request_vote(node_id, &request).await {
+                    Ok(response) => {
+                        self.mark_connection_success(node_id).await;
+                        return Ok(response);
+                    }
+                    Err(e) => {
+                        warn!("RequestVote to {} failed: {:?}", node_id, e);
+                        self.mark_connection_failed(node_id).await;
+                        last_error = Some(e);
+                    }
+                }
+            }
+
+            self.rpc_failures.fetch_add(1, Ordering::Relaxed);
+            Err(last_error.unwrap_or(RpcError::MaxRetriesExceeded))
+        }
+
+        async fn try_send_request_vote(
+            &self,
+            node_id: &NodeId,
+            request: &RequestVoteRequest,
+        ) -> Result<RequestVoteResponse, RpcError> {
+            let mut client = self.get_connection(node_id).await?;
+
+            let pb_request = pb::RequestVoteRequest {
+                term: request.term,
+                candidate_id: request.candidate_id.clone(),
+                last_log_index: request.last_log_index,
+                last_log_term: request.last_log_term,
+            };
+
+            let response = client
+                .request_vote(Request::new(pb_request))
+                .await
+                .map_err(|e| RpcError::RpcFailed(format!("RequestVote failed: {}", e)))?;
+
+            let pb_response = response.into_inner();
+            Ok(RequestVoteResponse {
+                term: pb_response.term,
+                vote_granted: pb_response.vote_granted,
+            })
+        }
+
+        /// Send AppendEntries RPC with retry logic
+        pub async fn send_append_entries(
+            &self,
+            node_id: &NodeId,
+            request: AppendEntriesRequest,
+        ) -> Result<AppendEntriesResponse, RpcError> {
+            self.rpc_calls.fetch_add(1, Ordering::Relaxed);
+
+            let mut last_error = None;
+            let mut delay = self.config.retry_base_delay_ms;
+
+            for attempt in 0..=self.config.max_retries {
+                if attempt > 0 {
+                    debug!(
+                        "Retrying AppendEntries to {} (attempt {}/{})",
+                        node_id, attempt, self.config.max_retries
+                    );
+                    time::sleep(Duration::from_millis(delay)).await;
+                    delay = (delay * 2).min(5000);
+                }
+
+                match self.try_send_append_entries(node_id, &request).await {
+                    Ok(response) => {
+                        self.mark_connection_success(node_id).await;
+                        return Ok(response);
+                    }
+                    Err(e) => {
+                        warn!("AppendEntries to {} failed: {:?}", node_id, e);
+                        self.mark_connection_failed(node_id).await;
+                        last_error = Some(e);
+                    }
+                }
+            }
+
+            self.rpc_failures.fetch_add(1, Ordering::Relaxed);
+            Err(last_error.unwrap_or(RpcError::MaxRetriesExceeded))
+        }
+
+        async fn try_send_append_entries(
+            &self,
+            node_id: &NodeId,
+            request: &AppendEntriesRequest,
+        ) -> Result<AppendEntriesResponse, RpcError> {
+            let mut client = self.get_connection(node_id).await?;
+
+            let pb_entries: Vec<pb::LogEntry> = request
+                .entries
+                .iter()
+                .map(|e| log_entry_to_pb(e))
+                .collect();
+
+            let pb_request = pb::AppendEntriesRequest {
+                term: request.term,
+                leader_id: request.leader_id.clone(),
+                prev_log_index: request.prev_log_index,
+                prev_log_term: request.prev_log_term,
+                entries: pb_entries,
+                leader_commit: request.leader_commit,
+            };
+
+            let response = client
+                .append_entries(Request::new(pb_request))
+                .await
+                .map_err(|e| RpcError::RpcFailed(format!("AppendEntries failed: {}", e)))?;
+
+            let pb_response = response.into_inner();
+            Ok(AppendEntriesResponse {
+                term: pb_response.term,
+                success: pb_response.success,
+                conflict_index: pb_response.conflict_index,
+                conflict_term: pb_response.conflict_term,
+                match_index: pb_response.match_index,
+            })
+        }
+
+        /// Add a new peer
+        pub async fn add_peer(&self, node_id: NodeId, address: String) {
+            let mut addresses = self.peer_addresses.write().await;
+            addresses.insert(node_id, address);
+        }
+
+        /// Remove a peer
+        pub async fn remove_peer(&self, node_id: &NodeId) {
+            {
+                let mut addresses = self.peer_addresses.write().await;
+                addresses.remove(node_id);
+            }
+            {
+                let mut connections = self.connections.write().await;
+                connections.remove(node_id);
+            }
+        }
+
+        /// Get RPC statistics
+        pub fn get_stats(&self) -> RpcStats {
+            RpcStats {
+                total_calls: self.rpc_calls.load(Ordering::Relaxed),
+                failed_calls: self.rpc_failures.load(Ordering::Relaxed),
+            }
+        }
+    }
+
+    /// Convert LogEntry to protobuf
+    fn log_entry_to_pb(entry: &LogEntry) -> pb::LogEntry {
+        let command_data = bincode::serialize(&entry.command).unwrap_or_default();
+        let command_type = match &entry.command {
+            Command::Insert { .. } => "Insert",
+            Command::Delete { .. } => "Delete",
+            Command::Update { .. } => "Update",
+            Command::NoOp => "NoOp",
+        };
+        let timestamp_ms = entry
+            .timestamp
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0);
+
+        pb::LogEntry {
+            term: entry.term,
+            index: entry.index,
+            command_data,
+            command_type: command_type.to_string(),
+            timestamp_ms,
+        }
+    }
+
+    /// Convert protobuf to LogEntry
+    pub fn pb_to_log_entry(pb: &pb::LogEntry) -> Result<LogEntry, RpcError> {
+        let command: Command = bincode::deserialize(&pb.command_data)
+            .map_err(|e| RpcError::DeserializationFailed(format!("Command: {}", e)))?;
+
+        let timestamp = SystemTime::UNIX_EPOCH + Duration::from_millis(pb.timestamp_ms);
+
+        Ok(LogEntry {
+            term: pb.term,
+            index: pb.index,
+            command,
+            timestamp,
+        })
+    }
+
+    /// RPC statistics
+    #[derive(Debug, Clone)]
+    pub struct RpcStats {
+        pub total_calls: u64,
+        pub failed_calls: u64,
+    }
+
+    /// RPC errors
+    #[derive(Debug, Clone)]
+    pub enum RpcError {
+        UnknownPeer(NodeId),
+        ConnectionFailed(String),
+        InvalidAddress(String),
+        TlsError(String),
+        RpcFailed(String),
+        DeserializationFailed(String),
+        MaxRetriesExceeded,
+        Timeout,
+    }
+
+    impl std::fmt::Display for RpcError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                RpcError::UnknownPeer(id) => write!(f, "Unknown peer: {}", id),
+                RpcError::ConnectionFailed(msg) => write!(f, "Connection failed: {}", msg),
+                RpcError::InvalidAddress(msg) => write!(f, "Invalid address: {}", msg),
+                RpcError::TlsError(msg) => write!(f, "TLS error: {}", msg),
+                RpcError::RpcFailed(msg) => write!(f, "RPC failed: {}", msg),
+                RpcError::DeserializationFailed(msg) => {
+                    write!(f, "Deserialization failed: {}", msg)
+                }
+                RpcError::MaxRetriesExceeded => write!(f, "Max retries exceeded"),
+                RpcError::Timeout => write!(f, "RPC timeout"),
+            }
+        }
+    }
+
+    impl std::error::Error for RpcError {}
+}
+
+#[cfg(feature = "server")]
+pub use rpc::{RaftRpcClient, RpcError, RpcStats};
+
+// ============================================================================
+// Raft Node Implementation
+// ============================================================================
 
 /// Raft node implementation
 pub struct RaftNode {
@@ -199,31 +644,50 @@ pub struct RaftNode {
     /// Current node state
     state: Arc<RwLock<NodeState>>,
     /// Persistent state
-    persistent: Arc<RwLock<PersistentState>>,
+    pub persistent: Arc<RwLock<PersistentState>>,
     /// Volatile state
-    volatile: Arc<Mutex<VolatileState>>,
+    pub volatile: Arc<Mutex<VolatileState>>,
     /// Leader state (only valid when node is leader)
     leader_state: Arc<Mutex<Option<LeaderState>>>,
     /// Last time we heard from leader
     last_heartbeat: Arc<Mutex<Instant>>,
-    /// Peers we can communicate with
+    /// Peer node IDs we can communicate with
     peers: Arc<RwLock<HashSet<NodeId>>>,
+    /// Current known leader
+    current_leader: Arc<RwLock<Option<NodeId>>>,
+    /// RPC client for sending messages to peers
+    #[cfg(feature = "server")]
+    rpc_client: Arc<RaftRpcClient>,
+    /// Flag to signal shutdown
+    shutdown: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl RaftNode {
     /// Create a new Raft node
     pub fn new(config: RaftConfig) -> Self {
-        let peers: HashSet<NodeId> = config.peers.iter().cloned().collect();
+        let peers: HashSet<NodeId> = config.peers.iter().map(|p| p.node_id.clone()).collect();
+
+        #[cfg(feature = "server")]
+        let rpc_client = Arc::new(RaftRpcClient::new(config.clone()));
 
         Self {
-            config,
+            config: config.clone(),
             state: Arc::new(RwLock::new(NodeState::Follower)),
             persistent: Arc::new(RwLock::new(PersistentState::default())),
             volatile: Arc::new(Mutex::new(VolatileState::default())),
             leader_state: Arc::new(Mutex::new(None)),
             last_heartbeat: Arc::new(Mutex::new(Instant::now())),
             peers: Arc::new(RwLock::new(peers)),
+            current_leader: Arc::new(RwLock::new(None)),
+            #[cfg(feature = "server")]
+            rpc_client,
+            shutdown: Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
+    }
+
+    /// Get node ID
+    pub fn node_id(&self) -> &NodeId {
+        &self.config.node_id
     }
 
     /// Get current term
@@ -243,21 +707,19 @@ impl RaftNode {
 
     /// Get the current leader ID (if known)
     pub async fn leader_id(&self) -> Option<NodeId> {
-        // In a real implementation, we'd track who the leader is
-        // For now, return self if we're leader
         if self.is_leader().await {
             Some(self.config.node_id.clone())
         } else {
-            None
+            self.current_leader.read().await.clone()
         }
     }
 
     /// Start the Raft node
     pub async fn start(self: Arc<Self>) {
-        // Clone Arc for tasks
-        let node = self.clone();
+        info!("Starting Raft node: {}", self.config.node_id);
 
         // Start election timer
+        let node = self.clone();
         tokio::spawn(async move {
             node.election_timer_loop().await;
         });
@@ -267,11 +729,33 @@ impl RaftNode {
         tokio::spawn(async move {
             node.heartbeat_loop().await;
         });
+
+        // Start log apply loop
+        let node = self.clone();
+        tokio::spawn(async move {
+            node.apply_loop().await;
+        });
+    }
+
+    /// Shutdown the Raft node
+    pub fn shutdown(&self) {
+        info!("Shutting down Raft node: {}", self.config.node_id);
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Check if shutdown was requested
+    fn is_shutdown(&self) -> bool {
+        self.shutdown.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     /// Election timer loop
     async fn election_timer_loop(self: Arc<Self>) {
         loop {
+            if self.is_shutdown() {
+                break;
+            }
+
             let timeout = self.random_election_timeout();
             time::sleep(timeout).await;
 
@@ -280,6 +764,10 @@ impl RaftNode {
             if last_heartbeat.elapsed() >= timeout {
                 let state = self.state.read().await.clone();
                 if !matches!(state, NodeState::Leader) {
+                    info!(
+                        "Election timeout on node {}, starting election",
+                        self.config.node_id
+                    );
                     self.start_election().await;
                 }
             }
@@ -289,6 +777,10 @@ impl RaftNode {
     /// Heartbeat loop (for leader)
     async fn heartbeat_loop(self: Arc<Self>) {
         loop {
+            if self.is_shutdown() {
+                break;
+            }
+
             time::sleep(Duration::from_millis(self.config.heartbeat_interval_ms)).await;
 
             // Only send heartbeats if we're the leader
@@ -298,22 +790,45 @@ impl RaftNode {
         }
     }
 
+    /// Apply loop - applies committed entries to state machine
+    async fn apply_loop(self: Arc<Self>) {
+        loop {
+            if self.is_shutdown() {
+                break;
+            }
+
+            time::sleep(Duration::from_millis(10)).await;
+
+            let entries = self.get_entries_to_apply().await;
+            for entry in entries {
+                debug!("Applying log entry {}: {:?}", entry.index, entry.command);
+                // In a real implementation, apply to state machine here
+            }
+        }
+    }
+
     /// Start an election
     pub async fn start_election(&self) {
         // Transition to candidate
         *self.state.write().await = NodeState::Candidate;
+        *self.current_leader.write().await = None;
 
         // Increment term and vote for self
-        let mut persistent = self.persistent.write().await;
-        persistent.current_term += 1;
-        persistent.voted_for = Some(self.config.node_id.clone());
-        let current_term = persistent.current_term;
+        let (current_term, last_log_index, last_log_term) = {
+            let mut persistent = self.persistent.write().await;
+            persistent.current_term += 1;
+            persistent.voted_for = Some(self.config.node_id.clone());
+            let current_term = persistent.current_term;
+            let last_log_index = persistent.log.last().map(|e| e.index).unwrap_or(0);
+            let last_log_term = persistent.log.last().map(|e| e.term).unwrap_or(0);
+            (current_term, last_log_index, last_log_term)
+        };
 
-        let last_log_index = persistent.log.last().map(|e| e.index).unwrap_or(0);
-        let last_log_term = persistent.log.last().map(|e| e.term).unwrap_or(0);
-        drop(persistent);
+        info!(
+            "Node {} starting election for term {}",
+            self.config.node_id, current_term
+        );
 
-        // Request votes from all peers
         let request = RequestVoteRequest {
             term: current_term,
             candidate_id: self.config.node_id.clone(),
@@ -321,28 +836,120 @@ impl RaftNode {
             last_log_term,
         };
 
-        // In a real implementation, we'd send RPCs to peers
-        // For now, simulate receiving votes
         let peers = self.peers.read().await.clone();
-        let votes_needed = (peers.len() + 1) / 2 + 1; // Majority
+        let votes_needed = (peers.len() + 1) / 2 + 1; // Majority including self
 
         // We already voted for ourselves
-        let mut votes = 1;
+        let mut votes = 1u64;
 
-        // Simulate successful election for testing
-        if votes >= votes_needed {
-            self.become_leader().await;
+        #[cfg(feature = "server")]
+        {
+            // Send RequestVote RPCs to all peers in parallel
+            let mut vote_futures = Vec::new();
+
+            for peer_id in peers.iter() {
+                let rpc_client = self.rpc_client.clone();
+                let peer_id = peer_id.clone();
+                let request = request.clone();
+
+                vote_futures.push(tokio::spawn(async move {
+                    let result = rpc_client.send_request_vote(&peer_id, request).await;
+                    (peer_id, result)
+                }));
+            }
+
+            // Collect votes with timeout
+            let timeout = Duration::from_millis(self.config.election_timeout_max_ms);
+            let deadline = Instant::now() + timeout;
+
+            for future in vote_futures {
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                if remaining.is_zero() {
+                    break;
+                }
+
+                match tokio::time::timeout(remaining, future).await {
+                    Ok(Ok((peer_id, Ok(response)))) => {
+                        // Check if we got a higher term
+                        if response.term > current_term {
+                            info!(
+                                "Node {} received higher term {} from {}, stepping down",
+                                self.config.node_id, response.term, peer_id
+                            );
+                            self.step_down(response.term).await;
+                            return;
+                        }
+
+                        if response.vote_granted {
+                            votes += 1;
+                            info!(
+                                "Node {} received vote from {} ({}/{})",
+                                self.config.node_id, peer_id, votes, votes_needed
+                            );
+                        }
+                    }
+                    Ok(Ok((peer_id, Err(e)))) => {
+                        warn!("Failed to get vote from {}: {:?}", peer_id, e);
+                    }
+                    Ok(Err(e)) => {
+                        warn!("Vote task failed: {:?}", e);
+                    }
+                    Err(_) => {
+                        debug!("Vote collection timed out");
+                        break;
+                    }
+                }
+            }
         }
+
+        #[cfg(not(feature = "server"))]
+        {
+            // Without server feature, use simulated election (for testing)
+            // In single-node mode, we always win
+            if peers.is_empty() {
+                votes = votes_needed as u64;
+            }
+        }
+
+        // Check if we won the election
+        let current_state = self.state.read().await.clone();
+        if matches!(current_state, NodeState::Candidate) && votes >= votes_needed as u64 {
+            info!(
+                "Node {} won election for term {} with {} votes",
+                self.config.node_id, current_term, votes
+            );
+            self.become_leader().await;
+        } else {
+            debug!(
+                "Node {} did not win election (got {}/{} votes)",
+                self.config.node_id, votes, votes_needed
+            );
+        }
+    }
+
+    /// Step down to follower when receiving higher term
+    async fn step_down(&self, new_term: Term) {
+        let mut persistent = self.persistent.write().await;
+        persistent.current_term = new_term;
+        persistent.voted_for = None;
+        drop(persistent);
+
+        *self.state.write().await = NodeState::Follower;
+        *self.leader_state.lock().await = None;
     }
 
     /// Become the leader
     async fn become_leader(&self) {
         *self.state.write().await = NodeState::Leader;
+        *self.current_leader.write().await = Some(self.config.node_id.clone());
+
+        info!("Node {} became leader", self.config.node_id);
 
         // Initialize leader state
-        let persistent = self.persistent.read().await;
-        let last_log_index = persistent.log.last().map(|e| e.index).unwrap_or(0);
-        drop(persistent);
+        let last_log_index = {
+            let persistent = self.persistent.read().await;
+            persistent.log.last().map(|e| e.index).unwrap_or(0)
+        };
 
         let peers = self.peers.read().await.clone();
         let mut next_index = HashMap::new();
@@ -360,28 +967,198 @@ impl RaftNode {
 
         // Append no-op entry to establish leadership
         self.append_entry(Command::NoOp).await.ok();
+
+        // Send immediate heartbeat
+        self.send_heartbeats().await;
     }
 
     /// Send heartbeats to all peers
-    async fn send_heartbeats(&self) {
-        let persistent = self.persistent.read().await;
-        let term = persistent.current_term;
-        let commit_index = self.volatile.lock().await.commit_index;
-        drop(persistent);
+    pub async fn send_heartbeats(&self) {
+        if !self.is_leader().await {
+            return;
+        }
+
+        let (term, commit_index) = {
+            let persistent = self.persistent.read().await;
+            let volatile = self.volatile.lock().await;
+            (persistent.current_term, volatile.commit_index)
+        };
 
         let peers = self.peers.read().await.clone();
 
-        for _peer in peers.iter() {
-            // In a real implementation, send AppendEntriesRequest
-            // For now, this is a stub
-            let _request = AppendEntriesRequest {
-                term,
-                leader_id: self.config.node_id.clone(),
-                prev_log_index: 0,
-                prev_log_term: 0,
-                entries: vec![],
-                leader_commit: commit_index,
+        #[cfg(feature = "server")]
+        {
+            let leader_state = self.leader_state.lock().await;
+            let leader_state = match &*leader_state {
+                Some(ls) => ls.clone(),
+                None => return,
             };
+            drop(leader_state);
+
+            // Send AppendEntries to each peer in parallel
+            let mut append_futures = Vec::new();
+
+            for peer_id in peers.iter() {
+                let (prev_log_index, prev_log_term, entries) = {
+                    let leader_state = self.leader_state.lock().await;
+                    let leader_state = match &*leader_state {
+                        Some(ls) => ls,
+                        None => continue,
+                    };
+
+                    let next_idx = *leader_state.next_index.get(peer_id).unwrap_or(&1);
+                    let persistent = self.persistent.read().await;
+
+                    let prev_log_index = next_idx.saturating_sub(1);
+                    let prev_log_term = if prev_log_index > 0 {
+                        persistent
+                            .log
+                            .get((prev_log_index - 1) as usize)
+                            .map(|e| e.term)
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
+
+                    // Get entries to send
+                    let start_idx = (next_idx - 1) as usize;
+                    let entries: Vec<LogEntry> = persistent
+                        .log
+                        .iter()
+                        .skip(start_idx)
+                        .take(self.config.max_entries_per_batch)
+                        .cloned()
+                        .collect();
+
+                    (prev_log_index, prev_log_term, entries)
+                };
+
+                let request = AppendEntriesRequest {
+                    term,
+                    leader_id: self.config.node_id.clone(),
+                    prev_log_index,
+                    prev_log_term,
+                    entries: entries.clone(),
+                    leader_commit: commit_index,
+                };
+
+                let rpc_client = self.rpc_client.clone();
+                let peer_id = peer_id.clone();
+                let node_id = self.config.node_id.clone();
+                let entries_len = entries.len();
+                let leader_state_arc = self.leader_state.clone();
+                let persistent_arc = self.persistent.clone();
+                let volatile_arc = self.volatile.clone();
+                let state_arc = self.state.clone();
+                let current_leader_arc = self.current_leader.clone();
+
+                append_futures.push(tokio::spawn(async move {
+                    match rpc_client.send_append_entries(&peer_id, request).await {
+                        Ok(response) => {
+                            // Handle response
+                            if response.term > term {
+                                // Step down
+                                let mut persistent = persistent_arc.write().await;
+                                persistent.current_term = response.term;
+                                persistent.voted_for = None;
+                                drop(persistent);
+
+                                *state_arc.write().await = NodeState::Follower;
+                                *current_leader_arc.write().await = None;
+                                return;
+                            }
+
+                            let mut leader_state = leader_state_arc.lock().await;
+                            if let Some(ls) = leader_state.as_mut() {
+                                if response.success {
+                                    // Update next_index and match_index
+                                    ls.match_index
+                                        .insert(peer_id.clone(), response.match_index);
+                                    ls.next_index
+                                        .insert(peer_id.clone(), response.match_index + 1);
+
+                                    debug!(
+                                        "AppendEntries to {} succeeded, match_index={}",
+                                        peer_id, response.match_index
+                                    );
+                                } else {
+                                    // Decrement next_index and retry
+                                    if let Some(next) = ls.next_index.get_mut(&peer_id) {
+                                        if let Some(conflict_index) = response.conflict_index {
+                                            *next = conflict_index;
+                                        } else {
+                                            *next = next.saturating_sub(1).max(1);
+                                        }
+                                    }
+                                    debug!("AppendEntries to {} failed, will retry", peer_id);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Failed to send heartbeat to {}: {:?}", peer_id, e);
+                        }
+                    }
+                }));
+            }
+
+            // Wait for all append entries to complete (with timeout)
+            let timeout = Duration::from_millis(self.config.heartbeat_interval_ms);
+            for future in append_futures {
+                let _ = tokio::time::timeout(timeout, future).await;
+            }
+
+            // Update commit index based on match indices
+            self.update_commit_index().await;
+        }
+
+        #[cfg(not(feature = "server"))]
+        {
+            // Without server feature, just log the heartbeat
+            debug!("Would send heartbeats to {} peers", peers.len());
+        }
+    }
+
+    /// Update commit index based on match indices (leader only)
+    async fn update_commit_index(&self) {
+        let leader_state = self.leader_state.lock().await;
+        let leader_state = match &*leader_state {
+            Some(ls) => ls,
+            None => return,
+        };
+
+        let persistent = self.persistent.read().await;
+        let current_term = persistent.current_term;
+
+        // Find the highest index that has been replicated on a majority
+        let mut match_indices: Vec<LogIndex> = leader_state.match_index.values().cloned().collect();
+
+        // Include leader's own log
+        let our_last_index = persistent.log.last().map(|e| e.index).unwrap_or(0);
+        match_indices.push(our_last_index);
+
+        match_indices.sort_unstable();
+
+        // Majority is at position (n/2) in sorted array
+        let majority_idx = match_indices.len() / 2;
+        let new_commit_index = match_indices[majority_idx];
+
+        // Only commit entries from current term
+        if new_commit_index > 0 {
+            if let Some(entry) = persistent.log.get((new_commit_index - 1) as usize) {
+                if entry.term == current_term {
+                    drop(persistent);
+                    drop(leader_state);
+
+                    let mut volatile = self.volatile.lock().await;
+                    if new_commit_index > volatile.commit_index {
+                        debug!(
+                            "Leader updating commit_index from {} to {}",
+                            volatile.commit_index, new_commit_index
+                        );
+                        volatile.commit_index = new_commit_index;
+                    }
+                }
+            }
         }
     }
 
@@ -415,6 +1192,7 @@ impl RaftNode {
             persistent.current_term = request.term;
             persistent.voted_for = None;
             *self.state.write().await = NodeState::Follower;
+            *self.current_leader.write().await = None;
         }
 
         let mut vote_granted = false;
@@ -438,6 +1216,11 @@ impl RaftNode {
                     persistent.voted_for = Some(request.candidate_id);
                     vote_granted = true;
                     *self.last_heartbeat.lock().await = Instant::now();
+
+                    debug!(
+                        "Node {} granted vote for term {}",
+                        self.config.node_id, request.term
+                    );
                 }
             }
         }
@@ -462,8 +1245,9 @@ impl RaftNode {
             *self.state.write().await = NodeState::Follower;
         }
 
-        // Reset election timer
+        // Reset election timer and update known leader
         *self.last_heartbeat.lock().await = Instant::now();
+        *self.current_leader.write().await = Some(request.leader_id.clone());
 
         // Reply false if term < current_term
         if request.term < persistent.current_term {
@@ -472,7 +1256,15 @@ impl RaftNode {
                 success: false,
                 conflict_index: None,
                 conflict_term: None,
+                match_index: 0,
             };
+        }
+
+        // Step down if we're a candidate or leader
+        let current_state = self.state.read().await.clone();
+        if matches!(current_state, NodeState::Candidate | NodeState::Leader) {
+            *self.state.write().await = NodeState::Follower;
+            *self.leader_state.lock().await = None;
         }
 
         // Check if log contains entry at prev_log_index with matching term
@@ -484,6 +1276,7 @@ impl RaftNode {
                         success: false,
                         conflict_index: Some(request.prev_log_index),
                         conflict_term: Some(entry.term),
+                        match_index: 0,
                     };
                 }
             } else {
@@ -492,6 +1285,7 @@ impl RaftNode {
                     success: false,
                     conflict_index: Some(persistent.log.len() as u64),
                     conflict_term: None,
+                    match_index: 0,
                 };
             }
         }
@@ -511,6 +1305,8 @@ impl RaftNode {
             insert_index += 1;
         }
 
+        let match_index = persistent.log.last().map(|e| e.index).unwrap_or(0);
+
         // Update commit index
         if request.leader_commit > self.volatile.lock().await.commit_index {
             let new_commit_index = request
@@ -524,6 +1320,7 @@ impl RaftNode {
             success: true,
             conflict_index: None,
             conflict_term: None,
+            match_index,
         }
     }
 
@@ -564,6 +1361,26 @@ impl RaftNode {
             current_term: persistent.current_term,
         }
     }
+
+    /// Add a peer dynamically
+    #[cfg(feature = "server")]
+    pub async fn add_peer(&self, node_id: NodeId, address: String) {
+        self.peers.write().await.insert(node_id.clone());
+        self.rpc_client.add_peer(node_id, address).await;
+    }
+
+    /// Remove a peer dynamically
+    #[cfg(feature = "server")]
+    pub async fn remove_peer(&self, node_id: &NodeId) {
+        self.peers.write().await.remove(node_id);
+        self.rpc_client.remove_peer(node_id).await;
+    }
+
+    /// Get RPC statistics
+    #[cfg(feature = "server")]
+    pub fn rpc_stats(&self) -> RpcStats {
+        self.rpc_client.get_stats()
+    }
 }
 
 /// Log statistics
@@ -574,6 +1391,166 @@ pub struct LogStats {
     pub applied_entries: usize,
     pub current_term: Term,
 }
+
+// ============================================================================
+// gRPC Server Implementation
+// ============================================================================
+
+#[cfg(feature = "server")]
+pub mod server {
+    use super::*;
+    use std::net::SocketAddr;
+    use tonic::transport::Server;
+
+    /// Raft gRPC service implementation
+    pub struct RaftGrpcService {
+        node: Arc<RaftNode>,
+    }
+
+    impl RaftGrpcService {
+        pub fn new(node: Arc<RaftNode>) -> Self {
+            Self { node }
+        }
+    }
+
+    #[tonic::async_trait]
+    impl pb::raft_service_server::RaftService for RaftGrpcService {
+        async fn request_vote(
+            &self,
+            request: Request<pb::RequestVoteRequest>,
+        ) -> Result<Response<pb::RequestVoteResponse>, Status> {
+            let req = request.into_inner();
+
+            let raft_request = RequestVoteRequest {
+                term: req.term,
+                candidate_id: req.candidate_id,
+                last_log_index: req.last_log_index,
+                last_log_term: req.last_log_term,
+            };
+
+            let response = self.node.handle_request_vote(raft_request).await;
+
+            Ok(Response::new(pb::RequestVoteResponse {
+                term: response.term,
+                vote_granted: response.vote_granted,
+            }))
+        }
+
+        async fn append_entries(
+            &self,
+            request: Request<pb::AppendEntriesRequest>,
+        ) -> Result<Response<pb::AppendEntriesResponse>, Status> {
+            let req = request.into_inner();
+
+            // Convert protobuf log entries
+            let entries: Result<Vec<LogEntry>, _> =
+                req.entries.iter().map(|e| rpc::pb_to_log_entry(e)).collect();
+
+            let entries = entries.map_err(|e| Status::invalid_argument(format!("{}", e)))?;
+
+            let raft_request = AppendEntriesRequest {
+                term: req.term,
+                leader_id: req.leader_id,
+                prev_log_index: req.prev_log_index,
+                prev_log_term: req.prev_log_term,
+                entries,
+                leader_commit: req.leader_commit,
+            };
+
+            let response = self.node.handle_append_entries(raft_request).await;
+
+            Ok(Response::new(pb::AppendEntriesResponse {
+                term: response.term,
+                success: response.success,
+                conflict_index: response.conflict_index,
+                conflict_term: response.conflict_term,
+                match_index: response.match_index,
+            }))
+        }
+
+        async fn install_snapshot(
+            &self,
+            request: Request<pb::InstallSnapshotRequest>,
+        ) -> Result<Response<pb::InstallSnapshotResponse>, Status> {
+            let req = request.into_inner();
+
+            // TODO: Implement snapshot installation
+            // For now, just acknowledge receipt
+
+            let current_term = self.node.current_term().await;
+
+            Ok(Response::new(pb::InstallSnapshotResponse {
+                term: current_term,
+                success: true,
+                bytes_received: req.data.len() as u64,
+            }))
+        }
+
+        async fn get_leader(
+            &self,
+            _request: Request<pb::GetLeaderRequest>,
+        ) -> Result<Response<pb::GetLeaderResponse>, Status> {
+            let leader_id = self.node.leader_id().await;
+            let current_term = self.node.current_term().await;
+
+            Ok(Response::new(pb::GetLeaderResponse {
+                leader_known: leader_id.is_some(),
+                leader_id,
+                leader_address: None, // Could look up address from peer info
+                term: current_term,
+            }))
+        }
+    }
+
+    /// Start the Raft gRPC server
+    pub async fn start_raft_server(
+        node: Arc<RaftNode>,
+        addr: SocketAddr,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let service = RaftGrpcService::new(node.clone());
+
+        info!("Starting Raft gRPC server on {}", addr);
+
+        Server::builder()
+            .add_service(pb::raft_service_server::RaftServiceServer::new(service))
+            .serve(addr)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Start the Raft gRPC server with TLS
+    #[cfg(feature = "server")]
+    pub async fn start_raft_server_tls(
+        node: Arc<RaftNode>,
+        addr: SocketAddr,
+        cert_path: &str,
+        key_path: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        use tonic::transport::{Identity, ServerTlsConfig};
+
+        let cert = tokio::fs::read(cert_path).await?;
+        let key = tokio::fs::read(key_path).await?;
+
+        let identity = Identity::from_pem(cert, key);
+        let tls_config = ServerTlsConfig::new().identity(identity);
+
+        let service = RaftGrpcService::new(node.clone());
+
+        info!("Starting Raft gRPC server with TLS on {}", addr);
+
+        Server::builder()
+            .tls_config(tls_config)?
+            .add_service(pb::raft_service_server::RaftServiceServer::new(service))
+            .serve(addr)
+            .await?;
+
+        Ok(())
+    }
+}
+
+#[cfg(feature = "server")]
+pub use server::{start_raft_server, RaftGrpcService};
 
 // ============================================================================
 // Cluster Membership Management
@@ -785,7 +1762,8 @@ impl FailoverManager {
     /// Update known leader
     pub async fn set_leader(&self, leader: NodeId) {
         *self.current_leader.write().await = Some(leader);
-        self.failures.store(0, std::sync::atomic::Ordering::Relaxed);
+        self.failures
+            .store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get current leader
@@ -795,7 +1773,10 @@ impl FailoverManager {
 
     /// Report a failure
     pub async fn report_failure(&self) -> bool {
-        let failures = self.failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        let failures =
+            self.failures
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                + 1;
 
         if failures >= self.config.max_retries {
             // Trigger leader discovery
@@ -817,7 +1798,8 @@ impl FailoverManager {
         let current = self.current_leader.read().await;
 
         // Find a member that's not the failed leader
-        members.iter()
+        members
+            .iter()
             .find(|m| current.as_ref() != Some(*m))
             .cloned()
     }
@@ -873,7 +1855,11 @@ impl ReplicationCoordinator {
     }
 
     /// Read with specified consistency
-    pub async fn read<T>(&self, _key: &str, consistency: ReadConsistency) -> Result<Option<T>, String>
+    pub async fn read<T>(
+        &self,
+        _key: &str,
+        consistency: ReadConsistency,
+    ) -> Result<Option<T>, String>
     where
         T: serde::de::DeserializeOwned,
     {
@@ -1036,7 +2022,10 @@ mod ha_tests {
         let coordinator = ReplicationCoordinator::new(node, FailoverConfig::default());
         let health = coordinator.get_cluster_health().await;
 
-        assert!(matches!(health.status, HealthStatus::Healthy | HealthStatus::Degraded | HealthStatus::Unhealthy));
+        assert!(matches!(
+            health.status,
+            HealthStatus::Healthy | HealthStatus::Degraded | HealthStatus::Unhealthy
+        ));
     }
 
     #[tokio::test]
@@ -1047,8 +2036,14 @@ mod ha_tests {
         let coordinator = ReplicationCoordinator::new(node, FailoverConfig::default());
 
         // Add nodes
-        coordinator.apply_membership_change(MembershipChange::AddNode("node-1".to_string())).await.unwrap();
-        coordinator.apply_membership_change(MembershipChange::AddNode("node-2".to_string())).await.unwrap();
+        coordinator
+            .apply_membership_change(MembershipChange::AddNode("node-1".to_string()))
+            .await
+            .unwrap();
+        coordinator
+            .apply_membership_change(MembershipChange::AddNode("node-2".to_string()))
+            .await
+            .unwrap();
 
         let cluster_config = coordinator.cluster_config.read().await;
         assert_eq!(cluster_config.members.len(), 2);
@@ -1084,14 +2079,16 @@ mod ha_tests {
         let coordinator = ReplicationCoordinator::new(node.clone(), FailoverConfig::default());
 
         // Non-leader should fail leader reads
-        let result: Result<Option<String>, _> = coordinator.read("key", ReadConsistency::Leader).await;
+        let result: Result<Option<String>, _> =
+            coordinator.read("key", ReadConsistency::Leader).await;
         assert!(result.is_err());
 
         // Become leader
         *node.state.write().await = NodeState::Leader;
 
         // Leader reads should succeed
-        let result: Result<Option<String>, _> = coordinator.read("key", ReadConsistency::Leader).await;
+        let result: Result<Option<String>, _> =
+            coordinator.read("key", ReadConsistency::Leader).await;
         assert!(result.is_ok());
 
         // Any reads should always succeed
@@ -1409,5 +2406,61 @@ mod tests {
 
         let response = node.handle_request_vote(request).await;
         assert!(!response.vote_granted);
+    }
+
+    #[tokio::test]
+    async fn test_step_down_on_higher_term_append_entries() {
+        let config = RaftConfig {
+            node_id: "node-1".to_string(),
+            ..Default::default()
+        };
+        let node = RaftNode::new(config);
+
+        // Become leader
+        *node.state.write().await = NodeState::Leader;
+        node.persistent.write().await.current_term = 1;
+
+        // Receive AppendEntries with higher term
+        let request = AppendEntriesRequest {
+            term: 5,
+            leader_id: "node-2".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: vec![],
+            leader_commit: 0,
+        };
+
+        let response = node.handle_append_entries(request).await;
+
+        assert!(response.success);
+        assert_eq!(node.state().await, NodeState::Follower);
+        assert_eq!(node.current_term().await, 5);
+    }
+
+    #[tokio::test]
+    async fn test_known_leader_updated_on_append_entries() {
+        let config = RaftConfig::default();
+        let node = RaftNode::new(config);
+
+        // Initially no known leader
+        assert!(node.leader_id().await.is_none());
+
+        // Receive AppendEntries from leader
+        let request = AppendEntriesRequest {
+            term: 1,
+            leader_id: "leader-node".to_string(),
+            prev_log_index: 0,
+            prev_log_term: 0,
+            entries: vec![],
+            leader_commit: 0,
+        };
+
+        node.handle_append_entries(request).await;
+
+        // Should now know the leader
+        assert_eq!(
+            *node.current_leader.read().await,
+            Some("leader-node".to_string())
+        );
     }
 }
