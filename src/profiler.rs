@@ -206,12 +206,12 @@ impl QueryProfiler {
         // Simple flame graph generation (simplified for demo)
         let mut svg = String::new();
         svg.push_str(r#"<?xml version="1.0" standalone="no"?>"#);
-        svg.push_str("\n");
+        svg.push('\n');
         svg.push_str(r#"<svg width="1200" height="600" xmlns="http://www.w3.org/2000/svg">"#);
-        svg.push_str("\n");
+        svg.push('\n');
 
         svg.push_str(r#"<text x="600" y="30" text-anchor="middle" font-size="20" font-family="Arial">Query Flame Graph</text>"#);
-        svg.push_str("\n");
+        svg.push('\n');
 
         let mut y = 60;
         for (i, query) in self.queries.iter().enumerate() {
@@ -219,7 +219,7 @@ impl QueryProfiler {
                 r#"<text x="10" y="{}" font-size="14" font-family="Arial">{}: {:.2}ms</text>"#,
                 y, query.name, query.total_duration_ms
             ));
-            svg.push_str("\n");
+            svg.push('\n');
 
             y += 20;
             for stage in &query.stages {
@@ -233,7 +233,7 @@ impl QueryProfiler {
                     width.max(1),
                     (255 - stage.depth * 30).min(255)
                 ));
-                svg.push_str("\n");
+                svg.push('\n');
 
                 svg.push_str(&format!(
                     r#"<text x="{}" y="{}" font-size="10" font-family="Arial">{} ({:.2}ms)</text>"#,
@@ -242,7 +242,7 @@ impl QueryProfiler {
                     stage.name,
                     stage.duration_ms
                 ));
-                svg.push_str("\n");
+                svg.push('\n');
 
                 y += 20;
             }

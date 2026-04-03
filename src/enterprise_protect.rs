@@ -34,6 +34,7 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -158,6 +159,8 @@ pub struct EncryptionManager {
     current_dek: RwLock<Option<DataEncryptionKey>>,
     /// DEK cache
     dek_cache: RwLock<HashMap<String, DataEncryptionKey>>,
+    /// Key generation counter for unique IDs
+    key_counter: AtomicU64,
 }
 
 impl EncryptionManager {
@@ -167,6 +170,7 @@ impl EncryptionManager {
             config,
             current_dek: RwLock::new(None),
             dek_cache: RwLock::new(HashMap::new()),
+            key_counter: AtomicU64::new(0),
         }
     }
 
@@ -244,8 +248,9 @@ impl EncryptionManager {
 
     fn generate_dek(&self) -> Result<DataEncryptionKey> {
         // In production, this would call the KMS to generate a DEK
-        let key: Vec<u8> = (0..32).map(|i| (i * 7 + 13) as u8).collect(); // Deterministic for demo
-        let key_id = format!("dek_{}", unix_timestamp());
+        let counter = self.key_counter.fetch_add(1, Ordering::Relaxed);
+        let key: Vec<u8> = (0..32).map(|i| ((i * 7 + 13 + counter as usize) % 256) as u8).collect();
+        let key_id = format!("dek_{}_{}", unix_timestamp(), counter);
 
         Ok(DataEncryptionKey {
             key: key.clone(),
@@ -271,11 +276,10 @@ impl EncryptionManager {
         {
             let current = self.current_dek.read()
                 .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
-            if let Some(dek) = &*current {
-                if dek.key_id == key_id {
+            if let Some(dek) = &*current
+                && dek.key_id == key_id {
                     return Ok(dek.clone());
                 }
-            }
         }
 
         // Check cache
@@ -787,6 +791,7 @@ pub struct ComplianceSummary {
 
 /// Enterprise configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct EnterpriseConfig {
     pub encryption_enabled: bool,
     pub audit_logging: bool,
@@ -795,17 +800,6 @@ pub struct EnterpriseConfig {
     pub retention_policy: Option<RetentionPolicy>,
 }
 
-impl Default for EnterpriseConfig {
-    fn default() -> Self {
-        Self {
-            encryption_enabled: false,
-            audit_logging: false,
-            access_control: false,
-            backup_enabled: false,
-            retention_policy: None,
-        }
-    }
-}
 
 fn unix_timestamp() -> i64 {
     SystemTime::now()

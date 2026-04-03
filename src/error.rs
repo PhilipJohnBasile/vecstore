@@ -187,8 +187,8 @@ impl From<serde_json::Error> for VecStoreError {
 }
 
 #[cfg(feature = "embeddings")]
-impl From<ort::OrtError> for VecStoreError {
-    fn from(err: ort::OrtError) -> Self {
+impl From<ort::Error> for VecStoreError {
+    fn from(err: ort::Error) -> Self {
         VecStoreError::OnnxRuntime(err.to_string())
     }
 }

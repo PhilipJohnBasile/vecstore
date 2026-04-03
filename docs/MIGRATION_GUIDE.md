@@ -24,7 +24,7 @@ VecStore provides automated migration tools and code equivalents for popular vec
 3. **Update application code** to use VecStore API
 4. **Optimize performance** for your use case
 
-> **Note:** VecStore 0.0.1 is an alpha release. Migration tooling and APIs are still evolving.
+> **Note:** VecStore 0.1.0 is an alpha release. Migration tooling and APIs are still evolving.
 
 ### Why Migrate to VecStore?
 
@@ -34,7 +34,7 @@ VecStore provides automated migration tools and code equivalents for popular vec
 - **Mature feature set**: HNSW indexing, metadata filters, snapshots, batch ingestion.
 - **RAG support**: Hybrid search, quantization helpers, reranking utilities.
 
-> **Caution:** The 0.0.1 alpha is best suited for prototypes and evaluation migrations. Keep your source system online until you are confident VecStore covers your workload.
+> **Caution:** The 0.1.0 alpha is best suited for prototypes and evaluation migrations. Keep your source system online until you are confident VecStore covers your workload.
 
 ---
 
@@ -582,8 +582,8 @@ store.update("doc1", new_vector, metadata,
 ## Getting Help
 
 - **Documentation**: https://docs.rs/vecstore
-- **Examples**: https://github.com/yourusername/vecstore/tree/main/examples
-- **Issues**: https://github.com/yourusername/vecstore/issues
+- **Examples**: https://github.com/PhilipJohnBasile/vecstore/tree/main/examples
+- **Issues**: https://github.com/PhilipJohnBasile/vecstore/issues
 
 ## Next Steps
 

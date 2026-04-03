@@ -147,39 +147,35 @@ impl FieldSchema {
         }
 
         // Range validation for numbers
-        if let Value::Number(n) = value {
-            if let Some(n_f64) = n.as_f64() {
-                if let Some(min) = self.min {
-                    if n_f64 < min {
+        if let Value::Number(n) = value
+            && let Some(n_f64) = n.as_f64() {
+                if let Some(min) = self.min
+                    && n_f64 < min {
                         return Err(ValidationError::RangeError {
                             value: n_f64,
                             min: Some(min),
                             max: None,
                         });
                     }
-                }
 
-                if let Some(max) = self.max {
-                    if n_f64 > max {
+                if let Some(max) = self.max
+                    && n_f64 > max {
                         return Err(ValidationError::RangeError {
                             value: n_f64,
                             min: None,
                             max: Some(max),
                         });
                     }
-                }
             }
-        }
 
         // Allowed values validation
-        if let Some(ref allowed) = self.allowed_values {
-            if !allowed.contains(value) {
+        if let Some(ref allowed) = self.allowed_values
+            && !allowed.contains(value) {
                 return Err(ValidationError::EnumError {
                     value: value.clone(),
                     allowed: allowed.clone(),
                 });
             }
-        }
 
         // Pattern validation for strings
         if let (Some(pattern), Value::String(s)) = (&self.pattern, value) {

@@ -276,8 +276,8 @@ impl GraphRAG {
         self.entities.insert(id.clone(), entity);
 
         // Initialize edge lists
-        self.outgoing.entry(id.clone()).or_insert_with(Vec::new);
-        self.incoming.entry(id).or_insert_with(Vec::new);
+        self.outgoing.entry(id.clone()).or_default();
+        self.incoming.entry(id).or_default();
 
         Ok(())
     }
@@ -296,8 +296,8 @@ impl GraphRAG {
         self.entities.insert(id.clone(), entity);
 
         // Initialize edge lists
-        self.outgoing.entry(id.clone()).or_insert_with(Vec::new);
-        self.incoming.entry(id).or_insert_with(Vec::new);
+        self.outgoing.entry(id.clone()).or_default();
+        self.incoming.entry(id).or_default();
 
         Ok(())
     }
@@ -326,13 +326,13 @@ impl GraphRAG {
         // Add to outgoing edges
         self.outgoing
             .entry(from.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(relation.clone());
 
         // Add to incoming edges
         self.incoming
             .entry(to)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(relation);
 
         Ok(())
@@ -354,13 +354,13 @@ impl GraphRAG {
         // Add to outgoing edges
         self.outgoing
             .entry(from)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(relation.clone());
 
         // Add to incoming edges
         self.incoming
             .entry(to)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(relation);
 
         Ok(())
@@ -455,11 +455,10 @@ impl GraphRAG {
                         continue;
                     }
 
-                    if let Some(ref filter) = query.relation_type_filter {
-                        if !filter.contains(&relation.relation_type) {
+                    if let Some(ref filter) = query.relation_type_filter
+                        && !filter.contains(&relation.relation_type) {
                             continue;
                         }
-                    }
 
                     if !visited.contains(&relation.to) {
                         subgraph.push(relation.to.clone());

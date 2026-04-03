@@ -361,7 +361,7 @@ impl TemporalSearch {
     }
 
     /// Adjust search results with temporal decay
-    pub fn apply_decay(&self, results: &mut Vec<TemporalResult>) {
+    pub fn apply_decay(&self, results: &mut [TemporalResult]) {
         let now = Utc::now();
 
         for result in results.iter_mut() {

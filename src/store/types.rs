@@ -27,8 +27,10 @@ pub type Id = String;
 /// | Binary | 32x | 90% | 8x | High-dim embeddings (1024+) |
 /// | ProductQuantization | 32x | 70-90% | 0.5x | Maximum compression |
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum QuantizationConfig {
     /// No quantization - full float32 vectors
+    #[default]
     None,
 
     /// 8-bit scalar quantization (INT8)
@@ -107,11 +109,6 @@ const fn default_pq_iterations() -> usize {
     DEFAULT_PQ_ITERATIONS
 }
 
-impl Default for QuantizationConfig {
-    fn default() -> Self {
-        QuantizationConfig::None
-    }
-}
 
 /// Statistics about quantized vector storage
 #[derive(Debug, Clone, Serialize, Deserialize)]

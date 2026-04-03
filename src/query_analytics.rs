@@ -977,8 +977,8 @@ impl QueryRecommender {
         }
 
         // Check dimension distribution for index optimization
-        if let Some((most_common_dim, _)) = patterns.dimension_distribution.first() {
-            if *most_common_dim > 512 {
+        if let Some((most_common_dim, _)) = patterns.dimension_distribution.first()
+            && *most_common_dim > 512 {
                 recommendations.push(Recommendation {
                     category: RecommendationCategory::IndexOptimization,
                     title: "High Dimensional Vectors".to_string(),
@@ -990,11 +990,10 @@ impl QueryRecommender {
                     effort: Impact::High,
                 });
             }
-        }
 
         // Check k distribution
-        if let Some((most_common_k, _)) = patterns.k_distribution.first() {
-            if *most_common_k > 100 {
+        if let Some((most_common_k, _)) = patterns.k_distribution.first()
+            && *most_common_k > 100 {
                 recommendations.push(Recommendation {
                     category: RecommendationCategory::QueryOptimization,
                     title: "Large Top-K Values".to_string(),
@@ -1006,7 +1005,6 @@ impl QueryRecommender {
                     effort: Impact::Low,
                 });
             }
-        }
 
         recommendations
     }

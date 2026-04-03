@@ -137,12 +137,17 @@ impl RateLimiter {
 ///     Ok(())
 /// }
 /// ```
+/// Default OpenAI API base URL
+const DEFAULT_BASE_URL: &str = "https://api.openai.com";
+
 pub struct OpenAIEmbedding {
     client: reqwest::Client,
     api_key: String,
     model: OpenAIModel,
     rate_limiter: RateLimiter,
     max_retries: usize,
+    /// Base URL for the API (allows testing with mock servers)
+    base_url: String,
 }
 
 impl OpenAIEmbedding {
@@ -175,6 +180,7 @@ impl OpenAIEmbedding {
             model,
             rate_limiter: RateLimiter::new(500), // 500 requests per minute (conservative)
             max_retries: 3,
+            base_url: DEFAULT_BASE_URL.to_string(),
         })
     }
 
@@ -188,6 +194,29 @@ impl OpenAIEmbedding {
     pub fn with_max_retries(mut self, max_retries: usize) -> Self {
         self.max_retries = max_retries;
         self
+    }
+
+    /// Configure a custom base URL (useful for testing with mock servers)
+    ///
+    /// # Example
+    /// ```no_run
+    /// # use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
+    /// # #[tokio::main]
+    /// # async fn main() -> anyhow::Result<()> {
+    /// let embedder = OpenAIEmbedding::new("test-key".to_string(), OpenAIModel::TextEmbedding3Small)
+    ///     .await?
+    ///     .with_base_url("http://localhost:8080".to_string());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn with_base_url(mut self, base_url: String) -> Self {
+        self.base_url = base_url;
+        self
+    }
+
+    /// Get the current base URL
+    pub fn base_url(&self) -> &str {
+        &self.base_url
     }
 
     /// Embed a single text asynchronously
@@ -261,9 +290,10 @@ impl OpenAIEmbedding {
                 dimensions: None,
             };
 
+            let url = format!("{}/v1/embeddings", self.base_url);
             let response = self
                 .client
-                .post("https://api.openai.com/v1/embeddings")
+                .post(&url)
                 .header("Authorization", format!("Bearer {}", self.api_key))
                 .header("Content-Type", "application/json")
                 .json(&request)

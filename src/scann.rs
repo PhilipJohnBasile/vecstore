@@ -507,9 +507,9 @@ impl ScaNNIndex {
         let bytes_per_vector = if self.config.quantization_bits == 8 {
             self.dimension
         } else if self.config.quantization_bits == 4 {
-            (self.dimension + 1) / 2
+            self.dimension.div_ceil(2)
         } else {
-            (self.dimension + 3) / 4
+            self.dimension.div_ceil(4)
         };
 
         let quantized_memory = total_vectors * bytes_per_vector;

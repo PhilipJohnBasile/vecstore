@@ -367,11 +367,10 @@ impl MemoryCache {
             .min_by_key(|(_, e)| e.last_access)
             .map(|(k, _)| k.clone());
 
-        if let Some(key) = oldest_key {
-            if let Some(entry) = self.entries.remove(&key) {
+        if let Some(key) = oldest_key
+            && let Some(entry) = self.entries.remove(&key) {
                 self.current_size = self.current_size.saturating_sub(entry.data.len() as u64);
             }
-        }
     }
 
     fn invalidate(&mut self, key: &str) {
@@ -1080,22 +1079,20 @@ impl TieredStorageManager {
         }
 
         // Try warm
-        if let Some(warm) = &self.warm_tier {
-            if let Some(vector) = warm.get(id)? {
+        if let Some(warm) = &self.warm_tier
+            && let Some(vector) = warm.get(id)? {
                 // Promote to hot on access
                 self.hot_tier.put(&vector.id, &vector.vector, &vector.metadata)?;
                 return Ok(Some(vector));
             }
-        }
 
         // Try cold
-        if let Some(cold) = &self.cold_tier {
-            if let Some(vector) = cold.get(id)? {
+        if let Some(cold) = &self.cold_tier
+            && let Some(vector) = cold.get(id)? {
                 // Promote to hot on access
                 self.hot_tier.put(&vector.id, &vector.vector, &vector.metadata)?;
                 return Ok(Some(vector));
             }
-        }
 
         Ok(None)
     }
@@ -1154,13 +1151,15 @@ mod tests {
 
     #[test]
     fn test_cache_behavior() {
-        let config = ObjectStoreConfig::local("/tmp/vecstore_cache_test")
+        let mut config = ObjectStoreConfig::local("/tmp/vecstore_cache_test")
             .with_cache_tier(CacheTier {
                 name: "memory".to_string(),
                 max_size_bytes: 1024 * 1024,
                 ttl_seconds: 300,
                 storage_type: CacheStorageType::Memory,
             });
+        // Enable read-through caching for this test
+        config.read_through_cache = true;
 
         let backend = ObjectStoreBackend::new(config).unwrap();
 
@@ -1201,8 +1200,7 @@ mod tests {
         let count = backend.put_batch(&vectors).unwrap();
         assert_eq!(count, 10);
 
-        let ids: Vec<&str> = (0..5).map(|i| format!("vec_{}", i)).collect::<Vec<_>>().iter().map(|s| s.as_str()).collect();
-        // This doesn't work with borrowed strings, so let's simplify
+        // Note: Building dynamic IDs doesn't work well with borrowed strings, using literals instead
         let retrieved = backend.get_batch(&["vec_0", "vec_1", "vec_2"]).unwrap();
         assert_eq!(retrieved.len(), 3);
     }

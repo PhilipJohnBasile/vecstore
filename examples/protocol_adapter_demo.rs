@@ -90,7 +90,7 @@ fn main() -> Result<()> {
     })
     .to_string();
 
-    let response = adapter.handle_request(&chroma_query, Protocol::ChromaDB)?;
+    let _response = adapter.handle_request(&chroma_query, Protocol::ChromaDB)?;
     println!("   ✓ Query executed");
 
     // Example 5: Auto-detection

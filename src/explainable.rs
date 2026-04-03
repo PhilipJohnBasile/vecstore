@@ -42,12 +42,14 @@ use std::collections::HashMap;
 
 /// Level of explanation detail
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum ExplainLevel {
     /// Minimal - just the score
     Minimal,
     /// Basic - score + top contributing dimensions
     Basic,
     /// Standard - adds semantic reasoning
+    #[default]
     Standard,
     /// Full - includes counter-examples and confidence intervals
     Full,
@@ -55,11 +57,6 @@ pub enum ExplainLevel {
     Debug,
 }
 
-impl Default for ExplainLevel {
-    fn default() -> Self {
-        Self::Standard
-    }
-}
 
 /// Dimension contribution to similarity
 #[derive(Debug, Clone, Serialize, Deserialize)]

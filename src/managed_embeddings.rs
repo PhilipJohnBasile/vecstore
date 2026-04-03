@@ -843,14 +843,19 @@ impl EmbeddingService {
         Ok((embeddings, total_tokens))
     }
 
+    /// Fallback embedding for unsupported providers.
+    ///
+    /// Generates deterministic hash-based embeddings for testing and development.
+    /// Production deployments should use supported providers (OpenAI, Cohere, Voyage, Jina, LocalONNX).
     fn embed_simulated(&self, texts: &[&str], model: &ModelConfig) -> Result<(Vec<Vec<f32>>, usize)> {
+        tracing::warn!("Using simulated embeddings for unsupported provider - not suitable for production");
         let total_tokens: usize = texts.iter().map(|t| t.split_whitespace().count()).sum();
         let embeddings = self.generate_embeddings(texts, model.dimension);
         Ok((embeddings, total_tokens))
     }
 
     fn generate_embeddings(&self, texts: &[&str], dimension: usize) -> Vec<Vec<f32>> {
-        // Generate deterministic embeddings based on text hash for simulation
+        // Generate deterministic embeddings based on text hash for testing/fallback
         texts.iter().map(|text| {
             let mut embedding = vec![0.0f32; dimension];
             let bytes = text.as_bytes();

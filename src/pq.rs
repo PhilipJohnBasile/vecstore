@@ -156,7 +156,7 @@ impl ProductQuantizer {
     /// Create a new Product Quantizer
     pub fn new(config: PQConfig) -> Result<Self> {
         // Validate configuration
-        if config.dimension % config.num_subspaces != 0 {
+        if !config.dimension.is_multiple_of(config.num_subspaces) {
             return Err(anyhow!(
                 "Dimension {} must be divisible by num_subspaces {}",
                 config.dimension,
@@ -296,14 +296,14 @@ impl ProductQuantizer {
                 .iter()
                 .map(|v| {
                     let mut recon = vec![0.0; d];
-                    for m in 0..self.config.num_subspaces {
+                    for (m, codebook) in temp_codebooks.iter().enumerate().take(self.config.num_subspaces) {
                         let start_dim = m * self.subspace_dim;
                         let end_dim = start_dim + self.subspace_dim;
                         let subvec = &v[start_dim..end_dim];
 
                         // Find nearest centroid
-                        let centroid_idx = self.find_nearest_centroid(subvec, &temp_codebooks[m]);
-                        for (i, &val) in temp_codebooks[m][centroid_idx].iter().enumerate() {
+                        let centroid_idx = self.find_nearest_centroid(subvec, codebook);
+                        for (i, &val) in codebook[centroid_idx].iter().enumerate() {
                             recon[start_dim + i] = val;
                         }
                     }
@@ -426,8 +426,8 @@ impl ProductQuantizer {
 
             for c in 0..k {
                 if counts[c] > 0 {
-                    for j in 0..dim {
-                        new_centroids[c][j] /= counts[c] as f32;
+                    for val in new_centroids[c].iter_mut().take(dim) {
+                        *val /= counts[c] as f32;
                     }
                 } else {
                     // Reinitialize empty centroid with random vector
@@ -924,7 +924,7 @@ impl IVFPQ {
             let mut counts = vec![0usize; k];
 
             for v in vectors {
-                let nearest = self.find_nearest_in(&v, &centroids);
+                let nearest = self.find_nearest_in(v, &centroids);
                 counts[nearest] += 1;
                 for (j, &val) in v.iter().enumerate() {
                     new_centroids[nearest][j] += val;
@@ -933,8 +933,8 @@ impl IVFPQ {
 
             for c in 0..k {
                 if counts[c] > 0 {
-                    for j in 0..dim {
-                        new_centroids[c][j] /= counts[c] as f32;
+                    for val in new_centroids[c].iter_mut().take(dim) {
+                        *val /= counts[c] as f32;
                     }
                 }
             }

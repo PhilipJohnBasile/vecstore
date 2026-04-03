@@ -46,12 +46,12 @@ use anyhow::Context;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "embeddings")]
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "embeddings")]
-use ndarray::{Array2, CowArray};
+use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
+use ort::session::{builder::GraphOptimizationLevel, Session};
 #[cfg(feature = "embeddings")]
 use std::sync::RwLock;
 #[cfg(feature = "embeddings")]
@@ -260,15 +260,11 @@ pub struct ColBERTReranker {
 
     /// ONNX Runtime session (when embeddings feature is enabled)
     #[cfg(feature = "embeddings")]
-    session: Option<Arc<Session>>,
+    session: Option<Arc<Mutex<Session>>>,
 
     /// Tokenizer (when embeddings feature is enabled)
     #[cfg(feature = "embeddings")]
     tokenizer: Option<Arc<Tokenizer>>,
-
-    /// ONNX Runtime environment
-    #[cfg(feature = "embeddings")]
-    environment: Option<Arc<Environment>>,
 
     /// Query embedding cache for faster repeated queries
     #[cfg(feature = "embeddings")]
@@ -297,8 +293,6 @@ impl ColBERTReranker {
             session: None,
             #[cfg(feature = "embeddings")]
             tokenizer: None,
-            #[cfg(feature = "embeddings")]
-            environment: None,
             #[cfg(feature = "embeddings")]
             query_cache: Arc::new(RwLock::new(HashMap::new())),
         })
@@ -392,31 +386,25 @@ impl ColBERTReranker {
         config.model_path = Some(model_path.clone());
         config.tokenizer_path = Some(tokenizer_path.clone());
 
-        // Initialize ONNX Runtime environment
-        let environment = Arc::new(
-            Environment::builder()
-                .with_name("colbert")
-                .build()
-                .context("Failed to create ONNX environment")?,
-        );
-
-        // Load ONNX model with optimizations
-        let session = SessionBuilder::new(&environment)?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_intra_threads(config.num_threads as i16)?
-            .with_model_from_file(&model_path)
+        // Load ONNX model with optimizations using ort 2.0 API
+        let session = Session::builder()
+            .context("Failed to create session builder")?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .context("Failed to set optimization level")?
+            .with_intra_threads(config.num_threads)
+            .context("Failed to set thread count")?
+            .commit_from_file(&model_path)
             .context("Failed to load ColBERT ONNX model")?;
 
         // Load tokenizer
         let tokenizer = Tokenizer::from_file(&tokenizer_path)
             .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
 
-        let mut reranker = Self {
+        let reranker = Self {
             config,
             doc_cache: HashMap::new(),
-            session: Some(Arc::new(session)),
+            session: Some(Arc::new(Mutex::new(session))),
             tokenizer: Some(Arc::new(tokenizer)),
-            environment: Some(environment),
             query_cache: Arc::new(RwLock::new(HashMap::new())),
         };
 
@@ -493,27 +481,24 @@ impl ColBERTReranker {
         let attention_mask_array =
             Array2::from_shape_vec((1, max_tokens), padded_attention_mask.clone())?;
 
-        // Convert to dynamic arrays for ONNX Runtime
-        let input_ids_dyn = input_ids_array.into_dyn();
-        let attention_mask_dyn = attention_mask_array.into_dyn();
+        // Create Tensor objects for ort 2.0
+        let input_ids_tensor = ort::value::Tensor::from_array(input_ids_array)?;
+        let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
-        let input_ids_cow = CowArray::from(&input_ids_dyn);
-        let attention_mask_cow = CowArray::from(&attention_mask_dyn);
+        // Run inference using ort 2.0 inputs! macro
+        let mut session_guard = session.lock()
+            .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
+        let outputs = session_guard.run(ort::inputs![
+            input_ids_tensor,
+            attention_mask_tensor
+        ])?;
 
-        // Create ONNX input values
-        let input_ids_value = Value::from_array(session.allocator(), &input_ids_cow)?;
-        let attention_mask_value = Value::from_array(session.allocator(), &attention_mask_cow)?;
-
-        // Run inference - ColBERT models typically take input_ids and attention_mask
-        let outputs = session.run(vec![input_ids_value, attention_mask_value])?;
-
-        // Extract token embeddings
+        // Extract token embeddings using ort 2.0 API
         // ColBERT output shape: (batch_size, seq_length, embedding_dim)
-        let token_embeddings = outputs[0]
-            .try_extract::<f32>()
-            .context("Failed to extract token embeddings")?
-            .view()
-            .to_owned();
+        let token_embeddings_view = outputs[0]
+            .try_extract_array::<f32>()
+            .context("Failed to extract token embeddings")?;
+        let token_embeddings = token_embeddings_view.to_owned();
 
         let shape = token_embeddings.shape();
         let _batch_size = shape[0];
@@ -699,24 +684,23 @@ impl ColBERTReranker {
             let attention_mask_array =
                 Array2::from_shape_vec((current_batch_size, max_tokens), all_attention_masks.clone())?;
 
-            let input_ids_dyn = input_ids_array.into_dyn();
-            let attention_mask_dyn = attention_mask_array.into_dyn();
+            // Create Tensor objects for ort 2.0
+            let input_ids_tensor = ort::value::Tensor::from_array(input_ids_array)?;
+            let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
-            let input_ids_cow = CowArray::from(&input_ids_dyn);
-            let attention_mask_cow = CowArray::from(&attention_mask_dyn);
+            // Run batch inference using ort 2.0 inputs! macro
+            let mut session_guard = session.lock()
+                .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
+            let outputs = session_guard.run(ort::inputs![
+                input_ids_tensor,
+                attention_mask_tensor
+            ])?;
 
-            let input_ids_value = Value::from_array(session.allocator(), &input_ids_cow)?;
-            let attention_mask_value = Value::from_array(session.allocator(), &attention_mask_cow)?;
-
-            // Run batch inference
-            let outputs = session.run(vec![input_ids_value, attention_mask_value])?;
-
-            // Extract and process embeddings
-            let token_embeddings = outputs[0]
-                .try_extract::<f32>()
-                .context("Failed to extract batch token embeddings")?
-                .view()
-                .to_owned();
+            // Extract and process embeddings using ort 2.0 API
+            let token_embeddings_view = outputs[0]
+                .try_extract_array::<f32>()
+                .context("Failed to extract batch token embeddings")?;
+            let token_embeddings = token_embeddings_view.to_owned();
 
             let shape = token_embeddings.shape();
             let output_seq_len = shape[1];
@@ -853,22 +837,20 @@ impl ColBERTReranker {
         // For each query token (considering attention mask)
         for (q_idx, query_emb) in query_tokens.embeddings.iter().enumerate() {
             // Skip padding tokens if attention mask is available
-            if let Some(ref mask) = query_tokens.attention_mask {
-                if q_idx < mask.len() && mask[q_idx] == 0 {
+            if let Some(ref mask) = query_tokens.attention_mask
+                && q_idx < mask.len() && mask[q_idx] == 0 {
                     continue;
                 }
-            }
 
             let mut max_sim = f32::NEG_INFINITY;
 
             // Find max similarity with any document token
             for (d_idx, doc_emb) in doc_tokens.embeddings.iter().enumerate() {
                 // Skip padding tokens if attention mask is available
-                if let Some(ref mask) = doc_tokens.attention_mask {
-                    if d_idx < mask.len() && mask[d_idx] == 0 {
+                if let Some(ref mask) = doc_tokens.attention_mask
+                    && d_idx < mask.len() && mask[d_idx] == 0 {
                         continue;
                     }
-                }
 
                 let sim = self.compute_token_similarity(query_emb, doc_emb);
                 max_sim = max_sim.max(sim);

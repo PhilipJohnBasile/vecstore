@@ -78,7 +78,7 @@ pub struct MmapVectorStore {
 impl MmapVectorStore {
     /// Create a new memory-mapped vector store
     pub fn create<P: AsRef<Path>>(path: P, config: MmapConfig) -> Result<Self> {
-        let bytes_per_vector = config.vector_dim * std::mem::size_of::<f32>();
+        let bytes_per_vector = config.vector_dim * size_of::<f32>();
         let file_size = bytes_per_vector * config.initial_capacity;
 
         // Create the file and set its size
@@ -126,7 +126,7 @@ impl MmapVectorStore {
             .context("Failed to open mmap file")?;
 
         let file_size = file.metadata()?.len() as usize;
-        let bytes_per_vector = config.vector_dim * std::mem::size_of::<f32>();
+        let bytes_per_vector = config.vector_dim * size_of::<f32>();
         let capacity = file_size / bytes_per_vector;
 
         let mut mmap_options = MmapOptions::new();
@@ -183,7 +183,7 @@ impl MmapVectorStore {
         }
 
         let offset = self.vector_offset(index);
-        let bytes_per_vector = self.config.vector_dim * std::mem::size_of::<f32>();
+        let bytes_per_vector = self.config.vector_dim * size_of::<f32>();
         let bytes = &self.mmap[offset..offset + bytes_per_vector];
 
         Ok(self.bytes_to_vector(bytes))
@@ -213,7 +213,7 @@ impl MmapVectorStore {
     /// Grow the memory map to accommodate more vectors
     fn grow(&mut self) -> Result<()> {
         let new_capacity = self.capacity * 2;
-        let bytes_per_vector = self.config.vector_dim * std::mem::size_of::<f32>();
+        let bytes_per_vector = self.config.vector_dim * size_of::<f32>();
         let new_size = bytes_per_vector * new_capacity;
 
         // Flush current mmap before resizing
@@ -244,12 +244,12 @@ impl MmapVectorStore {
 
     /// Calculate the byte offset for a vector index
     fn vector_offset(&self, index: usize) -> usize {
-        index * self.config.vector_dim * std::mem::size_of::<f32>()
+        index * self.config.vector_dim * size_of::<f32>()
     }
 
     /// Convert a vector to bytes
     fn vector_to_bytes(&self, vector: &[f32]) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(std::mem::size_of_val(vector));
+        let mut bytes = Vec::with_capacity(size_of_val(vector));
         for &value in vector {
             bytes.extend_from_slice(&value.to_le_bytes());
         }
@@ -259,7 +259,7 @@ impl MmapVectorStore {
     /// Convert bytes to a vector
     fn bytes_to_vector(&self, bytes: &[u8]) -> Vec<f32> {
         let mut vector = Vec::with_capacity(self.config.vector_dim);
-        for chunk in bytes.chunks_exact(std::mem::size_of::<f32>()) {
+        for chunk in bytes.chunks_exact(size_of::<f32>()) {
             let value = f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]);
             vector.push(value);
         }

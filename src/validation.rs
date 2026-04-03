@@ -234,15 +234,16 @@ pub struct VectorValidator {
     config: ValidationConfig,
 }
 
+impl Default for VectorValidator {
+    fn default() -> Self {
+        Self::new(ValidationConfig::default())
+    }
+}
+
 impl VectorValidator {
     /// Create new validator with config
     pub fn new(config: ValidationConfig) -> Self {
         Self { config }
-    }
-
-    /// Create with default config
-    pub fn default() -> Self {
-        Self::new(ValidationConfig::default())
     }
 
     /// Create strict validator
@@ -267,14 +268,13 @@ impl VectorValidator {
         }
 
         // Check dimension
-        if let Some(expected_dim) = self.config.expected_dimension {
-            if vector.len() != expected_dim {
+        if let Some(expected_dim) = self.config.expected_dimension
+            && vector.len() != expected_dim {
                 errors.push(ValidationError::DimensionMismatch {
                     expected: expected_dim,
                     actual: vector.len(),
                 });
             }
-        }
 
         // Check for NaN and infinity
         let nan_indices: Vec<usize> = vector
@@ -373,9 +373,7 @@ impl VectorValidator {
             if magnitude < 1e-9 {
                 // Zero vector - replace with uniform small values
                 let default_val = 1.0 / (fixed.len() as f32).sqrt();
-                for val in &mut fixed {
-                    *val = default_val;
-                }
+                fixed.fill(default_val);
             }
         }
 
@@ -479,8 +477,8 @@ impl VectorValidator {
 
     fn compute_variance(&self, vector: &[f32]) -> f32 {
         let mean = vector.iter().sum::<f32>() / vector.len() as f32;
-        let variance = vector.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / vector.len() as f32;
-        variance
+        
+        vector.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / vector.len() as f32
     }
 
     fn compute_sparsity(&self, vector: &[f32]) -> f32 {

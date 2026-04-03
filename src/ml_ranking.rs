@@ -39,13 +39,13 @@ use crate::error::Result;
 #[cfg(feature = "embeddings")]
 use std::path::Path;
 #[cfg(feature = "embeddings")]
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 #[cfg(feature = "embeddings")]
 use crate::error::VecStoreError;
 #[cfg(feature = "embeddings")]
-use ndarray::{Array2, CowArray};
+use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
+use ort::session::{builder::GraphOptimizationLevel, Session};
 
 /// Default batch size for ONNX inference
 const DEFAULT_BATCH_SIZE: usize = 32;
@@ -56,29 +56,20 @@ const MAX_CACHED_SESSIONS: usize = 10;
 /// ONNX Model Session Cache for efficient model reuse
 #[cfg(feature = "embeddings")]
 struct OnnxSessionCache {
-    environment: Arc<Environment>,
-    sessions: RwLock<HashMap<String, Arc<Session>>>,
+    sessions: RwLock<HashMap<String, Arc<Mutex<Session>>>>,
 }
 
 #[cfg(feature = "embeddings")]
 impl OnnxSessionCache {
     /// Create a new session cache
     fn new() -> Result<Self> {
-        let environment = Arc::new(
-            Environment::builder()
-                .with_name("ml_ranker")
-                .build()
-                .map_err(|e| VecStoreError::Internal(format!("Failed to create ONNX environment: {}", e)))?,
-        );
-
         Ok(Self {
-            environment,
             sessions: RwLock::new(HashMap::new()),
         })
     }
 
     /// Get or create a session for a model path
-    fn get_or_create_session(&self, model_path: &str, num_threads: usize) -> Result<Arc<Session>> {
+    fn get_or_create_session(&self, model_path: &str, num_threads: usize) -> Result<Arc<Mutex<Session>>> {
         // Check if session already exists
         {
             let sessions = self.sessions.read()
@@ -88,22 +79,22 @@ impl OnnxSessionCache {
             }
         }
 
-        // Create new session
+        // Create new session using ort 2.0 API
         let path = Path::new(model_path);
         if !path.exists() {
             return Err(VecStoreError::NotFound(format!("Model file not found: {}", model_path)));
         }
 
-        let session = SessionBuilder::new(&self.environment)
+        let session = Session::builder()
             .map_err(|e| VecStoreError::Internal(format!("Failed to create session builder: {}", e)))?
             .with_optimization_level(GraphOptimizationLevel::Level3)
             .map_err(|e| VecStoreError::Internal(format!("Failed to set optimization level: {}", e)))?
-            .with_intra_threads(num_threads as i16)
+            .with_intra_threads(num_threads)
             .map_err(|e| VecStoreError::Internal(format!("Failed to set thread count: {}", e)))?
-            .with_model_from_file(path)
+            .commit_from_file(path)
             .map_err(|e| VecStoreError::Internal(format!("Failed to load ONNX model: {}", e)))?;
 
-        let session = Arc::new(session);
+        let session = Arc::new(Mutex::new(session));
 
         // Cache the session
         {
@@ -132,13 +123,14 @@ impl OnnxSessionCache {
         let input_array = Array2::from_shape_vec((1, feature_dim), dummy_features)
             .map_err(|e| VecStoreError::Internal(format!("Failed to create dummy input: {}", e)))?;
 
-        let input_dyn = input_array.into_dyn();
-        let input_cow = CowArray::from(&input_dyn);
-        let input_value = Value::from_array(session.allocator(), &input_cow)
+        // Create Tensor object for ort 2.0
+        let input_tensor = ort::value::Tensor::from_array(input_array)
             .map_err(|e| VecStoreError::Internal(format!("Failed to create input tensor: {}", e)))?;
 
-        // Run warmup inference
-        let _ = session.run(vec![input_value])
+        // Run warmup inference using ort 2.0 inputs! macro
+        let mut session_guard = session.lock()
+            .map_err(|e| VecStoreError::LockError(e.to_string()))?;
+        let _ = session_guard.run(ort::inputs![input_tensor])
             .map_err(|e| VecStoreError::Internal(format!("Warmup inference failed: {}", e)))?;
 
         Ok(())
@@ -158,7 +150,13 @@ impl OnnxSessionCache {
 fn get_session_cache() -> Result<&'static OnnxSessionCache> {
     use std::sync::OnceLock;
     static CACHE: OnceLock<OnnxSessionCache> = OnceLock::new();
-    CACHE.get_or_try_init(OnnxSessionCache::new)
+    if let Some(cache) = CACHE.get() {
+        return Ok(cache);
+    }
+    let cache = OnnxSessionCache::new()?;
+    // Ignore the result if another thread initialized first
+    let _ = CACHE.set(cache);
+    CACHE.get().ok_or_else(|| VecStoreError::Internal("Failed to initialize session cache".to_string()))
 }
 
 /// Ranking configuration
@@ -266,8 +264,10 @@ pub enum ScoreNormalization {
 
 /// Model type for ONNX inference
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum OnnxModelType {
     /// Generic ranking model (outputs a single relevance score)
+    #[default]
     Ranker,
     /// XGBoost model exported to ONNX
     XGBoost,
@@ -279,11 +279,6 @@ pub enum OnnxModelType {
     NeuralNetwork,
 }
 
-impl Default for OnnxModelType {
-    fn default() -> Self {
-        OnnxModelType::Ranker
-    }
-}
 
 /// ONNX model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -777,7 +772,9 @@ impl MLRanker {
 
         // Process in batches
         for chunk in feature_vectors.chunks(batch_size) {
-            let batch_scores = self.run_onnx_batch(&session, chunk, apply_sigmoid, apply_softmax, output_index)?;
+            let mut session_guard = session.lock()
+                .map_err(|e| VecStoreError::LockError(e.to_string()))?;
+            let batch_scores = self.run_onnx_batch(&mut session_guard, chunk, apply_sigmoid, apply_softmax, output_index)?;
             all_scores.extend(batch_scores);
         }
 
@@ -788,7 +785,7 @@ impl MLRanker {
     #[cfg(feature = "embeddings")]
     fn run_onnx_batch(
         &self,
-        session: &Session,
+        session: &mut Session,
         batch: &[Vec<f32>],
         apply_sigmoid: bool,
         apply_softmax: bool,
@@ -810,23 +807,20 @@ impl MLRanker {
         let input_array = Array2::from_shape_vec((batch_size, feature_dim), flat_features)
             .map_err(|e| VecStoreError::Internal(format!("Failed to create input array: {}", e)))?;
 
-        let input_dyn = input_array.into_dyn();
-        let input_cow = CowArray::from(&input_dyn);
-        let input_value = Value::from_array(session.allocator(), &input_cow)
+        // Create Tensor object for ort 2.0
+        let input_tensor = ort::value::Tensor::from_array(input_array)
             .map_err(|e| VecStoreError::Internal(format!("Failed to create input tensor: {}", e)))?;
 
-        // Run inference
-        let outputs = session.run(vec![input_value])
+        // Run inference using ort 2.0 inputs! macro
+        let outputs = session.run(ort::inputs![input_tensor])
             .map_err(|e| VecStoreError::Internal(format!("ONNX inference failed: {}", e)))?;
 
-        // Extract output tensor
-        let output_tensor = outputs.first()
-            .ok_or_else(|| VecStoreError::Internal("No output from ONNX model".to_string()))?;
+        // Extract output tensor using ort 2.0 API
+        let output_tensor = &outputs[0];
 
-        let output_array = output_tensor.try_extract::<f32>()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to extract output: {}", e)))?
-            .view()
-            .to_owned();
+        let output_view = output_tensor.try_extract_array::<f32>()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to extract output: {}", e)))?;
+        let output_array = output_view.to_owned();
 
         // Parse output based on shape
         let output_shape = output_array.shape();

@@ -166,7 +166,7 @@ impl ResumeToken {
 }
 
 /// Change filter
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct ChangeFilter {
     /// Filter by operation types
     pub operations: Option<Vec<Operation>>,
@@ -182,6 +182,20 @@ pub struct ChangeFilter {
     pub start_after: Option<ResumeToken>,
     /// Maximum batch size
     pub batch_size: usize,
+}
+
+impl Default for ChangeFilter {
+    fn default() -> Self {
+        Self {
+            operations: None,
+            document_ids: None,
+            metadata_filter: None,
+            include_full_document: true,
+            include_previous: false,
+            start_after: None,
+            batch_size: 100,
+        }
+    }
 }
 
 impl ChangeFilter {
@@ -256,18 +270,16 @@ impl ChangeFilter {
     /// Check if event matches filter
     fn matches(&self, event: &ChangeEvent) -> bool {
         // Check operation
-        if let Some(ops) = &self.operations {
-            if !ops.contains(&event.operation) {
+        if let Some(ops) = &self.operations
+            && !ops.contains(&event.operation) {
                 return false;
             }
-        }
 
         // Check document ID
-        if let Some(ids) = &self.document_ids {
-            if !ids.contains(&event.document_id) {
+        if let Some(ids) = &self.document_ids
+            && !ids.contains(&event.document_id) {
                 return false;
             }
-        }
 
         // Check metadata
         if let Some(filter) = &self.metadata_filter {
@@ -405,11 +417,11 @@ impl ChangeStream {
     pub fn watch(&self, filter: ChangeFilter) -> Result<Arc<Subscription>, VecStoreError> {
         let id = self.subscription_counter.fetch_add(1, Ordering::Relaxed);
 
-        // If resuming, replay events from log
+        // Replay events from log - either from resume token or from beginning
         let events = if let Some(ref token) = filter.start_after {
             self.replay_from(token, &filter)?
         } else {
-            VecDeque::new()
+            self.replay_all(&filter)?
         };
 
         let subscription = Arc::new(Subscription {
@@ -530,6 +542,16 @@ impl ChangeStream {
 
         Ok(log.iter()
             .filter(|e| e.id > start_id && filter.matches(e))
+            .cloned()
+            .collect())
+    }
+
+    fn replay_all(&self, filter: &ChangeFilter) -> Result<VecDeque<ChangeEvent>, VecStoreError> {
+        let log = self.event_log.read()
+            .map_err(|_| VecStoreError::LockError("event_log lock poisoned".into()))?;
+
+        Ok(log.iter()
+            .filter(|e| filter.matches(e))
             .cloned()
             .collect())
     }

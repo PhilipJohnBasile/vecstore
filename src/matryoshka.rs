@@ -173,12 +173,11 @@ impl MatryoshkaEmbedding {
         }
 
         // Try to get from full embedding
-        if let Some(ref full) = self.full {
-            if dim <= full.len() {
+        if let Some(ref full) = self.full
+            && dim <= full.len() {
                 // Would need to compute truncated - return None for now
                 return None;
             }
-        }
 
         // Return closest smaller dimension
         self.truncated
@@ -314,11 +313,10 @@ impl MatryoshkaStore {
 
             // Re-score candidates at higher dimension
             for (id, score) in &mut candidates {
-                if let Some(emb) = self.embeddings.get(id) {
-                    if let Some(v) = emb.at_dimension(dim) {
+                if let Some(emb) = self.embeddings.get(id)
+                    && let Some(v) = emb.at_dimension(dim) {
                         *score = self.cosine_similarity(&refined_query, v);
                     }
-                }
             }
 
             // Re-sort after refinement

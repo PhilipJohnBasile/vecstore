@@ -164,7 +164,7 @@ struct FileHeader {
 impl FileHeader {
     const MAGIC: [u8; 4] = *b"HNSW";
     const VERSION: u32 = 1;
-    const SIZE: usize = std::mem::size_of::<FileHeader>();
+    const SIZE: usize = size_of::<FileHeader>();
 
     fn new(m: u16) -> Self {
         Self {
@@ -396,11 +396,18 @@ impl DiskHNSW {
             .open(&self.file_path)
             .context("Failed to open file for writing")?;
 
-        // Find the end of the file (or use tracked offset)
+        // Read current header to get data_length (position after last node)
+        let mut header_buf = vec![0u8; FileHeader::SIZE];
+        file.read_exact(&mut header_buf)?;
+        let current_data_length = unsafe {
+            (*(header_buf.as_ptr() as *const FileHeader)).data_length
+        };
+
+        // Seek to end of actual data (not end of file which may have padding)
         let file_len = file.metadata()?.len();
         let offset = file
-            .seek(SeekFrom::End(0))
-            .context("Failed to seek to end of file")?;
+            .seek(SeekFrom::Start(current_data_length))
+            .context("Failed to seek to data end")?;
 
         // Calculate required size
         let node_size = 11 + (node.edges.len() * 8);
@@ -504,12 +511,79 @@ impl DiskHNSW {
         Ok(HNSWNode { id, layer, edges })
     }
 
-    /// Get a node from the index (async version - not yet implemented)
+    /// Get a node from the index (sync fallback for async mode)
+    ///
+    /// In async mode, prefer using `get_node_async()` for proper lock handling.
+    /// This sync version attempts to acquire the lock immediately and returns
+    /// an error if the lock is currently held.
     #[cfg(feature = "async")]
     pub fn get_node(&self, node_id: u64) -> Result<HNSWNode> {
-        // In async mode, would need to await the RwLock
-        // For now, return error - use search() which has brute force fallback
-        Err(anyhow!("get_node not available in async mode - use search()"))
+        let offset = *self
+            .node_offsets
+            .get(&node_id)
+            .ok_or_else(|| anyhow!("Node {} not found", node_id))?;
+
+        let mmap_arc = self
+            .mmap
+            .as_ref()
+            .ok_or_else(|| anyhow!("Index not mapped"))?;
+
+        // Try to acquire read lock without blocking
+        let mmap = mmap_arc.try_read()
+            .map_err(|_| anyhow!("Lock held - use get_node_async() for async access"))?;
+
+        let offset = offset as usize;
+
+        // Read node data
+        let id = u64::from_le_bytes(mmap[offset..offset + 8].try_into().unwrap());
+        let layer = mmap[offset + 8];
+        let num_edges = u16::from_le_bytes(mmap[offset + 9..offset + 11].try_into().unwrap());
+
+        let mut edges = Vec::with_capacity(num_edges as usize);
+        let mut edge_offset = offset + 11;
+        for _ in 0..num_edges {
+            let edge = u64::from_le_bytes(mmap[edge_offset..edge_offset + 8].try_into().unwrap());
+            edges.push(edge);
+            edge_offset += 8;
+        }
+
+        Ok(HNSWNode { id, layer, edges })
+    }
+
+    /// Get a node from the index (async version)
+    ///
+    /// Properly awaits the RwLock for async access to the memory-mapped data.
+    #[cfg(feature = "async")]
+    pub async fn get_node_async(&self, node_id: u64) -> Result<HNSWNode> {
+        let offset = *self
+            .node_offsets
+            .get(&node_id)
+            .ok_or_else(|| anyhow!("Node {} not found", node_id))?;
+
+        let mmap_arc = self
+            .mmap
+            .as_ref()
+            .ok_or_else(|| anyhow!("Index not mapped"))?;
+
+        // Await the read lock
+        let mmap = mmap_arc.read().await;
+
+        let offset = offset as usize;
+
+        // Read node data
+        let id = u64::from_le_bytes(mmap[offset..offset + 8].try_into().unwrap());
+        let layer = mmap[offset + 8];
+        let num_edges = u16::from_le_bytes(mmap[offset + 9..offset + 11].try_into().unwrap());
+
+        let mut edges = Vec::with_capacity(num_edges as usize);
+        let mut edge_offset = offset + 11;
+        for _ in 0..num_edges {
+            let edge = u64::from_le_bytes(mmap[edge_offset..edge_offset + 8].try_into().unwrap());
+            edges.push(edge);
+            edge_offset += 8;
+        }
+
+        Ok(HNSWNode { id, layer, edges })
     }
 
     /// Get node layer
@@ -625,6 +699,32 @@ impl DiskHNSW {
     /// Get all node IDs
     pub fn get_all_node_ids(&self) -> Vec<u64> {
         self.node_max_layer.keys().copied().collect()
+    }
+
+    /// Sync all data to disk
+    ///
+    /// Ensures all written data is persisted to disk before closing.
+    /// Call this before dropping if you need to reopen the index.
+    pub fn sync(&self) -> Result<()> {
+        // Open file and sync to disk
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&self.file_path)
+            .context("Failed to open file for sync")?;
+
+        // Sync file data to disk
+        file.sync_all().context("Failed to sync file")?;
+        Ok(())
+    }
+}
+
+impl Drop for DiskHNSW {
+    fn drop(&mut self) {
+        // Best effort sync on drop
+        if let Err(e) = self.sync() {
+            eprintln!("Warning: failed to sync DiskHNSW on drop: {}", e);
+        }
     }
 }
 
@@ -981,7 +1081,7 @@ impl DiskHNSWIndex {
         }
 
         // Handle empty index
-        if self.vectors.len() == 0 {
+        if self.vectors.is_empty() {
             return Ok(vec![]);
         }
 
@@ -1048,13 +1148,12 @@ impl DiskHNSWIndex {
 
             let mut found_closer = false;
             for neighbor in neighbors {
-                if let Ok(dist) = self.get_distance(query, neighbor) {
-                    if dist < current_dist {
+                if let Ok(dist) = self.get_distance(query, neighbor)
+                    && dist < current_dist {
                         current = neighbor;
                         current_dist = dist;
                         found_closer = true;
                     }
-                }
             }
 
             if !found_closer {
@@ -1080,13 +1179,11 @@ impl DiskHNSWIndex {
 
         while let Some(current) = candidates.pop() {
             // Stop if current is further than the worst result
-            if results.len() >= ef {
-                if let Some(worst) = results.peek() {
-                    if current.distance > worst.distance {
+            if results.len() >= ef
+                && let Some(worst) = results.peek()
+                    && current.distance > worst.distance {
                         break;
                     }
-                }
-            }
 
             // Get neighbors
             let neighbors = match self.graph.get_neighbors_at_layer(current.id, layer) {
@@ -1278,7 +1375,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: Fix header synchronization issue when reopening files
     fn test_open_existing_index() {
         let temp_dir = TempDir::new().unwrap();
         let path = temp_dir.path().join("test.hnsw");
@@ -1400,7 +1496,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore] // TODO: May fail on systems with limited temp storage
+    #[ignore] // Requires sufficient disk space - may fail on constrained systems
     fn test_disk_hnsw_index_large_dataset() {
         let temp_dir = TempDir::new().unwrap();
         let base_path = temp_dir.path().join("large_index");

@@ -605,13 +605,11 @@ impl DynamicCollection {
         let mut results: Vec<_> = vectors.iter()
             .filter_map(|(id, vec)| {
                 // Apply filter if provided
-                if let Some(filter_str) = filter {
-                    if let Some(doc) = documents.get(id) {
-                        if !self.matches_filter(doc, filter_str) {
+                if let Some(filter_str) = filter
+                    && let Some(doc) = documents.get(id)
+                        && !self.matches_filter(doc, filter_str) {
                             return None;
                         }
-                    }
-                }
 
                 let score = cosine_similarity(query, vec);
                 Some((id.clone(), score))

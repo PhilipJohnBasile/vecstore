@@ -157,7 +157,7 @@ fn main() -> Result<()> {
         ];
 
         let mut pca = PCA::new(2);
-        let reduced = pca.fit_transform(&vectors)?;
+        let _reduced = pca.fit_transform(&vectors)?;
 
         let stats = ReductionStats::from_pca(&pca, 4);
         println!(

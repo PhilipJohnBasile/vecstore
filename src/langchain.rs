@@ -217,10 +217,10 @@ impl LangChainVectorStore {
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
         // Convert to scored documents
-        Ok(results
+        results
             .into_iter()
             .map(|neighbor| self.neighbor_to_scored_document(neighbor))
-            .collect::<Result<Vec<_>>>()?)
+            .collect::<Result<Vec<_>>>()
     }
 
     /// Similarity search by vector (pre-computed embedding)
@@ -240,10 +240,10 @@ impl LangChainVectorStore {
             .query(query)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
-        Ok(results
+        results
             .into_iter()
             .map(|neighbor| self.neighbor_to_scored_document(neighbor))
-            .collect::<Result<Vec<_>>>()?)
+            .collect::<Result<Vec<_>>>()
     }
 
     /// MMR (Maximal Marginal Relevance) search for diverse results

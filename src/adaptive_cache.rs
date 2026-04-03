@@ -143,7 +143,7 @@ impl BloomFilter {
         let num_bits = Self::optimal_bits(expected_items, fp_rate);
         let num_hashes = Self::optimal_hashes(num_bits, expected_items);
 
-        let num_words = (num_bits + 63) / 64;
+        let num_words = num_bits.div_ceil(64);
         let bits = (0..num_words).map(|_| AtomicU64::new(0)).collect();
 
         Self {
@@ -417,8 +417,8 @@ impl AdaptiveCache {
         {
             let mut l2 = self.l2.write()
                 .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
-            if let Some(entry) = l2.remove(key) {
-                if !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds)) {
+            if let Some(entry) = l2.remove(key)
+                && !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds)) {
                     let mut stats = self.l2_stats.write()
                         .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
                     stats.hits += 1;
@@ -427,15 +427,14 @@ impl AdaptiveCache {
                     self.promote_to_l1(key, entry)?;
                     return Ok(Some(value));
                 }
-            }
         }
 
         // Check L3 (disk) and promote to L2
         if self.config.enable_l3 {
             let mut l3 = self.l3.write()
                 .map_err(|_| VecStoreError::LockError("l3 cache lock poisoned".into()))?;
-            if let Some(entry) = l3.remove(key) {
-                if !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds)) {
+            if let Some(entry) = l3.remove(key)
+                && !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds)) {
                     let mut stats = self.l3_stats.write()
                         .map_err(|_| VecStoreError::LockError("l3_stats lock poisoned".into()))?;
                     stats.hits += 1;
@@ -444,7 +443,6 @@ impl AdaptiveCache {
                     self.promote_to_l2(key, entry)?;
                     return Ok(Some(value));
                 }
-            }
         }
 
         // Miss

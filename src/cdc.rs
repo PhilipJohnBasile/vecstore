@@ -281,45 +281,39 @@ impl ChangeFilter {
         }
 
         // Check change type
-        if let Some(ref cts) = self.change_types {
-            if !cts.contains(&event.change_type) {
+        if let Some(ref cts) = self.change_types
+            && !cts.contains(&event.change_type) {
                 return false;
             }
-        }
 
         // Check ID prefix
-        if let Some(ref prefix) = self.id_prefix {
-            if !event.vector_id.starts_with(prefix) {
+        if let Some(ref prefix) = self.id_prefix
+            && !event.vector_id.starts_with(prefix) {
                 return false;
             }
-        }
 
         // Check ID pattern (simple glob)
-        if let Some(ref pattern) = self.id_pattern {
-            if !glob_match(pattern, &event.vector_id) {
+        if let Some(ref pattern) = self.id_pattern
+            && !glob_match(pattern, &event.vector_id) {
                 return false;
             }
-        }
 
         // Check source
-        if let Some(ref sources) = self.sources {
-            if !sources.contains(&event.source) {
+        if let Some(ref sources) = self.sources
+            && !sources.contains(&event.source) {
                 return false;
             }
-        }
 
         // Check sequence range
-        if let Some(from) = self.from_sequence {
-            if event.sequence < from {
+        if let Some(from) = self.from_sequence
+            && event.sequence < from {
                 return false;
             }
-        }
 
-        if let Some(to) = self.to_sequence {
-            if event.sequence > to {
+        if let Some(to) = self.to_sequence
+            && event.sequence > to {
                 return false;
             }
-        }
 
         true
     }

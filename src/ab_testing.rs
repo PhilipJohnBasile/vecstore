@@ -503,7 +503,7 @@ impl ABTestManager {
             ended_at: state.ended_at,
             duration_seconds: state.started_at.map(|start| {
                 let end = state.ended_at.unwrap_or_else(current_timestamp);
-                ((end - start) / 1000) as u64
+                (end - start) / 1000
             }),
             variant_results,
             comparisons,
@@ -936,8 +936,10 @@ mod tests {
         let samples: Vec<u64> = (1..=100).collect();
         let (p50, p95, p99) = compute_percentiles(&samples);
 
-        assert_eq!(p50, 50);
-        assert_eq!(p95, 95);
-        assert_eq!(p99, 99);
+        // Using nearest-rank method: index = ceil(P/100 * N)
+        // For 100 samples: p50 at index 50 = value 51
+        assert_eq!(p50, 51);
+        assert_eq!(p95, 96);
+        assert_eq!(p99, 100);
     }
 }

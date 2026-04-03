@@ -21,6 +21,13 @@
 
 ---
 
+## Requirements
+
+- **Rust 1.92+** (Edition 2024)
+- Platform: Windows, macOS, Linux, or WebAssembly
+
+---
+
 ## Quick Start
 
 ### Rust
@@ -142,10 +149,14 @@ const results = store.query(queryVector, 10);
 - [x] WASM/browser support
 - [x] Snapshots
 
-### Coming Soon
-- [ ] LangChain/LlamaIndex integration
-- [ ] Product Quantization (8-32x memory reduction)
-- [ ] GPU acceleration
+### Also Shipped in v0.1.0
+- [x] LangChain integration
+- [x] LlamaIndex integration
+- [x] Graph-RAG integration
+- [x] Product Quantization (8-32x memory reduction)
+- [x] GPU acceleration (CUDA, Metal, WebGPU)
+- [x] Distributed system with Raft consensus
+- [x] gRPC federation for multi-cluster queries
 
 ---
 

@@ -138,11 +138,10 @@ impl PineconeMigration {
         let start_offset = self.config.resume_from.unwrap_or(0);
 
         for (i, vector_data) in vectors.iter().enumerate().skip(start_offset) {
-            if i % self.config.batch_size == 0 {
-                if let Some(ref callback) = self.progress_callback {
+            if i % self.config.batch_size == 0
+                && let Some(ref callback) = self.progress_callback {
                     callback(migrated, total);
                 }
-            }
 
             match self.import_vector(vector_data, store) {
                 Ok(size) => {
@@ -238,11 +237,10 @@ impl QdrantMigration {
         let mut bytes = 0u64;
 
         for (i, line) in reader.lines().enumerate() {
-            if let Some(offset) = self.config.resume_from {
-                if i < offset {
+            if let Some(offset) = self.config.resume_from
+                && i < offset {
                     continue;
                 }
-            }
 
             let line = line.map_err(|e| anyhow::anyhow!("Read error: {}", e))?;
 

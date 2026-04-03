@@ -76,14 +76,13 @@ impl<V: Clone> QueryCache<V> {
 
         if let Some(entry) = self.entries.get_mut(&hash) {
             // Check TTL if enabled
-            if let Some(ttl) = self.ttl {
-                if entry.inserted_at.elapsed() > ttl {
+            if let Some(ttl) = self.ttl
+                && entry.inserted_at.elapsed() > ttl {
                     // Entry expired, remove it
                     self.entries.remove(&hash);
                     self.misses += 1;
                     return None;
                 }
-            }
 
             // Update access time for LRU
             self.access_counter += 1;

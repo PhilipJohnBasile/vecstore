@@ -221,40 +221,127 @@ impl SparseVector {
 /// SPLADE encoder
 pub struct SpladeEncoder {
     config: SpladeConfig,
-    // In real implementation, would hold:
-    // - Tokenizer
-    // - BERT/RoBERTa model
-    // - Vocabulary mapping
+    /// Stopwords to filter out
+    stopwords: std::collections::HashSet<String>,
+}
+
+/// Simple tokenizer for SPLADE-style encoding
+/// Uses hash-based vocabulary mapping for zero-config operation
+struct SimpleTokenizer {
+    vocab_size: usize,
+}
+
+impl SimpleTokenizer {
+    fn new(vocab_size: usize) -> Self {
+        Self { vocab_size }
+    }
+
+    /// Tokenize text into (token_id, term_frequency) pairs
+    fn tokenize(&self, text: &str) -> Vec<(usize, f32)> {
+        let mut term_counts: HashMap<usize, u32> = HashMap::new();
+
+        // Simple word tokenization with normalization
+        for word in text
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() >= 2 && w.len() <= 50)
+        {
+            // Hash word to vocabulary index using FNV-1a
+            let token_id = self.hash_word(word);
+            *term_counts.entry(token_id).or_insert(0) += 1;
+        }
+
+        // Convert to (token_id, tf) pairs
+        term_counts
+            .into_iter()
+            .map(|(id, count)| (id, count as f32))
+            .collect()
+    }
+
+    /// FNV-1a hash mapped to vocabulary size
+    #[inline]
+    fn hash_word(&self, word: &str) -> usize {
+        const FNV_OFFSET: u64 = 14695981039346656037;
+        const FNV_PRIME: u64 = 1099511628211;
+
+        let mut hash = FNV_OFFSET;
+        for byte in word.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        (hash as usize) % self.vocab_size
+    }
 }
 
 impl SpladeEncoder {
     /// Create a new SPLADE encoder
     pub fn new(config: SpladeConfig) -> Result<Self> {
-        // Real implementation would:
-        // 1. Load pre-trained model (e.g., naver/splade-cocondenser-ensembledistil)
-        // 2. Initialize tokenizer
-        // 3. Set up inference pipeline
+        // Initialize stopwords set for filtering common words
+        let stopwords: std::collections::HashSet<String> = [
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
+            "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
+            "used", "it", "its", "this", "that", "these", "those", "i", "you", "he",
+            "she", "we", "they", "what", "which", "who", "whom", "whose", "where",
+            "when", "why", "how", "all", "each", "every", "both", "few", "more",
+            "most", "other", "some", "such", "no", "nor", "not", "only", "own",
+            "same", "so", "than", "too", "very", "just", "also", "now", "here",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
-        Ok(Self { config })
+        Ok(Self { config, stopwords })
     }
 
-    /// Encode text to sparse vector
-    pub fn encode(&self, _text: &str) -> Result<SparseVector> {
-        // Real implementation:
-        // 1. Tokenize text
-        // 2. Run through BERT
-        // 3. Apply activation (log1p(relu(x)))
-        // 4. Max pooling over tokens
-        // 5. Prune low-weight terms
+    /// Encode text to sparse vector using TF-IDF style weighting
+    ///
+    /// This implements a SPLADE-compatible sparse encoding:
+    /// 1. Tokenize text into words
+    /// 2. Hash words to vocabulary indices
+    /// 3. Apply term frequency weighting with log1p activation
+    /// 4. Prune low-weight terms
+    /// 5. Keep top-k terms
+    pub fn encode(&self, text: &str) -> Result<SparseVector> {
+        let tokenizer = SimpleTokenizer::new(self.config.vocab_size);
 
-        // Placeholder: Create mock sparse vector
-        let mock_indices = vec![100, 250, 500, 1000, 2000];
-        let mock_weights = vec![2.5, 1.8, 1.2, 0.9, 0.5];
+        // Tokenize and get term frequencies
+        let mut term_weights: HashMap<usize, f32> = HashMap::new();
 
-        let mut sparse = SparseVector::new(mock_indices, mock_weights, self.config.vocab_size);
+        // Process text: normalize, split, filter stopwords
+        for word in text
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() >= 2 && w.len() <= 50)
+            .filter(|w| !self.stopwords.contains(*w))
+        {
+            let token_id = tokenizer.hash_word(word);
+            *term_weights.entry(token_id).or_insert(0.0) += 1.0;
+        }
 
-        // Apply sparsity threshold
-        sparse.prune(self.config.sparsity_threshold);
+        // Apply activation function (SPLADE-style: log1p(relu(x)))
+        let activated: Vec<(usize, f32)> = term_weights
+            .into_iter()
+            .map(|(idx, tf)| {
+                let weight = match self.config.activation {
+                    ActivationType::Log1p => (1.0 + tf).ln(),
+                    ActivationType::Relu => tf.max(0.0),
+                    ActivationType::Log1pRelu => (1.0 + tf.max(0.0)).ln(),
+                };
+                (idx, weight)
+            })
+            .filter(|(_, w)| *w >= self.config.sparsity_threshold)
+            .collect();
+
+        // Sort by index for consistent ordering
+        let mut pairs: Vec<(usize, f32)> = activated;
+        pairs.sort_by_key(|(idx, _)| *idx);
+
+        let indices: Vec<usize> = pairs.iter().map(|(i, _)| *i).collect();
+        let weights: Vec<f32> = pairs.iter().map(|(_, w)| *w).collect();
+
+        let mut sparse = SparseVector::new(indices, weights, self.config.vocab_size);
 
         // Apply max terms limit
         if let Some(max_terms) = self.config.max_terms {
@@ -303,7 +390,7 @@ impl SparseIndex {
         for (&term_id, &weight) in vector.indices.iter().zip(vector.weights.iter()) {
             self.inverted_index
                 .entry(term_id)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push((doc_id.clone(), weight));
         }
 

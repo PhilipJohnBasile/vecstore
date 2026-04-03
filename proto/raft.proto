@@ -1,0 +1,126 @@
+syntax = "proto3";
+
+package raft;
+
+// Raft consensus service for distributed coordination
+service RaftService {
+    // RequestVote RPC - called by candidates to request votes during elections
+    rpc RequestVote(RequestVoteRequest) returns (RequestVoteResponse);
+
+    // AppendEntries RPC - used by leader for log replication and heartbeats
+    rpc AppendEntries(AppendEntriesRequest) returns (AppendEntriesResponse);
+
+    // InstallSnapshot RPC - used by leader to send snapshot chunks to followers
+    rpc InstallSnapshot(InstallSnapshotRequest) returns (InstallSnapshotResponse);
+
+    // GetLeader RPC - used to discover the current cluster leader
+    rpc GetLeader(GetLeaderRequest) returns (GetLeaderResponse);
+}
+
+// ==================== RequestVote ====================
+
+message RequestVoteRequest {
+    // Candidate's term
+    uint64 term = 1;
+    // Candidate requesting vote
+    string candidate_id = 2;
+    // Index of candidate's last log entry
+    uint64 last_log_index = 3;
+    // Term of candidate's last log entry
+    uint64 last_log_term = 4;
+}
+
+message RequestVoteResponse {
+    // Current term for candidate to update itself
+    uint64 term = 1;
+    // True if candidate received vote
+    bool vote_granted = 2;
+}
+
+// ==================== AppendEntries ====================
+
+message AppendEntriesRequest {
+    // Leader's term
+    uint64 term = 1;
+    // Leader ID (for followers to redirect clients)
+    string leader_id = 2;
+    // Index of log entry immediately preceding new ones
+    uint64 prev_log_index = 3;
+    // Term of prev_log_index entry
+    uint64 prev_log_term = 4;
+    // Log entries to store (empty for heartbeat)
+    repeated LogEntry entries = 5;
+    // Leader's commit index
+    uint64 leader_commit = 6;
+}
+
+message AppendEntriesResponse {
+    // Current term for leader to update itself
+    uint64 term = 1;
+    // True if follower contained entry matching prev_log_index and prev_log_term
+    bool success = 2;
+    // For fast log backtracking (optional, used when success is false)
+    optional uint64 conflict_index = 3;
+    optional uint64 conflict_term = 4;
+    // The index of the last log entry replicated (for match_index tracking)
+    uint64 match_index = 5;
+}
+
+// Log entry in the Raft log
+message LogEntry {
+    // Term when entry was received
+    uint64 term = 1;
+    // Index in the log
+    uint64 index = 2;
+    // Serialized command (using bincode or JSON)
+    bytes command_data = 3;
+    // Command type hint for debugging
+    string command_type = 4;
+    // Timestamp as Unix epoch millis
+    uint64 timestamp_ms = 5;
+}
+
+// ==================== InstallSnapshot ====================
+
+message InstallSnapshotRequest {
+    // Leader's term
+    uint64 term = 1;
+    // Leader ID
+    string leader_id = 2;
+    // The snapshot replaces all entries up through and including this index
+    uint64 last_included_index = 3;
+    // Term of last_included_index
+    uint64 last_included_term = 4;
+    // Byte offset where chunk is positioned in the snapshot file
+    uint64 offset = 5;
+    // Raw bytes of the snapshot chunk, starting at offset
+    bytes data = 6;
+    // True if this is the last chunk
+    bool done = 7;
+    // Cluster configuration at snapshot (serialized)
+    bytes cluster_config = 8;
+}
+
+message InstallSnapshotResponse {
+    // Current term for leader to update itself
+    uint64 term = 1;
+    // Success indicator
+    bool success = 2;
+    // Bytes received so far (for progress tracking)
+    uint64 bytes_received = 3;
+}
+
+// ==================== Leader Discovery ====================
+
+message GetLeaderRequest {}
+
+message GetLeaderResponse {
+    // Whether a leader is known
+    bool leader_known = 1;
+    // Current leader's node ID
+    optional string leader_id = 2;
+    // Current leader's address
+    optional string leader_address = 3;
+    // Current term
+    uint64 term = 4;
+}

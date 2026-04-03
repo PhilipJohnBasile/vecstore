@@ -242,7 +242,7 @@ impl AutoEmbedder {
                 .call()
                 .with_context(|| format!("Failed to download {}", url))?;
 
-            let mut reader = response.into_reader();
+            let mut reader = response.into_body().into_reader();
             let mut file = fs::File::create(&dest)
                 .with_context(|| format!("Failed to create file: {:?}", dest))?;
 

@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use vecstore::{
     BenchmarkConfig, Benchmarker, HealthCheckConfig, HealthChecker, HealthStatus, Metadata, Query,
-    VecStore, VecStoreBuilder,
+    VecStore,
 };
 
 /// Production vector search service
@@ -64,7 +64,7 @@ impl VectorSearchService {
 
     /// Insert a vector with automatic health management
     fn insert(&mut self, id: String, vector: Vec<f32>, metadata: Metadata) -> Result<()> {
-        let start = Instant::now();
+        let _start = Instant::now();
 
         self.store.upsert(id, vector, metadata)?;
         self.metrics.total_inserts += 1;
@@ -249,7 +249,7 @@ fn main() -> Result<()> {
     println!("Final Health Report");
     println!("{}", "=".repeat(80));
 
-    let final_health = service.health_check()?;
+    let _final_health = service.health_check()?;
 
     println!("\n✅ Production system check complete!");
 

@@ -312,12 +312,12 @@ impl CollaborativeRecommender {
 
         self.user_ratings
             .entry(user_id.clone())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(item_id.clone(), rating);
 
         self.item_users
             .entry(item_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(user_id);
     }
 

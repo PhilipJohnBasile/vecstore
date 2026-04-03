@@ -64,6 +64,7 @@ pub enum AuditOutcome {
 
 /// Audit entry metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct AuditMetadata {
     /// User identifier
     pub user_id: Option<String>,
@@ -82,17 +83,6 @@ pub struct AuditMetadata {
     pub custom: std::collections::HashMap<String, serde_json::Value>,
 }
 
-impl Default for AuditMetadata {
-    fn default() -> Self {
-        Self {
-            user_id: None,
-            ip_address: None,
-            session_id: None,
-            request_id: None,
-            custom: std::collections::HashMap::new(),
-        }
-    }
-}
 
 /// Audit log entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -389,6 +379,12 @@ pub struct AuditLogger {
     backends: Arc<Mutex<Vec<Box<dyn AuditBackend>>>>,
 }
 
+impl Default for AuditLogger {
+    fn default() -> Self {
+        Self::new(AuditConfig::default())
+    }
+}
+
 impl AuditLogger {
     /// Create a new audit logger
     pub fn new(config: AuditConfig) -> Self {
@@ -396,11 +392,6 @@ impl AuditLogger {
             config,
             backends: Arc::new(Mutex::new(Vec::new())),
         }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(AuditConfig::default())
     }
 
     /// Add a backend
@@ -530,7 +521,6 @@ impl Drop for AuditLogger {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Arc;
 
     #[test]
     fn test_audit_entry_creation() {

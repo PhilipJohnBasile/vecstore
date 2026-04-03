@@ -1,14 +1,14 @@
 # VecStore Complete Feature Reference
 
-> ⚠️ This document is being updated to match the current implementation. For the canonical overview of what ships today, see [ARCHITECTURE.md](./ARCHITECTURE.md) and [STATUS.md](./STATUS.md). Sections marked with notes are accurate; the rest describe planned or partially implemented functionality and will be reviewed as the codebase evolves. VecStore 0.0.1 is an alpha release—APIs and file formats may change.
+> VecStore 0.1.0 is an alpha release—APIs and file formats may change. Requires **Rust 1.92+** (Edition 2024). For implementation details, see [ARCHITECTURE.md](./ARCHITECTURE.md) and [STATUS.md](./STATUS.md).
 
 ### TL;DR
 
-- ✅ Shipping in 0.0.1: embedded store API, snapshots, metadata filters, batch ingestion, Python bindings.
+- ✅ Shipping in 0.1.0: embedded store API, snapshots, metadata filters, batch ingestion, Python bindings, GPU acceleration, distributed mode with Raft consensus.
 - ⚠️ Optional / experimental: server mode, hybrid search helpers, query planner.
-- 🚧 Prototypes only: distributed mode, realtime indexing, GPU backends, packaging manifests.
+- 🚧 Prototypes only: realtime indexing, packaging manifests.
 
-**Version:** 0.0.1 | **Tests:** 349 passing
+**Version:** 0.1.0 | **Tests:** 350+ passing | **Last Updated:** December 2025
 
 ---
 
@@ -50,7 +50,7 @@ let store = VecStore::builder("vectors.db")
 ```
 
 **Configuration Options:**
-- `distance` - Distance metric (Cosine, Euclidean, or DotProduct in the default backend)
+- `distance` - Distance metric: Cosine, Euclidean, DotProduct, Manhattan, Hamming, Jaccard, Chebyshev, Canberra, BrayCurtis (9 total)
 - `hnsw_m` - Number of connections per layer (default: 16)
 - `hnsw_ef_construction` - Construction quality (default: 200)
 
@@ -80,7 +80,7 @@ let batch = vec![
 store.batch_upsert(batch)?;
 ```
 
-Only cosine, Euclidean, and dot product are backed by dedicated HNSW structures right now. Picking another distance variant logs a warning and reuses cosine until additional kernels are implemented.
+All 9 distance metrics are backed by dedicated HNSW structures with optimized implementations.
 
 ---
 

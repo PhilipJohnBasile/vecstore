@@ -2,7 +2,7 @@
 
 This document replaces the earlier “achievement” scorecard and aims to provide a grounded view of what currently works, what is in progress, and what remains aspirational.
 
-> VecStore 0.0.1 is an alpha release. Treat the lists below as current status, not long-term guarantees.
+> VecStore 0.1.0 is an alpha release (December 2025). Treat the lists below as current status, not long-term guarantees.
 
 ## Core Capabilities (Shipping)
 - HNSW-based approximate nearest neighbour index (cosine / Euclidean / dot product) with snapshot/restore.

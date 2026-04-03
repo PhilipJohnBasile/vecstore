@@ -44,7 +44,7 @@ fn main() -> anyhow::Result<()> {
     // Dataset 3: Data with outliers
     let mut outlier_vectors = Vec::new();
     println!("\nDataset 3: Data with Outliers");
-    for i in 0..27 {
+    for _i in 0..27 {
         outlier_vectors.push(vec![1.0, 1.0, 1.0]);
     }
     // Add outliers

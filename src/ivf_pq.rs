@@ -120,7 +120,7 @@ impl IVFPQIndex {
     /// * `dimension` - Vector dimension
     /// * `config` - IVF-PQ configuration parameters
     pub fn new(dimension: usize, config: IVFPQConfig) -> Result<Self> {
-        if dimension % config.num_subvectors != 0 {
+        if !dimension.is_multiple_of(config.num_subvectors) {
             return Err(anyhow!(
                 "Dimension {} must be divisible by num_subvectors {}",
                 dimension,

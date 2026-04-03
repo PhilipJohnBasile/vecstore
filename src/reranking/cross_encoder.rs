@@ -7,10 +7,10 @@
 use super::Reranker;
 use crate::store::Neighbor;
 use anyhow::{anyhow, Context, Result};
-use ndarray::{Array2, CowArray};
-use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
+use ndarray::Array2;
+use ort::session::{builder::GraphOptimizationLevel, Session};
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tokenizers::tokenizer::Tokenizer;
 
 /// Available pretrained cross-encoder models
@@ -75,7 +75,7 @@ impl CrossEncoderModel {
 /// # }
 /// ```
 pub struct CrossEncoderReranker {
-    session: Arc<Session>,
+    session: Arc<Mutex<Session>>,
     tokenizer: Arc<Tokenizer>,
     max_length: usize,
 }
@@ -132,23 +132,19 @@ impl CrossEncoderReranker {
     pub fn from_dir<P: AsRef<Path>>(model_dir: P) -> Result<Self> {
         let model_dir = model_dir.as_ref();
 
-        // Load ONNX model
+        // Load ONNX model using ort 2.0 API
         let model_path = model_dir.join("model.onnx");
         if !model_path.exists() {
             return Err(anyhow!("Model file not found: {:?}", model_path));
         }
 
-        let environment = Arc::new(
-            Environment::builder()
-                .with_name("cross_encoder")
-                .build()
-                .context("Failed to create ONNX environment")?,
-        );
-
-        let session = SessionBuilder::new(&environment)?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_intra_threads(4)?
-            .with_model_from_file(&model_path)
+        let session = Session::builder()
+            .context("Failed to create session builder")?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .context("Failed to set optimization level")?
+            .with_intra_threads(4)
+            .context("Failed to set thread count")?
+            .commit_from_file(&model_path)
             .context("Failed to load ONNX model")?;
 
         // Load tokenizer
@@ -161,7 +157,7 @@ impl CrossEncoderReranker {
             .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
 
         Ok(Self {
-            session: Arc::new(session),
+            session: Arc::new(Mutex::new(session)),
             tokenizer: Arc::new(tokenizer),
             max_length: 512, // Standard BERT max length
         })
@@ -169,24 +165,89 @@ impl CrossEncoderReranker {
 
     /// Download a pretrained model from HuggingFace
     fn download_model(model: CrossEncoderModel, target_dir: &Path) -> Result<()> {
+        use hf_hub::api::sync::Api;
         use std::fs;
 
         fs::create_dir_all(target_dir).context("Failed to create model directory")?;
 
-        // For now, return an error with instructions
-        // In a full implementation, we'd use hf-hub or reqwest to download
-        Err(anyhow!(
-            "Model download not yet implemented. Please manually download the model from:\n\
-             https://huggingface.co/{}\n\
-             \n\
-             Required files:\n\
-             - model.onnx (convert from PyTorch using optimum)\n\
-             - tokenizer.json\n\
-             \n\
-             Place them in: {:?}",
-            model.model_id(),
-            target_dir
-        ))
+        println!("📦 Downloading model: {}", model.model_id());
+        println!("   Target directory: {:?}", target_dir);
+
+        // Initialize HuggingFace Hub API
+        let api = Api::new().context("Failed to initialize HuggingFace Hub API")?;
+        let repo = api.model(model.model_id().to_string());
+
+        // Files to download
+        let files = ["tokenizer.json", "config.json"];
+
+        for file in &files {
+            println!("   Downloading {}...", file);
+            match repo.get(file) {
+                Ok(cached_path) => {
+                    let dest = target_dir.join(file);
+                    if cached_path != dest {
+                        fs::copy(&cached_path, &dest)
+                            .with_context(|| format!("Failed to copy {} to {:?}", file, dest))?;
+                    }
+                    println!("   ✓ Downloaded {}", file);
+                }
+                Err(e) => {
+                    println!("   ⚠ {} not found (optional): {}", file, e);
+                }
+            }
+        }
+
+        // Try to download ONNX model - look for common ONNX file names
+        let onnx_candidates = ["model.onnx", "onnx/model.onnx", "model_quantized.onnx"];
+        let mut onnx_found = false;
+
+        for onnx_file in &onnx_candidates {
+            match repo.get(onnx_file) {
+                Ok(cached_path) => {
+                    let dest = target_dir.join("model.onnx");
+                    if cached_path != dest {
+                        fs::copy(&cached_path, &dest)
+                            .context("Failed to copy ONNX model")?;
+                    }
+                    println!("   ✓ Downloaded ONNX model from {}", onnx_file);
+                    onnx_found = true;
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+
+        if !onnx_found {
+            // ONNX model not available - provide instructions for conversion
+            return Err(anyhow!(
+                "ONNX model not found in repository. The model needs to be converted to ONNX format.\n\
+                 \n\
+                 To convert the PyTorch model to ONNX, run:\n\
+                 \n\
+                 pip install optimum[onnxruntime]\n\
+                 optimum-cli export onnx --model {} {}/\n\
+                 \n\
+                 Then place model.onnx in: {:?}",
+                model.model_id(),
+                model.model_dir(),
+                target_dir
+            ));
+        }
+
+        // Verify required files exist
+        let model_path = target_dir.join("model.onnx");
+        let tokenizer_path = target_dir.join("tokenizer.json");
+
+        if !model_path.exists() {
+            return Err(anyhow!("Model file not found after download: {:?}", model_path));
+        }
+        if !tokenizer_path.exists() {
+            return Err(anyhow!("Tokenizer file not found after download: {:?}", tokenizer_path));
+        }
+
+        println!("✓ Model downloaded successfully!");
+
+        Ok(())
     }
 
     /// Score a single query-document pair
@@ -228,24 +289,21 @@ impl CrossEncoderReranker {
             attention_mask.iter().map(|&m| m as i64).collect(),
         )?;
 
-        let input_ids_dyn = input_ids_array.into_dyn();
-        let attention_mask_dyn = attention_mask_array.into_dyn();
+        // Create Tensor objects for ort 2.0
+        let input_ids_tensor = ort::value::Tensor::from_array(input_ids_array)?;
+        let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
-        let input_ids_cow = CowArray::from(&input_ids_dyn);
-        let attention_mask_cow = CowArray::from(&attention_mask_dyn);
-
-        let input_ids_value = Value::from_array(self.session.allocator(), &input_ids_cow)?;
-
-        let attention_mask_value =
-            Value::from_array(self.session.allocator(), &attention_mask_cow)?;
-
-        // Run inference
-        let outputs = self
-            .session
-            .run(vec![input_ids_value, attention_mask_value])?;
+        // Run inference using ort 2.0 inputs! macro
+        let mut session_guard = self.session.lock()
+            .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
+        let outputs = session_guard.run(ort::inputs![
+            input_ids_tensor,
+            attention_mask_tensor
+        ])?;
 
         // Extract logits (typically shape [1, 1] or [1, 2] for binary classification)
-        let logits = outputs[0].try_extract::<f32>()?.view().to_owned();
+        let logits_view = outputs[0].try_extract_array::<f32>()?;
+        let logits = logits_view.to_owned();
 
         // Get the relevance score
         // For ms-marco models, output is typically [1, 1] with a single score

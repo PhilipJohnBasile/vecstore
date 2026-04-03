@@ -360,16 +360,16 @@ impl GpuHnswIndex {
 
         impl Eq for Candidate {}
 
-        impl PartialOrd for Candidate {
-            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        impl Ord for Candidate {
+            fn cmp(&self, other: &Self) -> Ordering {
                 // Reverse for min-heap behavior
-                other.distance.partial_cmp(&self.distance)
+                other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
             }
         }
 
-        impl Ord for Candidate {
-            fn cmp(&self, other: &Self) -> Ordering {
-                self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        impl PartialOrd for Candidate {
+            fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+                Some(self.cmp(other))
             }
         }
 
@@ -573,6 +573,7 @@ impl GpuIndexBuilder {
         for i in 0..n {
             let node_max_layer = node_layers[i];
 
+            #[allow(clippy::needless_range_loop)]
             for layer in 0..=node_max_layer {
                 // Find neighbors at this layer
                 let nodes_at_layer: Vec<usize> = (0..i)
@@ -609,7 +610,7 @@ impl GpuIndexBuilder {
                 layers[layer].insert(i, neighbors.clone());
 
                 for &neighbor in &neighbors {
-                    let neighbor_edges = layers[layer].entry(neighbor).or_insert_with(Vec::new);
+                    let neighbor_edges = layers[layer].entry(neighbor).or_default();
                     if !neighbor_edges.contains(&i) {
                         neighbor_edges.push(i);
                         // Prune if too many

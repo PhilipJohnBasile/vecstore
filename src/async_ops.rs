@@ -14,12 +14,12 @@
 //!
 //! ```no_run
 //! use vecstore::VecStore;
-//! use vecstore::async_ops::AsyncVecStore;
+//! use vecstore::async_ops::AsyncStoreOps;
 //!
 //! #[tokio::main]
 //! async fn main() -> anyhow::Result<()> {
 //!     let store = VecStore::open("vectors.db")?;
-//!     let async_store = AsyncVecStore::new(store);
+//!     let async_store = AsyncStoreOps::new(store);
 //!
 //!     // Batch insert with parallelism
 //!     let items = vec![
@@ -44,14 +44,18 @@ use std::sync::{Arc, Mutex};
 use tokio::task;
 
 /// Async wrapper for VecStore providing parallel batch operations
+///
+/// Note: This uses `Mutex` for write-heavy batch operations.
+/// For read-heavy workloads, prefer `AsyncVecStore` from the `async_api` module
+/// which uses `RwLock` for better concurrent read performance.
 #[cfg(feature = "async")]
 #[derive(Clone)]
-pub struct AsyncVecStore {
+pub struct AsyncStoreOps {
     store: Arc<Mutex<VecStore>>,
 }
 
 #[cfg(feature = "async")]
-impl AsyncVecStore {
+impl AsyncStoreOps {
     /// Create a new async wrapper around a VecStore
     pub fn new(store: VecStore) -> Self {
         Self {
@@ -71,11 +75,11 @@ impl AsyncVecStore {
     /// # Example
     /// ```no_run
     /// # use vecstore::VecStore;
-    /// # use vecstore::async_ops::AsyncVecStore;
+    /// # use vecstore::async_ops::AsyncStoreOps;
     /// # #[tokio::main]
     /// # async fn main() -> anyhow::Result<()> {
     /// let store = VecStore::open("vectors.db")?;
-    /// let async_store = AsyncVecStore::new(store);
+    /// let async_store = AsyncStoreOps::new(store);
     ///
     /// let items: Vec<_> = (0..1000)
     ///     .map(|i| {
@@ -210,7 +214,7 @@ mod tests {
     async fn test_async_batch_upsert() {
         let dir = tempdir().unwrap();
         let store = VecStore::open(dir.path().join("test.db")).unwrap();
-        let async_store = AsyncVecStore::new(store);
+        let async_store = AsyncStoreOps::new(store);
 
         let items: Vec<_> = (0..100)
             .map(|i| {
@@ -233,7 +237,7 @@ mod tests {
     async fn test_async_batch_query() {
         let dir = tempdir().unwrap();
         let store = VecStore::open(dir.path().join("test.db")).unwrap();
-        let async_store = AsyncVecStore::new(store);
+        let async_store = AsyncStoreOps::new(store);
 
         // Insert test data
         let items: Vec<_> = (0..50)

@@ -154,7 +154,7 @@ impl HashTable {
         let hash_code = self.compute_hash(&vector);
         self.buckets
             .entry(hash_code)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((id, vector));
     }
 
@@ -164,9 +164,8 @@ impl HashTable {
         let hash_code = self.compute_hash(query);
 
         self.buckets
-            .get(&hash_code)
-            .map(|bucket| bucket.clone())
-            .unwrap_or_else(Vec::new)
+            .get(&hash_code).cloned()
+            .unwrap_or_default()
     }
 
     /// Remove a vector by ID

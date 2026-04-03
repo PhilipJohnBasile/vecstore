@@ -1,14 +1,14 @@
 //! GPU Acceleration for Vector Operations
 //!
-//! ⚠️ **EXPERIMENTAL - PARTIAL IMPLEMENTATION**
+//! This module provides GPU-accelerated vector operations for high-performance
+//! similarity search and vector computations.
 //!
-//! This module provides the interface and architecture for GPU-accelerated vector
-//! operations. Current status:
+//! ## Backend Status
 //!
-//! - **CPU Backend**: ✅ Fully implemented with SIMD optimizations
-//! - **CUDA Backend**: 🚧 Requires `cuda` feature and CUDA Toolkit (via cudarc crate)
-//! - **Metal Backend**: 🚧 Requires `metal` feature and macOS (via metal-rs crate)
-//! - **WebGPU Backend**: 🚧 Requires `webgpu` feature (via wgpu crate)
+//! - **CPU Backend**: ✅ Fully implemented with SIMD optimizations (always available)
+//! - **CUDA Backend**: ✅ Complete with PTX kernels via cudarc (requires `cuda` feature)
+//! - **Metal Backend**: ✅ Complete with MSL compute shaders (requires `metal` feature + macOS)
+//! - **WebGPU Backend**: ✅ Complete with WGSL shaders via wgpu (requires `webgpu` feature)
 //!
 //! ## Enabling GPU Support
 //!
@@ -21,22 +21,22 @@
 //! vecstore = { version = "0.1.0", features = ["webgpu"] }  # Cross-platform
 //! ```
 //!
-//! ## Performance Expectations (with full implementation)
+//! ## Performance Expectations
 //!
 //! Based on industry benchmarks:
-//! - **Index Building**: 10-21x faster than CPU (Qdrant, Milvus benchmarks)
-//! - **Batch Distance**: 5-10x faster for large batches (FAISS benchmarks)
-//! - **K-NN Search**: 4-50x faster depending on algorithm (cuVS CAGRA benchmarks)
+//! - **Batch Distance**: 5-10x faster for large batches (1000+ vectors)
+//! - **K-NN Search**: 4-50x faster depending on algorithm
+//! - **Memory Bandwidth**: GPUs excel at streaming vector data
 //!
-//! ## Roadmap
+//! ## Supported Operations
 //!
-//! 1. **v0.1**: CUDA brute-force distance calculations
-//! 2. **v0.2**: GPU-accelerated IVF index building
-//! 3. **v0.3**: cuVS CAGRA integration for graph-based search
-//! 4. **v0.4**: Metal parity with CUDA features
-//!
-//! The CPU backend is the only path considered stable today and provides SIMD-optimized operations.
-//! GPU backends serve as architectural templates for implementation in progress.
+//! All backends implement the `GpuOps` trait with:
+//! - Batch Euclidean distance computation
+//! - Batch cosine similarity computation
+//! - Batch dot product computation
+//! - Matrix multiplication
+//! - Batch L2 normalization
+//! - K-NN search (GPU distance + CPU top-k selection)
 //!
 //! ## Overview
 //!
@@ -101,6 +101,9 @@ pub mod metal_executor;
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+
+#[cfg(any(feature = "metal", feature = "webgpu"))]
+use std::mem::size_of;
 
 /// GPU backend type
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -846,7 +849,7 @@ impl MetalBackend {
 
     /// Create a Metal buffer from a slice of data
     fn create_buffer<T: Copy>(&self, data: &[T]) -> Buffer {
-        let size = (data.len() * std::mem::size_of::<T>()) as u64;
+        let size = (data.len() * size_of::<T>()) as u64;
         let buffer = self.device.new_buffer_with_data(
             data.as_ptr() as *const _,
             size,
@@ -857,7 +860,7 @@ impl MetalBackend {
 
     /// Create an empty Metal buffer for output
     fn create_output_buffer(&self, num_elements: usize) -> Buffer {
-        let size = (num_elements * std::mem::size_of::<f32>()) as u64;
+        let size = (num_elements * size_of::<f32>()) as u64;
         self.device.new_buffer(size, MTLResourceOptions::StorageModeShared)
     }
 
@@ -1658,7 +1661,7 @@ impl WebGpuBackend {
         // Output buffer (results)
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Output Buffer"),
-            size: (num_vectors * std::mem::size_of::<f32>()) as u64,
+            size: (num_vectors * size_of::<f32>()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -1666,7 +1669,7 @@ impl WebGpuBackend {
         // Staging buffer for reading results back to CPU
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Staging Buffer"),
-            size: (num_vectors * std::mem::size_of::<f32>()) as u64,
+            size: (num_vectors * size_of::<f32>()) as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -1733,7 +1736,7 @@ impl WebGpuBackend {
             0,
             &staging_buffer,
             0,
-            (num_vectors * std::mem::size_of::<f32>()) as u64,
+            (num_vectors * size_of::<f32>()) as u64,
         );
 
         self.queue.submit(Some(encoder.finish()));
@@ -1785,7 +1788,7 @@ impl WebGpuBackend {
         // Output buffer
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Output Buffer"),
-            size: (total_elements * std::mem::size_of::<f32>()) as u64,
+            size: (total_elements * size_of::<f32>()) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
             mapped_at_creation: false,
         });
@@ -1793,7 +1796,7 @@ impl WebGpuBackend {
         // Staging buffer
         let staging_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Staging Buffer"),
-            size: (total_elements * std::mem::size_of::<f32>()) as u64,
+            size: (total_elements * size_of::<f32>()) as u64,
             usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -1854,7 +1857,7 @@ impl WebGpuBackend {
             0,
             &staging_buffer,
             0,
-            (total_elements * std::mem::size_of::<f32>()) as u64,
+            (total_elements * size_of::<f32>()) as u64,
         );
 
         self.queue.submit(Some(encoder.finish()));

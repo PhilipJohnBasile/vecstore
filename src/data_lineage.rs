@@ -288,7 +288,7 @@ impl LineageTracker {
         }
 
         let now = current_timestamp();
-        let checksum = vector.map(|v| compute_checksum(v)).unwrap_or_default();
+        let checksum = vector.map(compute_checksum).unwrap_or_default();
 
         let record = LineageRecord {
             vector_id: vector_id.clone(),
@@ -307,7 +307,7 @@ impl LineageTracker {
             },
             vector_checksum: checksum,
             tags: HashSet::new(),
-            quality: vector.map(|v| compute_quality_metrics(v)),
+            quality: vector.map(compute_quality_metrics),
         };
 
         // Handle derived sources

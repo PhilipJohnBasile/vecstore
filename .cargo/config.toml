@@ -1,0 +1,33 @@
+# Cargo configuration for vecstore
+# https://doc.rust-lang.org/cargo/reference/config.html
+
+[build]
+# Treat warnings as errors in CI
+# rustflags = ["-D", "warnings"]
+
+[target.'cfg(all())']
+# Default rustflags for all targets
+rustflags = [
+    # Enable more detailed error messages
+    "-C", "debuginfo=2",
+]
+
+# Faster linking on Linux
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# Faster linking on macOS
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+# Windows MSVC settings
+[target.x86_64-pc-windows-msvc]
+rustflags = []
+
+[alias]
+# Useful aliases
+xtask = "run --package xtask --"

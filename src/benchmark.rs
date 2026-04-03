@@ -467,19 +467,40 @@ impl Benchmarker {
         vectors: &[Vec<f32>],
         queries: &[Vec<f32>],
     ) -> Result<IndexingResults> {
-        // HNSW (default) - already benchmarked above
-        let hnsw = IndexStrategyResult {
-            build_time_ms: 0.0, // Measured in insert benchmark
-            query_latency_us: LatencyStats {
-                avg_us: 0.0,
-                min_us: 0.0,
-                max_us: 0.0,
-                p50_us: 0.0,
-                p95_us: 0.0,
-                p99_us: 0.0,
-            },
-            memory_bytes: 0,
-            recall_at_10: None,
+        // HNSW benchmark - measure actual build and query times using VecStore
+        let hnsw = {
+            use crate::store::{Metadata, Query, VecStore};
+
+            let start = Instant::now();
+            let temp_dir = tempfile::tempdir()?;
+            let mut store = VecStore::open(temp_dir.path())?;
+
+            // Insert all vectors
+            for (i, vec) in vectors.iter().enumerate() {
+                store.upsert(format!("vec_{}", i), vec.clone(), Metadata::default())?;
+            }
+            let build_time_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+            // Measure query latency
+            let mut query_times = Vec::new();
+            for query_vec in queries.iter().take(self.config.num_queries.min(100)) {
+                let start = Instant::now();
+                let q = Query::new(query_vec.clone()).with_limit(10);
+                let _ = store.query(q)?;
+                query_times.push(start.elapsed());
+            }
+
+            // Estimate memory usage
+            let vec_size = self.config.dimension * 4;
+            let index_overhead = vectors.len() * 64; // HNSW link overhead
+            let memory_bytes = vectors.len() * vec_size + index_overhead;
+
+            IndexStrategyResult {
+                build_time_ms,
+                query_latency_us: LatencyStats::from_durations(query_times),
+                memory_bytes,
+                recall_at_10: None, // Would need ground truth
+            }
         };
 
         // IVF-PQ
@@ -517,11 +538,50 @@ impl Benchmarker {
             None
         };
 
+        // LSH benchmark
+        let lsh = if vectors.len() >= 100 {
+            use crate::lsh::{LSHConfig, LSHIndex};
+
+            let config = LSHConfig {
+                num_tables: 8,
+                num_bits: 16,
+                seed: 42,
+            };
+
+            let start = Instant::now();
+            let mut index = LSHIndex::new(self.config.dimension, config)?;
+
+            for (i, vec) in vectors.iter().enumerate() {
+                index.add(format!("vec_{}", i), vec.clone())?;
+            }
+            let build_time_ms = start.elapsed().as_secs_f64() * 1000.0;
+
+            // Measure query time
+            let mut query_times = Vec::new();
+            for query_vec in queries.iter().take(self.config.num_queries.min(100)) {
+                let start = Instant::now();
+                let _ = index.search(query_vec, 10)?;
+                query_times.push(start.elapsed());
+            }
+
+            // Estimate memory
+            let memory_bytes = vectors.len() * self.config.dimension * 4 + vectors.len() * 32;
+
+            Some(IndexStrategyResult {
+                build_time_ms,
+                query_latency_us: LatencyStats::from_durations(query_times),
+                memory_bytes,
+                recall_at_10: None,
+            })
+        } else {
+            None
+        };
+
         Ok(IndexingResults {
             hnsw,
             ivf_pq,
-            lsh: None, // Would need to implement benchmarks
-            scann: None,
+            lsh,
+            scann: None, // ScaNN requires separate implementation
         })
     }
 
@@ -679,19 +739,92 @@ impl Benchmarker {
     /// Benchmark concurrent operations
     fn benchmark_concurrent(
         &self,
-        _vectors: &[Vec<f32>],
-        _queries: &[Vec<f32>],
+        vectors: &[Vec<f32>],
+        queries: &[Vec<f32>],
     ) -> Result<ConcurrentResults> {
-        // Single-threaded baseline
-        let single_thread_qps = self.config.num_queries as f64 / 1.0; // Placeholder
+        use crate::store::{Metadata, Query, VecStore};
+        use std::sync::Arc;
 
-        let multi_thread_qps = HashMap::new();
-        // Would need actual concurrent testing here
+        // Build index first
+        let temp_dir = tempfile::tempdir()?;
+        let mut store = VecStore::open(temp_dir.path())?;
+        for (i, vec) in vectors.iter().enumerate() {
+            store.upsert(format!("vec_{}", i), vec.clone(), Metadata::default())?;
+        }
+        let store = Arc::new(store);
+
+        // Single-threaded baseline
+        let num_queries = queries.len().min(100);
+        let start = Instant::now();
+        for query_vec in queries.iter().take(num_queries) {
+            let q = Query::new(query_vec.clone()).with_limit(10);
+            let _ = store.query(q);
+        }
+        let single_elapsed = start.elapsed().as_secs_f64();
+        let single_thread_qps = if single_elapsed > 0.0 {
+            num_queries as f64 / single_elapsed
+        } else {
+            num_queries as f64 * 1000.0 // Very fast, assume 1000x
+        };
+
+        // Multi-threaded benchmarks
+        let mut multi_thread_qps = HashMap::new();
+        let available_threads = std::thread::available_parallelism()
+            .map(|p| p.get())
+            .unwrap_or(4);
+
+        for thread_count in [2, 4, 8, 16].iter().filter(|&&t| t <= available_threads) {
+            let thread_count = *thread_count;
+            let queries_per_thread = num_queries / thread_count;
+            if queries_per_thread == 0 {
+                continue;
+            }
+
+            let start = Instant::now();
+            let handles: Vec<_> = (0..thread_count)
+                .map(|t| {
+                    let idx = Arc::clone(&store);
+                    let thread_queries: Vec<Vec<f32>> = queries
+                        .iter()
+                        .skip(t * queries_per_thread)
+                        .take(queries_per_thread)
+                        .cloned()
+                        .collect();
+                    std::thread::spawn(move || {
+                        for qv in thread_queries {
+                            let q = Query::new(qv).with_limit(10);
+                            let _ = idx.query(q);
+                        }
+                    })
+                })
+                .collect();
+
+            for handle in handles {
+                let _ = handle.join();
+            }
+            let multi_elapsed = start.elapsed().as_secs_f64();
+
+            let qps = if multi_elapsed > 0.0 {
+                (thread_count * queries_per_thread) as f64 / multi_elapsed
+            } else {
+                (thread_count * queries_per_thread) as f64 * 1000.0
+            };
+            multi_thread_qps.insert(thread_count, qps);
+        }
+
+        // Calculate scalability factor
+        let max_threads = multi_thread_qps.keys().max().copied().unwrap_or(1);
+        let max_qps = multi_thread_qps.get(&max_threads).copied().unwrap_or(single_thread_qps);
+        let scalability_factor = if single_thread_qps > 0.0 {
+            (max_qps / single_thread_qps) / max_threads as f64
+        } else {
+            1.0
+        };
 
         Ok(ConcurrentResults {
             single_thread_qps,
             multi_thread_qps,
-            scalability_factor: 1.0,
+            scalability_factor,
         })
     }
 

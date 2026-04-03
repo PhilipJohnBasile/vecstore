@@ -687,7 +687,7 @@ impl OpenApiGenerator {
 
     fn json_schema_to_ts(&self, schema: &serde_json::Value) -> String {
         if let Some(ref_path) = schema.get("$ref").and_then(|r| r.as_str()) {
-            let type_name = ref_path.split('/').last().unwrap_or("unknown");
+            let type_name = ref_path.split('/').next_back().unwrap_or("unknown");
             return type_name.to_string();
         }
 

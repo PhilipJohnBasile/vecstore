@@ -209,14 +209,14 @@ impl InvertedSparseIndex {
     pub fn add(&mut self, doc_id: u32, sparse: &SparseVector) {
         self.total_docs += 1;
 
-        for (_idx, (&term, &weight)) in sparse.indices.iter().zip(&sparse.values).enumerate() {
+        for (&term, &weight) in sparse.indices.iter().zip(&sparse.values) {
             // Update document frequency
             *self.doc_freqs.entry(term).or_insert(0) += 1;
 
             // Add to posting list
             self.postings
                 .entry(term)
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(Posting { doc_id, weight });
         }
     }
@@ -229,10 +229,8 @@ impl InvertedSparseIndex {
                 if postings.is_empty() {
                     self.postings.remove(&term);
                     self.doc_freqs.remove(&term);
-                } else {
-                    if let Some(freq) = self.doc_freqs.get_mut(&term) {
-                        *freq = freq.saturating_sub(1);
-                    }
+                } else if let Some(freq) = self.doc_freqs.get_mut(&term) {
+                    *freq = freq.saturating_sub(1);
                 }
             }
         }
@@ -575,31 +573,105 @@ impl Default for SpladeConfig {
     }
 }
 
-/// SPLADE encoder (placeholder - requires ONNX runtime)
+/// SPLADE encoder for sparse vector generation
+///
+/// Uses hash-based tokenization with TF-IDF style weighting
+/// to produce SPLADE-compatible sparse vectors without requiring
+/// external model files.
 pub struct SpladeEncoder {
     config: SpladeConfig,
-    // In production: ONNX session, tokenizer, etc.
+    /// Stopwords to filter out common terms
+    stopwords: std::collections::HashSet<String>,
 }
 
 impl SpladeEncoder {
     pub fn new(config: SpladeConfig) -> Result<Self> {
-        Ok(Self { config })
+        // Initialize stopwords
+        let stopwords: std::collections::HashSet<String> = [
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
+            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
+            "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
+            "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
+            "used", "it", "its", "this", "that", "these", "those", "i", "you", "he",
+            "she", "we", "they", "what", "which", "who", "whom", "whose", "where",
+            "when", "why", "how", "all", "each", "every", "both", "few", "more",
+            "most", "other", "some", "such", "no", "nor", "not", "only", "own",
+            "same", "so", "than", "too", "very", "just", "also", "now", "here",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
+        Ok(Self { config, stopwords })
     }
 
-    /// Encode text to sparse vector (placeholder)
-    pub fn encode(&self, _text: &str) -> Result<SparseVector> {
-        // Placeholder: return mock sparse vector
-        // In production: run ONNX model, apply ReLU + log, extract top-k
-        Ok(SparseVector::new(vec![
-            (42, 0.8),
-            (156, 0.5),
-            (789, 0.3),
-        ]))
+    /// FNV-1a hash function for mapping words to vocabulary indices
+    #[inline]
+    fn hash_word(&self, word: &str, vocab_size: usize) -> u32 {
+        const FNV_OFFSET: u64 = 14695981039346656037;
+        const FNV_PRIME: u64 = 1099511628211;
+
+        let mut hash = FNV_OFFSET;
+        for byte in word.bytes() {
+            hash ^= byte as u64;
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+        ((hash as usize) % vocab_size) as u32
+    }
+
+    /// Encode text to sparse vector using TF-IDF style weighting
+    ///
+    /// Implements SPLADE-compatible encoding:
+    /// 1. Tokenize and normalize text
+    /// 2. Hash words to vocabulary indices
+    /// 3. Apply log1p activation (SPLADE-style)
+    /// 4. Keep top-k terms by weight
+    pub fn encode(&self, text: &str) -> Result<SparseVector> {
+        // Use a reasonable vocabulary size for hashing
+        let vocab_size = 30522_usize; // BERT vocabulary size
+
+        // Tokenize and count term frequencies
+        let mut term_counts: HashMap<u32, u32> = HashMap::new();
+
+        for word in text
+            .to_lowercase()
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|w| w.len() >= 2 && w.len() <= 50)
+            .filter(|w| !self.stopwords.contains(*w))
+        {
+            let token_id = self.hash_word(word, vocab_size);
+            *term_counts.entry(token_id).or_insert(0) += 1;
+        }
+
+        // Apply log1p activation and create sparse vector
+        let mut pairs: Vec<(u32, f32)> = term_counts
+            .into_iter()
+            .map(|(idx, count)| {
+                // SPLADE-style activation: log(1 + tf)
+                let weight = (1.0 + count as f32).ln();
+                (idx, weight)
+            })
+            .filter(|(_, w)| *w > 0.01) // Prune very low weights
+            .collect();
+
+        // Sort by weight descending, then truncate to top_k
+        pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        pairs.truncate(self.config.top_k_tokens);
+
+        // Sort by index for consistent sparse vector format
+        pairs.sort_by_key(|(idx, _)| *idx);
+
+        Ok(SparseVector::new(pairs))
     }
 
     /// Encode batch of texts
     pub fn encode_batch(&self, texts: &[String]) -> Result<Vec<SparseVector>> {
         texts.iter().map(|t| self.encode(t)).collect()
+    }
+
+    /// Get the configuration
+    pub fn config(&self) -> &SpladeConfig {
+        &self.config
     }
 }
 

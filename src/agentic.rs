@@ -457,7 +457,7 @@ impl QueryDecomposer {
 
         // Split on common conjunctions
         let parts: Vec<&str> = query
-            .split(|c| c == ',' || c == ';')
+            .split([',', ';'])
             .map(|s| s.trim())
             .filter(|s| !s.is_empty())
             .collect();
@@ -525,11 +525,10 @@ impl QueryDecomposer {
 
         // Look for capitalized words as potential entities
         for word in query.split_whitespace() {
-            if word.len() > 1 && word.chars().next().unwrap().is_uppercase() {
-                if !STOP_WORDS.contains(&word.to_lowercase().as_str()) {
+            if word.len() > 1 && word.chars().next().unwrap().is_uppercase()
+                && !STOP_WORDS.contains(&word.to_lowercase().as_str()) {
                     entities.push(word.to_string());
                 }
-            }
         }
 
         for (i, entity) in entities.iter().take(self.max_sub_queries).enumerate() {

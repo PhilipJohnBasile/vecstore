@@ -649,10 +649,8 @@ mod walkdir {
                     // Add children to stack
                     match fs::read_dir(&path) {
                         Ok(entries) => {
-                            for entry in entries {
-                                if let Ok(e) = entry {
-                                    self.stack.push(e.path());
-                                }
+                            for e in entries.flatten() {
+                                self.stack.push(e.path());
                             }
                         }
                         Err(e) => return Some(Err(e)),

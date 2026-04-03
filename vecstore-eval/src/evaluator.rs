@@ -1,6 +1,6 @@
 //! Evaluation suite orchestrator
 
-use crate::types::{EvaluationInput, EvaluationReport, Metric, MetricResult};
+use crate::types::{EvaluationInput, EvaluationReport, Metric};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};

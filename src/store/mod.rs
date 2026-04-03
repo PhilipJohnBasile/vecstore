@@ -55,7 +55,7 @@ pub struct VecStore {
     backend: VectorBackend,
     records: HashMap<Id, Record>,
     dimension: usize,
-    text_index: hybrid::TextIndex,
+    text_index: TextIndex,
     compaction_config: CompactionConfig,
     config: Config,
     /// Optional write-ahead log for durability
@@ -73,6 +73,34 @@ pub struct VecStore {
 pub struct VecStoreBuilder {
     path: PathBuf,
     config: Config,
+}
+
+/// Statistics about the VecStore
+#[derive(Debug, Clone)]
+pub struct StoreStats {
+    /// Total memory usage in bytes (approximate)
+    pub memory_usage: usize,
+    /// Average vector size in bytes
+    pub avg_vector_size: usize,
+    /// Number of vectors in the store
+    pub vector_count: usize,
+    /// Dimension of vectors (0 if store is empty)
+    pub dimension: usize,
+    /// HNSW configuration if using HNSW backend
+    #[cfg(not(target_arch = "wasm32"))]
+    pub hnsw_config: Option<HnswConfig>,
+    #[cfg(target_arch = "wasm32")]
+    pub hnsw_config: Option<HnswConfigInfo>,
+}
+
+/// HNSW configuration info for WASM (simplified version without full HnswConfig)
+#[cfg(target_arch = "wasm32")]
+#[derive(Debug, Clone)]
+pub struct HnswConfigInfo {
+    /// Number of connections per layer
+    pub m: usize,
+    /// Size of dynamic candidate list during construction
+    pub ef_construction: usize,
 }
 
 impl VecStoreBuilder {
@@ -217,7 +245,7 @@ impl VecStore {
 
             #[cfg(not(target_arch = "wasm32"))]
             let mut backend = {
-                let hnsw_config = hnsw_backend::HnswConfig {
+                let hnsw_config = HnswConfig {
                     m: config.hnsw_m,
                     ef_construction: config.hnsw_ef_construction,
                     max_elements: config.hnsw_max_elements,
@@ -236,7 +264,7 @@ impl VecStore {
             backend.rebuild_from_vectors(&vectors)?;
 
             // Import text index if available (Major Issue #6 fix)
-            let mut text_index = hybrid::TextIndex::new();
+            let mut text_index = TextIndex::new();
             if let Some(texts) = text_index_data {
                 text_index.import_texts(texts);
             }
@@ -303,7 +331,7 @@ impl VecStore {
 
             #[cfg(not(target_arch = "wasm32"))]
             let backend = {
-                let hnsw_config = hnsw_backend::HnswConfig {
+                let hnsw_config = HnswConfig {
                     m: config.hnsw_m,
                     ef_construction: config.hnsw_ef_construction,
                     max_elements: config.hnsw_max_elements,
@@ -318,7 +346,7 @@ impl VecStore {
                 backend, // Will be set on first insert
                 records: HashMap::new(),
                 dimension: 0,
-                text_index: hybrid::TextIndex::new(),
+                text_index: TextIndex::new(),
                 compaction_config: CompactionConfig::default(),
                 config,
                 #[cfg(not(target_arch = "wasm32"))]
@@ -342,6 +370,46 @@ impl VecStore {
     /// Get the full configuration
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Get the root path of the store
+    pub fn path(&self) -> &std::path::Path {
+        &self.root
+    }
+
+    /// Get statistics about the store
+    pub fn stats(&self) -> Result<StoreStats> {
+        let vector_count = self.len();
+        let dimension = self.dimension;
+
+        // Calculate approximate memory usage
+        let vector_memory = vector_count * dimension * size_of::<f32>();
+        let record_overhead = vector_count * size_of::<Record>();
+        let index_memory = vector_count * 100; // Approximate HNSW overhead per vector
+        let memory_usage = vector_memory + record_overhead + index_memory;
+
+        let avg_vector_size = if dimension > 0 {
+            dimension * size_of::<f32>()
+        } else {
+            0
+        };
+
+        #[cfg(not(target_arch = "wasm32"))]
+        let hnsw_config = Some(*self.backend.config());
+
+        #[cfg(target_arch = "wasm32")]
+        let hnsw_config = Some(HnswConfigInfo {
+            m: 16,
+            ef_construction: 200,
+        });
+
+        Ok(StoreStats {
+            memory_usage,
+            avg_vector_size,
+            vector_count,
+            dimension,
+            hnsw_config,
+        })
     }
 
     // ========================================================================
@@ -404,12 +472,12 @@ impl VecStore {
                 num_centroids,
                 training_iterations,
             } => {
-                let pq_config = quantization::PQConfig {
+                let pq_config = PQConfig {
                     num_subvectors: *num_subvectors,
                     num_centroids: *num_centroids,
                     training_iterations: *training_iterations,
                 };
-                let mut pq = quantization::ProductQuantizer::new(self.dimension, pq_config)?;
+                let mut pq = ProductQuantizer::new(self.dimension, pq_config)?;
                 pq.train(&training_vectors)?;
                 disk::QuantizerState::Product(pq)
             }
@@ -560,7 +628,7 @@ impl VecStore {
             self.dimension = vector.len();
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let hnsw_config = hnsw_backend::HnswConfig {
+                let hnsw_config = HnswConfig {
                     m: self.config.hnsw_m,
                     ef_construction: self.config.hnsw_ef_construction,
                     max_elements: self.config.hnsw_max_elements,
@@ -695,8 +763,8 @@ impl VecStore {
         }
 
         // Set dimension from first record if needed
-        if self.dimension == 0 {
-            if let Some(first) = items.first() {
+        if self.dimension == 0
+            && let Some(first) = items.first() {
                 // Validate first vector is non-empty (Major Issue #21 fix)
                 if first.vector.is_empty() {
                     return Err(anyhow::anyhow!(
@@ -706,7 +774,7 @@ impl VecStore {
                 self.dimension = first.vector.len();
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    let hnsw_config = hnsw_backend::HnswConfig {
+                    let hnsw_config = HnswConfig {
                         m: self.config.hnsw_m,
                         ef_construction: self.config.hnsw_ef_construction,
                         max_elements: self.config.hnsw_max_elements,
@@ -718,7 +786,6 @@ impl VecStore {
                     self.backend = VectorBackend::new(self.dimension);
                 }
             }
-        }
 
         // Validate all vectors in parallel (Major Issue #21 fix)
         items.par_iter().try_for_each(|record| {
@@ -826,11 +893,10 @@ impl VecStore {
                 }
 
                 // Apply filter if present
-                if let Some(ref filter) = q.filter {
-                    if !filters::evaluate_filter(filter, &record.metadata) {
+                if let Some(ref filter) = q.filter
+                    && !filters::evaluate_filter(filter, &record.metadata) {
                         continue;
                     }
-                }
 
                 results.push(Neighbor {
                     id: id.clone(),
@@ -994,7 +1060,7 @@ impl VecStore {
 
         // Save HNSW index
         if self.dimension > 0 {
-            self.backend.save_index(&layout.hnsw_path())?;
+            self.backend.save_index(layout.hnsw_path())?;
         }
 
         // Save quantizer state if trained
@@ -1047,7 +1113,7 @@ impl VecStore {
         k: usize,
         filter_str: &str,
     ) -> Result<Vec<Neighbor>> {
-        let filter = filter_parser::parse_filter(filter_str)?;
+        let filter = parse_filter(filter_str)?;
         self.query(Query {
             vector,
             k,
@@ -1063,6 +1129,34 @@ impl VecStore {
     /// Check if the store has no active (non-deleted) records
     pub fn is_empty(&self) -> bool {
         self.active_count() == 0
+    }
+
+    /// Get a record by ID
+    ///
+    /// Returns the record if it exists and is not soft-deleted.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use vecstore::{VecStore, Metadata};
+    /// # let temp_dir = tempfile::tempdir().unwrap();
+    /// # let mut store = VecStore::open(temp_dir.path()).unwrap();
+    /// # store.upsert("vec1".into(), vec![0.1, 0.2, 0.3], Metadata::default()).unwrap();
+    /// if let Some(record) = store.get("vec1") {
+    ///     println!("Found vector: {:?}", record.vector);
+    /// }
+    /// ```
+    pub fn get(&self, id: &str) -> Option<&Record> {
+        self.records.get(id).filter(|r| !r.deleted)
+    }
+
+    /// Get multiple records by IDs
+    ///
+    /// Returns records that exist and are not soft-deleted.
+    pub fn get_many(&self, ids: &[&str]) -> Vec<&Record> {
+        ids.iter()
+            .filter_map(|id| self.get(id))
+            .collect()
     }
 
     /// Create a named snapshot of the current store state
@@ -1112,13 +1206,13 @@ impl VecStore {
 
         // Save HNSW index
         if self.dimension > 0 {
-            self.backend.save_index(&layout.hnsw_path())?;
+            self.backend.save_index(layout.hnsw_path())?;
         }
 
         // Write snapshot metadata
         let metadata = serde_json::json!({
             "name": name,
-            "created_at": chrono::Utc::now().to_rfc3339(),
+            "created_at": Utc::now().to_rfc3339(),
             "record_count": self.records.len(),
             "dimension": self.dimension,
         });
@@ -1216,7 +1310,7 @@ impl VecStore {
         }
 
         // Restore text index if available (Major Issue #6 fix)
-        self.text_index = hybrid::TextIndex::new();
+        self.text_index = TextIndex::new();
         if let Some(texts) = text_index_data {
             self.text_index.import_texts(texts);
         }
@@ -1363,11 +1457,10 @@ impl VecStore {
                 }
 
                 // Apply filter if present
-                if let Some(ref filter) = query.filter {
-                    if !filters::evaluate_filter(filter, &record.metadata) {
+                if let Some(ref filter) = query.filter
+                    && !filters::evaluate_filter(filter, &record.metadata) {
                         continue;
                     }
-                }
 
                 results.push(Neighbor {
                     id: id.clone(),
@@ -1413,8 +1506,8 @@ impl VecStore {
     /// * `Ok(true)` if record was soft deleted
     /// * `Ok(false)` if record doesn't exist or was already deleted
     pub fn soft_delete(&mut self, id: &str) -> Result<bool> {
-        if let Some(record) = self.records.get_mut(id) {
-            if !record.deleted {
+        if let Some(record) = self.records.get_mut(id)
+            && !record.deleted {
                 // Log to WAL before applying (for crash recovery)
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Some(ref mut wal) = self.wal {
@@ -1425,7 +1518,6 @@ impl VecStore {
                 record.deleted_at = Some(Utc::now().timestamp());
                 return Ok(true);
             }
-        }
         Ok(false)
     }
 
@@ -1438,8 +1530,8 @@ impl VecStore {
     /// * `Ok(true)` if record was restored
     /// * `Ok(false)` if record doesn't exist or wasn't deleted
     pub fn restore(&mut self, id: &str) -> Result<bool> {
-        if let Some(record) = self.records.get_mut(id) {
-            if record.deleted {
+        if let Some(record) = self.records.get_mut(id)
+            && record.deleted {
                 // Log to WAL before applying (for crash recovery)
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Some(ref mut wal) = self.wal {
@@ -1450,7 +1542,6 @@ impl VecStore {
                 record.deleted_at = None;
                 return Ok(true);
             }
-        }
         Ok(false)
     }
 
@@ -1862,13 +1953,12 @@ impl VecStore {
         let mut expired_count = 0;
 
         for record in self.records.values_mut() {
-            if let Some(expires_at) = record.expires_at {
-                if !record.deleted && now >= expires_at {
+            if let Some(expires_at) = record.expires_at
+                && !record.deleted && now >= expires_at {
                     record.deleted = true;
                     record.deleted_at = Some(now);
                     expired_count += 1;
                 }
-            }
         }
 
         Ok(expired_count)
@@ -1912,7 +2002,7 @@ impl VecStore {
             self.dimension = vector.len();
             #[cfg(not(target_arch = "wasm32"))]
             {
-                let hnsw_config = hnsw_backend::HnswConfig {
+                let hnsw_config = HnswConfig {
                     m: self.config.hnsw_m,
                     ef_construction: self.config.hnsw_ef_construction,
                     max_elements: self.config.hnsw_max_elements,
@@ -2053,8 +2143,13 @@ impl VecStore {
                         ));
                     }
 
-                    // For now, just take top K (actual reranking would use cross-encoder)
-                    // TODO: Integrate cross-encoder model if specified
+                    // Cross-encoder reranking: For full implementation, use:
+                    //   use crate::reranking::CrossEncoderReranker;
+                    //   let reranker = CrossEncoderReranker::new(model)?;
+                    //   reranker.rerank(&query_text, &candidates, *k)?
+                    //
+                    // Current behavior: return top K by initial ranking score.
+                    // This is a reasonable fallback when no cross-encoder is configured.
                     candidates.truncate(*k);
                     candidates
                 }
@@ -2436,10 +2531,49 @@ impl VecStore {
     }
 
     /// Estimate the selectivity of a filter (what fraction of records pass)
-    fn estimate_filter_selectivity(&self, _filter: &FilterExpr) -> f32 {
-        // TODO: Implement actual selectivity estimation based on metadata statistics
-        // For now, return a conservative estimate
-        0.1 // Assume 10% of records pass filter
+    ///
+    /// Selectivity estimation uses heuristics based on filter structure:
+    /// - Equality: ~5% (typically few records match exact value)
+    /// - Inequality: ~95% (most records are not equal)
+    /// - Range: ~30% (moderate selectivity)
+    /// - And: product of child selectivities
+    /// - Or: min(1.0, sum of selectivities)
+    /// - Not: 1.0 - child selectivity
+    fn estimate_filter_selectivity(&self, filter: &FilterExpr) -> f32 {
+        match filter {
+            FilterExpr::And(exprs) => {
+                // And: multiply selectivities (fewer records pass)
+                exprs
+                    .iter()
+                    .map(|e| self.estimate_filter_selectivity(e))
+                    .product()
+            }
+            FilterExpr::Or(exprs) => {
+                // Or: add selectivities, capped at 1.0 (more records pass)
+                let sum: f32 = exprs
+                    .iter()
+                    .map(|e| self.estimate_filter_selectivity(e))
+                    .sum();
+                sum.min(1.0)
+            }
+            FilterExpr::Not(expr) => {
+                // Not: invert selectivity
+                1.0 - self.estimate_filter_selectivity(expr)
+            }
+            FilterExpr::Cmp { op, .. } => {
+                // Estimate based on operator type
+                match op {
+                    FilterOp::Eq => 0.05,        // 5% - exact match is selective
+                    FilterOp::Neq => 0.95,       // 95% - inequality is not selective
+                    FilterOp::Lt | FilterOp::Gt => 0.30, // 30% - typical range
+                    FilterOp::Lte | FilterOp::Gte => 0.35, // 35% - inclusive range
+                    FilterOp::Contains => 0.20,  // 20% - substring matching
+                    FilterOp::In => 0.15,        // 15% - depends on list size
+                    FilterOp::NotIn => 0.85,     // 85% - inverse of In
+                    FilterOp::StartsWith => 0.10, // 10% - prefix matching
+                }
+            }
+        }
     }
 
     /// Create a graph visualizer for the HNSW index
@@ -2503,7 +2637,7 @@ mod soft_delete_tests {
         let mut store = VecStore::open(temp_dir.path().join("test.db")).unwrap();
 
         let mut meta1 = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
         meta1
             .fields
@@ -2513,7 +2647,7 @@ mod soft_delete_tests {
             .unwrap();
 
         let mut meta2 = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
         meta2
             .fields
@@ -2523,7 +2657,7 @@ mod soft_delete_tests {
             .unwrap();
 
         let mut meta3 = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
         meta3
             .fields
@@ -2856,7 +2990,7 @@ mod text_index_persistence_tests {
             let mut store = VecStore::open(&path).unwrap();
 
             let mut meta = Metadata {
-                fields: std::collections::HashMap::new(),
+                fields: HashMap::new(),
             };
             meta.fields
                 .insert("title".into(), serde_json::json!("Test Doc"));
@@ -2894,7 +3028,7 @@ mod text_index_persistence_tests {
         let mut store = VecStore::open(&path).unwrap();
 
         let mut meta = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
         meta.fields
             .insert("title".into(), serde_json::json!("Snapshot Doc"));
@@ -2950,7 +3084,7 @@ mod text_index_persistence_tests {
                 let id = format!("doc{}", i);
                 let text = format!("Document number {}", i);
                 let mut meta = Metadata {
-                    fields: std::collections::HashMap::new(),
+                    fields: HashMap::new(),
                 };
                 meta.fields.insert("num".into(), serde_json::json!(i));
 

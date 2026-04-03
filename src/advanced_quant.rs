@@ -281,7 +281,7 @@ impl BinaryQuantizer {
 
     /// Encode vector to binary
     pub fn encode(&self, vector: &[f32]) -> QuantizedVector {
-        let num_bytes = (vector.len() + 7) / 8;
+        let num_bytes = vector.len().div_ceil(8);
         let mut data = vec![0u8; num_bytes];
 
         for (i, &v) in vector.iter().enumerate() {
@@ -302,9 +302,9 @@ impl BinaryQuantizer {
     pub fn decode(&self, quantized: &QuantizedVector) -> Vec<f32> {
         let mut vector = vec![0.0f32; quantized.dimension];
 
-        for i in 0..quantized.dimension {
+        for (i, val) in vector.iter_mut().enumerate().take(quantized.dimension) {
             let bit = (quantized.data[i / 8] >> (i % 8)) & 1;
-            vector[i] = if bit == 1 { 1.0 } else { -1.0 };
+            *val = if bit == 1 { 1.0 } else { -1.0 };
         }
 
         vector
@@ -344,7 +344,7 @@ impl TernaryQuantizer {
     /// Encode to ternary (-1, 0, +1)
     pub fn encode(&self, vector: &[f32]) -> QuantizedVector {
         // Use 2 bits per value: 00 = -1, 01 = 0, 10 = +1
-        let num_bytes = (vector.len() * 2 + 7) / 8;
+        let num_bytes = (vector.len() * 2).div_ceil(8);
         let mut data = vec![0u8; num_bytes];
 
         for (i, &v) in vector.iter().enumerate() {
@@ -378,7 +378,7 @@ impl TernaryQuantizer {
     pub fn decode(&self, quantized: &QuantizedVector) -> Vec<f32> {
         let mut vector = vec![0.0f32; quantized.dimension];
 
-        for i in 0..quantized.dimension {
+        for (i, val) in vector.iter_mut().enumerate().take(quantized.dimension) {
             let bit_pos = i * 2;
             let byte_pos = bit_pos / 8;
             let bit_offset = bit_pos % 8;
@@ -388,7 +388,7 @@ impl TernaryQuantizer {
                 code |= (quantized.data[byte_pos + 1] & 1) << 1;
             }
 
-            vector[i] = match code & 0b11 {
+            *val = match code & 0b11 {
                 0b00 => -1.0,
                 0b01 => 0.0,
                 0b10 => 1.0,
@@ -444,7 +444,7 @@ impl TwoBitQuantizer {
 
     /// Encode to 2-bit
     pub fn encode(&self, vector: &[f32]) -> QuantizedVector {
-        let num_bytes = (vector.len() * 2 + 7) / 8;
+        let num_bytes = (vector.len() * 2).div_ceil(8);
         let mut data = vec![0u8; num_bytes];
 
         for (i, &v) in vector.iter().enumerate() {
@@ -476,7 +476,7 @@ impl TwoBitQuantizer {
     pub fn decode(&self, quantized: &QuantizedVector) -> Vec<f32> {
         let mut vector = vec![0.0f32; quantized.dimension];
 
-        for i in 0..quantized.dimension {
+        for (i, val) in vector.iter_mut().enumerate().take(quantized.dimension) {
             let bit_pos = i * 2;
             let byte_pos = bit_pos / 8;
             let bit_offset = bit_pos % 8;
@@ -489,7 +489,7 @@ impl TwoBitQuantizer {
             let scale = self.params.scales.get(i).copied().unwrap_or(1.0);
             let zero = self.params.zero_points.get(i).copied().unwrap_or(0.0);
 
-            vector[i] = (code as f32) * scale + zero;
+            *val = (code as f32) * scale + zero;
         }
 
         vector
@@ -537,7 +537,7 @@ impl FourBitQuantizer {
 
     /// Encode to 4-bit
     pub fn encode(&self, vector: &[f32]) -> QuantizedVector {
-        let num_bytes = (vector.len() + 1) / 2;
+        let num_bytes = vector.len().div_ceil(2);
         let mut data = vec![0u8; num_bytes];
 
         for (i, &v) in vector.iter().enumerate() {
@@ -566,7 +566,7 @@ impl FourBitQuantizer {
     pub fn decode(&self, quantized: &QuantizedVector) -> Vec<f32> {
         let mut vector = vec![0.0f32; quantized.dimension];
 
-        for i in 0..quantized.dimension {
+        for (i, val) in vector.iter_mut().enumerate().take(quantized.dimension) {
             let code = if i % 2 == 0 {
                 quantized.data[i / 2] & 0x0F
             } else {
@@ -576,7 +576,7 @@ impl FourBitQuantizer {
             let scale = self.params.scales.get(i).copied().unwrap_or(1.0);
             let zero = self.params.zero_points.get(i).copied().unwrap_or(0.0);
 
-            vector[i] = (code as f32) * scale + zero;
+            *val = (code as f32) * scale + zero;
         }
 
         vector

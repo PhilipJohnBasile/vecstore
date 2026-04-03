@@ -20,7 +20,7 @@ fn main() -> anyhow::Result<()> {
         let ptr = &*backend as *const MemoryBackend;
         &*ptr
     };
-    logger.add_backend(backend);
+    logger.add_backend(backend)?;
 
     println!("Configuration:");
     println!("  Backend:          Memory (1000 entries)");
@@ -36,7 +36,7 @@ fn main() -> anyhow::Result<()> {
     println!("  ✓ Query by bob (45ms)");
     println!("  ✓ Delete by charlie");
 
-    let entries = backend_ref.get_entries();
+    let entries = backend_ref.get_entries()?;
     println!("\nStored entries: {}", entries.len());
 
     for (i, entry) in entries.iter().take(3).enumerate() {
@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
     println!("  ✓ alice read vector_123 - Success");
     println!("  ✓ mallory write vector_456 - Denied");
 
-    let all_entries = backend_ref.get_entries();
+    let all_entries = backend_ref.get_entries()?;
     let auth_entries: Vec<_> = all_entries
         .iter()
         .filter(|e| e.event_type == AuditEventType::Auth)
@@ -122,7 +122,7 @@ fn main() -> anyhow::Result<()> {
         let ptr = &*filtered_backend as *const MemoryBackend;
         &*ptr
     };
-    filtered_logger.add_backend(filtered_backend);
+    filtered_logger.add_backend(filtered_backend)?;
 
     println!("Configuration: min_severity = Warning");
 
@@ -144,7 +144,7 @@ fn main() -> anyhow::Result<()> {
         .with_outcome(AuditOutcome::Failure);
     filtered_logger.log(error_entry).unwrap();
 
-    let filtered_entries = filtered_backend_ref.get_entries();
+    let filtered_entries = filtered_backend_ref.get_entries()?;
     println!("\nLogged 4 events (2 Info, 1 Warning, 1 Error)");
     println!(
         "Filtered result: {} entries (only Warning+)",
@@ -172,7 +172,7 @@ fn main() -> anyhow::Result<()> {
         let ptr = &*type_backend as *const MemoryBackend;
         &*ptr
     };
-    type_logger.add_backend(type_backend);
+    type_logger.add_backend(type_backend)?;
 
     println!("Configuration: event_types = [Auth, Authz, Delete]");
 
@@ -186,7 +186,7 @@ fn main() -> anyhow::Result<()> {
     type_logger.log_insert("vec_2", Some("user3")).unwrap();
     type_logger.log_query("search", 10, Some("user4")).unwrap();
 
-    let type_entries = type_backend_ref.get_entries();
+    let type_entries = type_backend_ref.get_entries()?;
     println!("\nLogged 4 events (2 allowed types, 2 filtered)");
     println!("Filtered result: {} entries", type_entries.len());
 
@@ -209,7 +209,7 @@ fn main() -> anyhow::Result<()> {
             .unwrap()
             .with_buffer_size(5),
     );
-    file_logger.add_backend(file_backend);
+    file_logger.add_backend(file_backend)?;
 
     println!("Configuration:");
     println!("  Backend:      File");

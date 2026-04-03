@@ -17,7 +17,7 @@
 //! ```
 
 use vecstore::compression::{
-    decode_rle, decode_varint, encode_rle, encode_varint, CompressedNeighborList,
+    decode_rle, encode_rle, encode_varint, CompressedNeighborList,
     CompressionConfig, CompressionLevel, CompressionStats,
 };
 

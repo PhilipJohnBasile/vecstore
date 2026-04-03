@@ -7,13 +7,15 @@ This roadmap captures focus areas for the next releases. It deliberately avoids 
 - **Transparency** – call out caveats and unfinished work directly in the docs.
 - **Pragmatism** – optimise developer experience for Rust/Python workflows and RAG prototyping.
 
-## Current State (v0.0.1)
+## Current State (v0.1.0 - December 2025)
 
 > VecStore is in alpha. Priorities below may change rapidly as the core stabilizes.
 - HNSW engine with query planning, metadata filtering, batch ingestion, and namespace isolation is stable.
 - Python bindings offer parity with the Rust API and are being exercised in tests/examples.
-- Optional server mode exists behind a feature flag; it is suitable for controlled environments but lacks multi-node automation.
-- Experimental modules (distributed, GPU, realtime, WASM) are under active development and not production-ready.
+- Optional server mode exists behind a feature flag; it is suitable for controlled environments.
+- GPU acceleration (CUDA, Metal, WebGPU) is implemented and feature-gated.
+- Distributed mode with Raft consensus is implemented for multi-node deployments.
+- WASM support enables browser-based vector search.
 
 ## Short-Term Priorities
 1. **Distributed durability**

@@ -149,7 +149,7 @@ impl HnswVisualizer {
                         format!(
                             "{}\\n[{:.2}, {:.2}, ...]",
                             node.id,
-                            preview.get(0).unwrap_or(&0.0),
+                            preview.first().unwrap_or(&0.0),
                             preview.get(1).unwrap_or(&0.0)
                         )
                     } else {
@@ -173,7 +173,7 @@ impl HnswVisualizer {
             dot.push_str("  }\n");
         }
 
-        dot.push_str("\n");
+        dot.push('\n');
 
         // Add edges
         for edge in &self.edges {
@@ -321,10 +321,9 @@ impl HnswVisualizer {
         let mut edges_per_layer = vec![0; self.layers];
 
         for node in &self.nodes {
-            for layer in 0..=node.layer {
-                if layer < self.layers {
-                    nodes_per_layer[layer] += 1;
-                }
+            let max_layer = node.layer.min(self.layers.saturating_sub(1));
+            for count in nodes_per_layer.iter_mut().take(max_layer + 1) {
+                *count += 1;
             }
         }
 

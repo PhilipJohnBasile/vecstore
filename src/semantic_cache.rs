@@ -138,11 +138,10 @@ impl<V: Clone> SemanticCache<V> {
 
             for (idx, entry) in bucket.iter().enumerate() {
                 // Check TTL
-                if let Some(ttl) = self.ttl {
-                    if now.duration_since(entry.inserted_at) > ttl {
+                if let Some(ttl) = self.ttl
+                    && now.duration_since(entry.inserted_at) > ttl {
                         continue; // Skip expired entries
                     }
-                }
 
                 // Calculate similarity
                 let similarity = Self::cosine_similarity(query, &entry.query);
@@ -181,11 +180,10 @@ impl<V: Clone> SemanticCache<V> {
 
             for entry in bucket {
                 // Check TTL
-                if let Some(ttl) = self.ttl {
-                    if now.duration_since(entry.inserted_at) > ttl {
+                if let Some(ttl) = self.ttl
+                    && now.duration_since(entry.inserted_at) > ttl {
                         continue;
                     }
-                }
 
                 let similarity = Self::cosine_similarity(query, &entry.query);
                 if similarity >= self.similarity_threshold {
@@ -271,14 +269,13 @@ impl<V: Clone> SemanticCache<V> {
         }
 
         // Remove the LRU entry
-        if let Some(bucket_key) = oldest_bucket {
-            if let Some(bucket) = self.entries.get_mut(&bucket_key) {
+        if let Some(bucket_key) = oldest_bucket
+            && let Some(bucket) = self.entries.get_mut(&bucket_key) {
                 bucket.remove(oldest_idx);
                 if bucket.is_empty() {
                     self.entries.remove(&bucket_key);
                 }
             }
-        }
     }
 
     /// Hash vector to bucket key (quantized hashing)

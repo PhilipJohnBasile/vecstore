@@ -453,11 +453,10 @@ impl VecStoreOperator {
         }
 
         // Check HA configuration
-        if let Some(ref ha) = cluster.spec.ha_config {
-            if ha.auto_failover && cluster.status.leader.is_none() && cluster.status.ready_replicas > 0 {
+        if let Some(ref ha) = cluster.spec.ha_config
+            && ha.auto_failover && cluster.status.leader.is_none() && cluster.status.ready_replicas > 0 {
                 actions.push(ReconcileAction::ElectLeader);
             }
-        }
 
         // Check backup schedule (Rust 1.92 if-let chain)
         if let Some(ref backup) = cluster.spec.backup
@@ -543,14 +542,13 @@ impl VecStoreOperator {
     }
 
     fn backup_due(&self, cluster: &ManagedCluster) -> bool {
-        if let Some(ref last) = cluster.status.last_backup {
-            if let Ok(last_time) = chrono::DateTime::parse_from_rfc3339(last) {
+        if let Some(ref last) = cluster.status.last_backup
+            && let Ok(last_time) = chrono::DateTime::parse_from_rfc3339(last) {
                 let now = chrono::Utc::now();
                 let elapsed = now.signed_duration_since(last_time);
                 // Simple check: backup if more than 24 hours
                 return elapsed.num_hours() >= 24;
             }
-        }
         true // No backup yet
     }
 
@@ -578,9 +576,7 @@ impl VecStoreOperator {
     /// List all managed clusters
     pub fn list_clusters(&self) -> Vec<(String, String, VecStoreClusterStatus)> {
         let Ok(clusters) = self.clusters.read() else { return Vec::new(); };
-        clusters
-            .iter()
-            .map(|(_, c)| (c.namespace.clone(), c.name.clone(), c.status.clone()))
+        clusters.values().map(|c| (c.namespace.clone(), c.name.clone(), c.status.clone()))
             .collect()
     }
 
@@ -1174,7 +1170,7 @@ mod tests {
         let spec = test_spec();
         let sts = ManifestGenerator::generate_statefulset(&spec, "test", "default");
         assert!(sts.contains("replicas: 3"));
-        assert!(sts.contains("dimensions"));
+        assert!(sts.contains("VECSTORE_DIMENSIONS"));
     }
 
     #[test]

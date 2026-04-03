@@ -581,8 +581,8 @@ impl CostOptimizer {
             });
         }
 
-        // Check cache hit rate (if we had this data)
-        let estimated_cache_hit_rate = 0.5; // Placeholder
+        // Check cache hit rate based on query patterns
+        let estimated_cache_hit_rate = self.estimate_cache_hit_rate(samples);
         if estimated_cache_hit_rate < 0.7 {
             let potential_query_reduction = 0.2; // 20% of queries could be cached
             let api_savings = avg_usage.queries as f64 * potential_query_reduction
@@ -618,14 +618,67 @@ impl CostOptimizer {
         recommendations
     }
 
-    fn estimate_cpu_utilization(&self, _samples: &VecDeque<ResourceSample>) -> f64 {
-        // In real implementation, would track actual CPU usage
-        0.45 // Placeholder
+    /// Estimate CPU utilization from resource samples
+    /// Returns a value between 0.0 and 1.0 representing average CPU utilization
+    fn estimate_cpu_utilization(&self, samples: &VecDeque<ResourceSample>) -> f64 {
+        if samples.is_empty() {
+            return 0.0;
+        }
+
+        // Get system CPU core count for utilization calculation
+        // Assume the cpu_cores field represents cores in use
+        let total_cores = std::thread::available_parallelism()
+            .map(|p| p.get() as f64)
+            .unwrap_or(4.0);
+
+        // Calculate average CPU cores in use across samples
+        let avg_cores_used: f64 = samples.iter().map(|s| s.cpu_cores).sum::<f64>() / samples.len() as f64;
+
+        // Convert to utilization percentage (0.0 - 1.0)
+        (avg_cores_used / total_cores).clamp(0.0, 1.0)
     }
 
-    fn estimate_memory_utilization(&self, _samples: &VecDeque<ResourceSample>) -> f64 {
-        // In real implementation, would track actual memory usage
-        0.55 // Placeholder
+    /// Estimate memory utilization from resource samples
+    /// Returns a value between 0.0 and 1.0 representing average memory utilization
+    fn estimate_memory_utilization(&self, samples: &VecDeque<ResourceSample>) -> f64 {
+        if samples.is_empty() {
+            return 0.0;
+        }
+
+        // Estimate total system memory (could be made configurable)
+        // Use a reasonable default or could read from system
+        let total_memory_gb = 16.0; // Assume 16GB system
+
+        // Calculate average memory usage across samples
+        let avg_memory_used: f64 = samples.iter().map(|s| s.memory_gb).sum::<f64>() / samples.len() as f64;
+
+        // Convert to utilization percentage (0.0 - 1.0)
+        (avg_memory_used / total_memory_gb).clamp(0.0, 1.0)
+    }
+
+    /// Estimate cache hit rate from query patterns in samples
+    /// Analyzes query frequency to estimate potential cache effectiveness
+    fn estimate_cache_hit_rate(&self, samples: &VecDeque<ResourceSample>) -> f64 {
+        if samples.len() < 2 {
+            return 0.5; // Default when insufficient data
+        }
+
+        // Estimate cache hit rate based on query patterns
+        // Higher query rates with stable latency suggest good caching
+        let avg_latency: f64 = samples.iter().map(|s| s.latency_ms).sum::<f64>() / samples.len() as f64;
+        let total_queries: u64 = samples.iter().map(|s| s.queries).sum();
+
+        // Lower latency relative to query volume suggests cache hits
+        // This is a heuristic: fast responses often indicate cached results
+        if total_queries == 0 {
+            return 0.5;
+        }
+
+        // Normalize: latency under 10ms suggests high cache hit rate
+        // latency over 100ms suggests low cache hit rate
+        let latency_factor = (1.0 - (avg_latency / 100.0).clamp(0.0, 1.0)) * 0.5 + 0.5;
+
+        latency_factor.clamp(0.0, 1.0)
     }
 
     /// Get budget status
@@ -646,9 +699,28 @@ impl CostOptimizer {
             self.project_monthly_cost(&history.samples)
         };
 
-        let days_elapsed = 15; // Placeholder - would calculate from start of month
-        let days_remaining = 30 - days_elapsed;
-        let daily_rate = total_cost / days_elapsed as f64;
+        // Calculate days elapsed in current month from system time
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+
+        // Days in current month (approximate for simplicity)
+        let days_in_month = 30;
+
+        // Calculate day of month from timestamp
+        // Seconds per day = 86400
+        let seconds_per_day = 86400u64;
+        let day_of_month = ((now / seconds_per_day) % days_in_month as u64).max(1);
+        let days_elapsed = day_of_month as i32;
+        let days_remaining = (days_in_month - days_elapsed).max(1);
+
+        // Calculate daily rate and projected spend
+        let daily_rate = if days_elapsed > 0 {
+            total_cost / days_elapsed as f64
+        } else {
+            total_cost
+        };
         let projected_spend = total_cost + (daily_rate * days_remaining as f64);
 
         BudgetStatus {
@@ -903,8 +975,8 @@ impl CostAwareAutoScaler {
         };
 
         // Check cooldown
-        if let Some(last_action) = state.last_scale_action {
-            if last_action.elapsed() < self.config.cooldown_period {
+        if let Some(last_action) = state.last_scale_action
+            && last_action.elapsed() < self.config.cooldown_period {
                 return ScalingDecision {
                     action: ScaleAction::NoChange,
                     current_replicas: state.replicas,
@@ -913,7 +985,6 @@ impl CostAwareAutoScaler {
                     cost_impact: 0.0,
                 };
             }
-        }
 
         let current_replicas = state.replicas;
         drop(state);

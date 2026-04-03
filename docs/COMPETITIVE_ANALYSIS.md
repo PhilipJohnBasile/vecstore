@@ -1,8 +1,8 @@
 # Competitive Notes
 
-This document summarises how VecStore compares to other vector databases as of October 2025. It is intentionally narrative instead of score-based so it can stay honest about strengths and gaps.
+This document summarises how VecStore compares to other vector databases as of December 2025. It is intentionally narrative instead of score-based so it can stay honest about strengths and gaps.
 
-> Current release (0.0.1) is alpha quality; treat the comparisons below as directional rather than a guarantee of shipped functionality.
+> Current release (0.1.0) is alpha quality; treat the comparisons below as directional rather than a guarantee of shipped functionality.
 > This replaces the earlier metrics scorecard that lived in `COMPETITIVE-ANALYSIS.md`.
 
 ## Positioning

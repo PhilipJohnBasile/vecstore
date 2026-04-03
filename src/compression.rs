@@ -46,6 +46,7 @@ use serde::{Deserialize, Serialize};
 
 /// Compression level
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Default)]
 pub enum CompressionLevel {
     /// No compression (fastest)
     None,
@@ -54,17 +55,13 @@ pub enum CompressionLevel {
     Fast,
 
     /// Balanced compression
+    #[default]
     Balanced,
 
     /// Maximum compression (slower, best ratio)
     Max,
 }
 
-impl Default for CompressionLevel {
-    fn default() -> Self {
-        Self::Balanced
-    }
-}
 
 /// Compression configuration
 #[derive(Debug, Clone)]
@@ -225,36 +222,89 @@ impl CompressionConfig {
         match self.level {
             CompressionLevel::None => Ok(data.to_vec()),
             CompressionLevel::Fast => {
-                // LZ4-like simple compression (placeholder - would use lz4 crate in production)
-                Ok(data.to_vec())
-            }
-            CompressionLevel::Balanced | CompressionLevel::Max => {
-                // ZSTD compression (would use zstd crate if available)
-                // TODO: Add zstd crate dependency and implement when compression feature is enabled
-                // For now, return uncompressed data as placeholder
-                Ok(data.to_vec())
-            }
-        }
-    }
-
-    /// Decompress arbitrary binary data
-    pub fn decompress_bulk(&self, data: &[u8]) -> Result<Vec<u8>> {
-        match self.level {
-            CompressionLevel::None => Ok(data.to_vec()),
-            CompressionLevel::Fast => {
-                // LZ4 decompression (placeholder)
-                Ok(data.to_vec())
-            }
-            CompressionLevel::Balanced | CompressionLevel::Max => {
                 #[cfg(feature = "compression")]
                 {
-                    zstd::decode_all(data).map_err(|e| anyhow!("ZSTD decompression failed: {}", e))
+                    // LZ4 compression for fast mode
+                    let mut output = Vec::new();
+                    // Prefix with magic byte to identify LZ4 format
+                    output.push(0x4C); // 'L' for LZ4
+                    let compressed = lz4_flex::compress_prepend_size(data);
+                    output.extend_from_slice(&compressed);
+                    Ok(output)
                 }
                 #[cfg(not(feature = "compression"))]
                 {
                     Ok(data.to_vec())
                 }
             }
+            CompressionLevel::Balanced => {
+                #[cfg(feature = "compression")]
+                {
+                    // ZSTD compression with balanced settings (level 3)
+                    let mut output = Vec::new();
+                    // Prefix with magic byte to identify ZSTD format
+                    output.push(0x5A); // 'Z' for ZSTD
+                    let compressed = zstd::encode_all(std::io::Cursor::new(data), 3)
+                        .map_err(|e| anyhow!("ZSTD compression failed: {}", e))?;
+                    output.extend_from_slice(&compressed);
+                    Ok(output)
+                }
+                #[cfg(not(feature = "compression"))]
+                {
+                    Ok(data.to_vec())
+                }
+            }
+            CompressionLevel::Max => {
+                #[cfg(feature = "compression")]
+                {
+                    // ZSTD compression with maximum settings (level 19)
+                    let mut output = Vec::new();
+                    // Prefix with magic byte to identify ZSTD format
+                    output.push(0x5A); // 'Z' for ZSTD
+                    let compressed = zstd::encode_all(std::io::Cursor::new(data), 19)
+                        .map_err(|e| anyhow!("ZSTD compression failed: {}", e))?;
+                    output.extend_from_slice(&compressed);
+                    Ok(output)
+                }
+                #[cfg(not(feature = "compression"))]
+                {
+                    Ok(data.to_vec())
+                }
+            }
+        }
+    }
+
+    /// Decompress arbitrary binary data
+    pub fn decompress_bulk(&self, data: &[u8]) -> Result<Vec<u8>> {
+        if data.is_empty() {
+            return Ok(vec![]);
+        }
+
+        #[cfg(feature = "compression")]
+        {
+            // Check magic byte to determine compression format
+            match data.first() {
+                Some(0x4C) => {
+                    // LZ4 format
+                    let decompressed = lz4_flex::decompress_size_prepended(&data[1..])
+                        .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
+                    Ok(decompressed)
+                }
+                Some(0x5A) => {
+                    // ZSTD format
+                    let decompressed = zstd::decode_all(std::io::Cursor::new(&data[1..]))
+                        .map_err(|e| anyhow!("ZSTD decompression failed: {}", e))?;
+                    Ok(decompressed)
+                }
+                _ => {
+                    // Uncompressed data (no magic byte or unknown format)
+                    Ok(data.to_vec())
+                }
+            }
+        }
+        #[cfg(not(feature = "compression"))]
+        {
+            Ok(data.to_vec())
         }
     }
 

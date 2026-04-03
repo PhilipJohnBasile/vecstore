@@ -241,7 +241,9 @@ struct SurrogateModel {
 
 /// Kernel types for Gaussian Process
 #[derive(Debug, Clone)]
+#[allow(clippy::upper_case_acronyms)]
 enum KernelType {
+    /// Radial Basis Function kernel
     RBF,
     Matern32,
     Matern52,
@@ -518,7 +520,7 @@ impl AutoTuner {
                     ParameterValue::String(choices[pos].clone())
                 }
                 ParameterType::Boolean => {
-                    let val = idx % 2 == 0;
+                    let val = idx.is_multiple_of(2);
                     idx /= 2;
                     ParameterValue::Boolean(val)
                 }
@@ -1101,7 +1103,7 @@ fn random_f64(min: f64, max: f64) -> f64 {
     use std::collections::hash_map::DefaultHasher;
 
     let mut hasher = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut hasher);
+    Instant::now().hash(&mut hasher);
     let hash = hasher.finish();
 
     min + (hash as f64 / u64::MAX as f64) * (max - min)
@@ -1199,6 +1201,12 @@ impl AutoTunerBuilder {
         self
     }
 
+    #[inline]
+    pub fn n_initial_samples(mut self, n: usize) -> Self {
+        self.config.n_initial_samples = n;
+        self
+    }
+
     pub fn build(self) -> AutoTuner {
         AutoTuner::new(
             self.config,
@@ -1244,6 +1252,7 @@ mod tests {
     fn test_optimization() {
         let tuner = AutoTunerBuilder::new()
             .strategy(SearchStrategy::RandomSearch)
+            .n_initial_samples(2)
             .max_iterations(5)
             .build();
 
@@ -1258,6 +1267,7 @@ mod tests {
 
         assert!(result.is_ok());
         let result = result.unwrap();
+        // n_iterations = n_initial_samples (2) + main loop iterations (up to 3)
         assert!(result.n_iterations <= 5);
     }
 

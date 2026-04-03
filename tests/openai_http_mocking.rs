@@ -16,10 +16,11 @@ async fn test_successful_single_embedding() {
     // Start mock server
     let mock_server = MockServer::start().await;
 
-    // Mock successful response
+    // Mock successful response with proper embedding format
+    let embedding_vec: Vec<f32> = (0..1536).map(|i| (i as f32) * 0.001).collect();
     let response_body = serde_json::json!({
         "data": [{
-            "embedding": vec![0.1_f32; 1536],
+            "embedding": embedding_vec,
             "index": 0
         }],
         "usage": {
@@ -37,12 +38,17 @@ async fn test_successful_single_embedding() {
         .await;
 
     // Create embedder with mock server URL
-    // Note: We need to modify the OpenAI backend to accept a custom base URL
-    // For now, this test demonstrates the wiremock setup
-    // In production, you would add a `with_base_url()` method to OpenAIEmbedding
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
 
-    // This test validates the mock server setup is correct
-    assert!(true); // Placeholder - actual implementation requires base_url configuration
+    // Test actual embedding call
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_ok(), "Embedding should succeed: {:?}", result.err());
+
+    let embedding = result.unwrap();
+    assert_eq!(embedding.len(), 1536, "Embedding should have 1536 dimensions");
 }
 
 #[tokio::test]
@@ -80,8 +86,18 @@ async fn test_rate_limit_error_with_retry() {
         .mount(&mock_server)
         .await;
 
-    // Test validates retry logic would work with proper base_url configuration
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test that retry succeeds after rate limit
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_ok(), "Should succeed after retry: {:?}", result.err());
+
+    let embedding = result.unwrap();
+    assert_eq!(embedding.len(), 1536, "Embedding should have 1536 dimensions");
 }
 
 #[tokio::test]
@@ -100,8 +116,22 @@ async fn test_authentication_error() {
         .mount(&mock_server)
         .await;
 
-    // Test validates authentication error handling
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("invalid-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test that authentication error is properly handled
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_err(), "Should fail with authentication error");
+
+    let error = result.err().unwrap();
+    assert!(
+        error.to_string().contains("401") || error.to_string().contains("Unauthorized") || error.to_string().contains("API"),
+        "Error should indicate authentication failure: {}",
+        error
+    );
 }
 
 #[tokio::test]
@@ -120,8 +150,22 @@ async fn test_server_error() {
         .mount(&mock_server)
         .await;
 
-    // Test validates server error handling
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test that server error is properly handled
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_err(), "Should fail with server error");
+
+    let error = result.err().unwrap();
+    assert!(
+        error.to_string().contains("500") || error.to_string().contains("server") || error.to_string().contains("error"),
+        "Error should indicate server failure: {}",
+        error
+    );
 }
 
 #[tokio::test]
@@ -137,8 +181,15 @@ async fn test_malformed_response() {
         .mount(&mock_server)
         .await;
 
-    // Test validates error handling for malformed responses
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test that malformed response is properly handled
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_err(), "Should fail with malformed response");
 }
 
 #[tokio::test]
@@ -173,25 +224,56 @@ async fn test_batch_embedding_with_multiple_items() {
         .mount(&mock_server)
         .await;
 
-    // Test validates batch processing
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test batch embedding with multiple items
+    let texts = vec!["Hello".to_string(), "World".to_string(), "Test".to_string()];
+    let result = embedder.embed_batch_async(&texts).await;
+    assert!(result.is_ok(), "Batch embedding should succeed: {:?}", result.err());
+
+    let embeddings = result.unwrap();
+    assert_eq!(embeddings.len(), 3, "Should return 3 embeddings");
+    for embedding in &embeddings {
+        assert_eq!(embedding.len(), 1536, "Each embedding should have 1536 dimensions");
+    }
 }
 
 #[tokio::test]
 async fn test_network_timeout() {
     let mock_server = MockServer::start().await;
 
-    // Mock delayed response (simulates timeout)
+    // Mock delayed response (simulates timeout) - use 5 seconds for test
     Mock::given(method("POST"))
         .and(path("/v1/embeddings"))
         .respond_with(
-            ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(60)), // Exceeds 30s client timeout
+            ResponseTemplate::new(200).set_delay(std::time::Duration::from_secs(5)),
         )
         .mount(&mock_server)
         .await;
 
-    // Test validates timeout handling
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL and short timeout
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri())
+        .with_timeout(std::time::Duration::from_secs(1));
+
+    // Test that timeout is properly handled
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_err(), "Should fail with timeout");
+
+    let error = result.err().unwrap();
+    assert!(
+        error.to_string().to_lowercase().contains("timeout") ||
+        error.to_string().to_lowercase().contains("timed out") ||
+        error.to_string().to_lowercase().contains("deadline"),
+        "Error should indicate timeout: {}",
+        error
+    );
 }
 
 #[tokio::test]
@@ -224,8 +306,18 @@ async fn test_retry_on_network_error() {
         .mount(&mock_server)
         .await;
 
-    // Test validates retry logic (3 retries max)
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test that retry succeeds after failures
+    let result = embedder.embed_async("Hello world").await;
+    assert!(result.is_ok(), "Should succeed after retries: {:?}", result.err());
+
+    let embedding = result.unwrap();
+    assert_eq!(embedding.len(), 1536, "Embedding should have 1536 dimensions");
 }
 
 #[tokio::test]
@@ -260,24 +352,39 @@ async fn test_embedding_order_preservation() {
         .mount(&mock_server)
         .await;
 
-    // Test validates embeddings are sorted by index
-    assert!(true); // Placeholder
+    // Create embedder with mock server URL
+    let embedder = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create embedder")
+        .with_base_url(mock_server.uri());
+
+    // Test batch embedding with out-of-order response
+    let texts = vec!["First".to_string(), "Second".to_string(), "Third".to_string()];
+    let result = embedder.embed_batch_async(&texts).await;
+    assert!(result.is_ok(), "Batch embedding should succeed: {:?}", result.err());
+
+    let embeddings = result.unwrap();
+    assert_eq!(embeddings.len(), 3, "Should return 3 embeddings");
+
+    // Verify order is preserved (first embedding should be 0.1, second 0.2, third 0.3)
+    // The mock returns out-of-order (index 2 first, then 0, then 1)
+    // but the embedder should reorder them correctly
+    assert!((embeddings[0][0] - 0.1).abs() < 0.001, "First embedding should be 0.1");
+    assert!((embeddings[1][0] - 0.2).abs() < 0.001, "Second embedding should be 0.2");
+    assert!((embeddings[2][0] - 0.3).abs() < 0.001, "Third embedding should be 0.3");
 }
 
 #[tokio::test]
 async fn test_different_model_requests() {
-    let mock_server = MockServer::start().await;
+    // Test text-embedding-3-small model
+    let mock_server_small = MockServer::start().await;
 
-    // Mock response for text-embedding-3-small
+    let small_embedding: Vec<f32> = (0..1536).map(|i| (i as f32) * 0.001).collect();
     Mock::given(method("POST"))
         .and(path("/v1/embeddings"))
-        .and(wiremock::matchers::body_json(serde_json::json!({
-            "model": "text-embedding-3-small",
-            "input": ["test"]
-        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "data": [{
-                "embedding": vec![0.1_f32; 1536],
+                "embedding": small_embedding,
                 "index": 0
             }],
             "usage": {
@@ -285,19 +392,28 @@ async fn test_different_model_requests() {
                 "total_tokens": 5
             }
         })))
-        .mount(&mock_server)
+        .mount(&mock_server_small)
         .await;
 
-    // Mock response for text-embedding-3-large
+    let embedder_small = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Small)
+        .await
+        .expect("Failed to create small embedder")
+        .with_base_url(mock_server_small.uri());
+
+    let result_small = embedder_small.embed_async("test").await;
+    assert!(result_small.is_ok(), "Small model should succeed: {:?}", result_small.err());
+    let embedding_small = result_small.unwrap();
+    assert_eq!(embedding_small.len(), 1536, "Small model should return 1536 dimensions");
+
+    // Test text-embedding-3-large model
+    let mock_server_large = MockServer::start().await;
+
+    let large_embedding: Vec<f32> = (0..3072).map(|i| (i as f32) * 0.001).collect();
     Mock::given(method("POST"))
         .and(path("/v1/embeddings"))
-        .and(wiremock::matchers::body_json(serde_json::json!({
-            "model": "text-embedding-3-large",
-            "input": ["test"]
-        })))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "data": [{
-                "embedding": vec![0.1_f32; 3072],
+                "embedding": large_embedding,
                 "index": 0
             }],
             "usage": {
@@ -305,51 +421,43 @@ async fn test_different_model_requests() {
                 "total_tokens": 5
             }
         })))
-        .mount(&mock_server)
+        .mount(&mock_server_large)
         .await;
 
-    // Test validates different models are requested correctly
-    assert!(true); // Placeholder
+    let embedder_large = OpenAIEmbedding::new("test-api-key".to_string(), OpenAIModel::TextEmbedding3Large)
+        .await
+        .expect("Failed to create large embedder")
+        .with_base_url(mock_server_large.uri());
+
+    let result_large = embedder_large.embed_async("test").await;
+    assert!(result_large.is_ok(), "Large model should succeed: {:?}", result_large.err());
+    let embedding_large = result_large.unwrap();
+    assert_eq!(embedding_large.len(), 3072, "Large model should return 3072 dimensions");
 }
 
-// NOTE: These tests are currently placeholders demonstrating wiremock setup.
-// To make them fully functional, the OpenAIEmbedding struct needs a method
-// to configure a custom base URL (e.g., `with_base_url(url: String)`).
+// NOTE: These tests use wiremock to simulate OpenAI API responses.
+// The OpenAIEmbedding struct supports a custom base URL via `with_base_url()`
+// and custom timeout via `with_timeout()` for testing purposes.
 //
-// Example implementation in src/embeddings/openai_backend.rs:
-//
-// impl OpenAIEmbedding {
-//     pub fn with_base_url(mut self, base_url: String) -> Self {
-//         self.base_url = base_url;
-//         self
-//     }
-//
-//     // In embed_batch_chunk, replace:
-//     // .post("https://api.openai.com/v1/embeddings")
-//     // with:
-//     // .post(format!("{}/v1/embeddings", self.base_url))
-// }
-//
-// Once that's implemented, these tests can be updated to:
-// let embedder = OpenAIEmbedding::new("test-key".to_string(), model).await?
-//     .with_base_url(mock_server.uri());
+// Run with: cargo test --features "embeddings,openai-embeddings" --test openai_http_mocking
 
 #[cfg(test)]
-mod integration_note {
-    //! This module documents the integration requirements for HTTP mocking tests.
+mod test_coverage_note {
+    //! HTTP Mocking Test Coverage
     //!
-    //! Current Status:
-    //! - ✅ Wiremock infrastructure set up
-    //! - ✅ Mock server scenarios defined
-    //! - ⚠️ Requires OpenAIEmbedding to support custom base URL
+    //! Implemented Tests:
+    //! - ✅ test_successful_single_embedding - Validates successful API response
+    //! - ✅ test_rate_limit_error_with_retry - Validates retry after 429
+    //! - ✅ test_authentication_error - Validates 401 error handling
+    //! - ✅ test_server_error - Validates 500 error handling
+    //! - ✅ test_malformed_response - Validates JSON parse error handling
+    //! - ✅ test_batch_embedding_with_multiple_items - Validates batch processing
+    //! - ✅ test_network_timeout - Validates timeout handling
+    //! - ✅ test_retry_on_network_error - Validates retry logic after failures
+    //! - ✅ test_embedding_order_preservation - Validates response ordering
+    //! - ✅ test_different_model_requests - Validates model-specific dimensions
     //!
-    //! Next Steps:
-    //! 1. Add `base_url: String` field to OpenAIEmbedding
-    //! 2. Add `with_base_url(url: String) -> Self` builder method
-    //! 3. Update HTTP POST to use configurable base URL
-    //! 4. Update placeholder tests to use actual embedder instances
-    //!
-    //! Benefits Once Complete:
+    //! Benefits:
     //! - Test HTTP error scenarios without API keys
     //! - Validate retry logic with controlled failures
     //! - Test rate limiting behavior

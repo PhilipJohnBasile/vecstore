@@ -1,0 +1,29 @@
+# Clippy configuration for vecstore
+# https://rust-lang.github.io/rust-clippy/master/index.html
+
+# Maximum cognitive complexity before triggering warning
+cognitive-complexity-threshold = 30
+
+# Maximum number of lines in a function
+too-many-lines-threshold = 200
+
+# Maximum number of arguments a function can have
+too-many-arguments-threshold = 10
+
+# Types that are acceptable to pass by value even if large
+pass-by-value-size-limit = 256
+
+# Maximum number of struct fields
+max-struct-bools = 5
+
+# MSRV for lint suggestions (Rust 1.92)
+msrv = "1.92"
+
+# Allowed names for variables (avoids single-letter warnings for common patterns)
+allowed-idents-below-min-chars = ["i", "j", "k", "n", "x", "y", "z", "id", "db"]
+
+# Type complexity threshold
+type-complexity-threshold = 350
+
+# Allow certain patterns in doc comments
+doc-valid-idents = ["ColBERT", "HNSW", "ONNX", "OpenAI", "VecStore", "GPU", "CUDA", "WebGPU", "gRPC", "MinIO", "BM25", "SPLADE", "IVF", "PQ", "ScaNN"]

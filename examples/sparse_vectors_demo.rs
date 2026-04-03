@@ -13,7 +13,6 @@
 //!
 //! Run with: cargo run --example sparse_vectors_demo
 
-use std::collections::HashMap;
 use vecstore::{
     bm25_score, hybrid_search_score, normalize_scores, BM25Config, BM25Stats, FusionStrategy,
     HybridQueryV2, HybridSearchConfig, Vector,
@@ -310,8 +309,8 @@ fn main() -> anyhow::Result<()> {
 
     // Sparse keywords (vocabulary indices)
     // vocab: ["rust": 0, "programming": 10, "tutorials": 25, ...]
-    let query_sparse_indices = vec![0, 10, 25];
-    let query_sparse_values = vec![2.0, 1.5, 1.0]; // term weights/frequencies
+    let _query_sparse_indices = vec![0, 10, 25];
+    let _query_sparse_values = vec![2.0, 1.5, 1.0]; // term weights/frequencies
 
     println!("   Query representation:");
     println!("   - Dense embedding (5-dim): {:?}", query_dense);

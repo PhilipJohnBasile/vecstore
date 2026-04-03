@@ -46,8 +46,10 @@ use crate::error::VecStoreError;
 
 /// Compression type for columnar data
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Default)]
 pub enum CompressionType {
     /// No compression
+    #[default]
     None,
     /// LZ4 fast compression
     Lz4,
@@ -61,11 +63,6 @@ pub enum CompressionType {
     Dictionary,
 }
 
-impl Default for CompressionType {
-    fn default() -> Self {
-        CompressionType::None
-    }
-}
 
 /// Configuration for columnar storage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -402,7 +399,7 @@ impl ColumnarStore {
         let meta_path = path.join("columnar_meta.json");
 
         let file = std::fs::File::open(&meta_path)
-            .map_err(|e| VecStoreError::Io(e))?;
+            .map_err(VecStoreError::Io)?;
 
         let meta: ColumnarMeta = serde_json::from_reader(file)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
@@ -430,7 +427,7 @@ impl ColumnarStore {
 
     fn load_chunk(&self, path: &Path) -> Result<ColumnarChunk, VecStoreError> {
         let file = std::fs::File::open(path)
-            .map_err(|e| VecStoreError::Io(e))?;
+            .map_err(VecStoreError::Io)?;
 
         let chunk: ColumnarChunk = bincode::deserialize_from(file)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
@@ -551,7 +548,7 @@ impl ColumnarStore {
         let path = self.path.as_ref()
             .ok_or_else(|| VecStoreError::InvalidInput("No path set for columnar store".into()))?;
 
-        std::fs::create_dir_all(path).map_err(|e| VecStoreError::Io(e))?;
+        std::fs::create_dir_all(path).map_err(VecStoreError::Io)?;
 
         // Save metadata
         let meta = ColumnarMeta {
@@ -563,7 +560,7 @@ impl ColumnarStore {
 
         let meta_path = path.join("columnar_meta.json");
         let file = std::fs::File::create(&meta_path)
-            .map_err(|e| VecStoreError::Io(e))?;
+            .map_err(VecStoreError::Io)?;
         serde_json::to_writer(file, &meta)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
@@ -571,7 +568,7 @@ impl ColumnarStore {
         for (i, chunk) in self.chunks.iter().enumerate() {
             let chunk_path = path.join(format!("chunk_{}.bin", i));
             let file = std::fs::File::create(&chunk_path)
-                .map_err(|e| VecStoreError::Io(e))?;
+                .map_err(VecStoreError::Io)?;
             bincode::serialize_into(file, chunk)
                 .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
         }
@@ -734,7 +731,7 @@ impl ColumnarStore {
                 size += compressed.iter().map(|c| c.len()).sum::<usize>();
             } else {
                 size += chunk.columns.iter()
-                    .map(|c| c.len() * std::mem::size_of::<f32>())
+                    .map(|c| c.len() * size_of::<f32>())
                     .sum::<usize>();
             }
         }
@@ -744,7 +741,7 @@ impl ColumnarStore {
 
     /// Get compression ratio
     pub fn compression_ratio(&self) -> f32 {
-        let raw_size = self.count * self.dimensions * std::mem::size_of::<f32>();
+        let raw_size = self.count * self.dimensions * size_of::<f32>();
         let stored_size = self.storage_size();
 
         if stored_size > 0 {
@@ -774,11 +771,10 @@ impl<'a> Iterator for ColumnarIterator<'a> {
     type Item = (String, Vec<f32>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((id, (chunk_idx, local_idx))) = self.id_iter.next() {
-            if let Ok(vec) = self.store.chunks[*chunk_idx].get_vector(*local_idx) {
+        if let Some((id, (chunk_idx, local_idx))) = self.id_iter.next()
+            && let Ok(vec) = self.store.chunks[*chunk_idx].get_vector(*local_idx) {
                 return Some((id.clone(), vec));
             }
-        }
         None
     }
 }

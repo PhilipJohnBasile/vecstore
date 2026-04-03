@@ -545,7 +545,7 @@ mod tests {
 
         // Insert into ns1
         let metadata = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
         manager
             .upsert(
@@ -583,7 +583,7 @@ mod tests {
             .unwrap();
 
         let metadata = Metadata {
-            fields: std::collections::HashMap::new(),
+            fields: HashMap::new(),
         };
 
         // Should succeed

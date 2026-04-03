@@ -52,7 +52,7 @@ cargo fmt
 cargo clippy
 ```
 
-**All tests should pass:** Currently 349/349 tests passing.
+**All tests should pass:** Currently 350+ tests passing. Requires **Rust 1.92+** (Edition 2024).
 
 ### 4. Make Your Changes
 
@@ -357,8 +357,8 @@ cargo bench --bench my_benchmark
 
 ## Getting Help
 
-- **Issues:** Check [existing issues](https://github.com/yourusername/vecstore/issues)
-- **Discussions:** Ask questions in [GitHub Discussions](https://github.com/yourusername/vecstore/discussions)
+- **Issues:** Check [existing issues](https://github.com/PhilipJohnBasile/vecstore/issues)
+- **Discussions:** Ask questions in [GitHub Discussions](https://github.com/PhilipJohnBasile/vecstore/discussions)
 - **Documentation:** See [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) for detailed info
 
 ---

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "vecstore-rs"
-version = "0.0.2"
+version = "0.1.0"
 description = "Embeddable vector database with HNSW search, LangChain integration, and RAG toolkit"
 readme = "python/README.md"
 requires-python = ">=3.8"

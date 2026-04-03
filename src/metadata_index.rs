@@ -134,7 +134,7 @@ impl BTreeIndex {
     pub fn insert(&mut self, value: IndexedValue, id: String) {
         self.tree
             .entry(value)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(id);
     }
 
@@ -235,7 +235,7 @@ impl HashIndex {
     pub fn insert(&mut self, value: IndexedValue, id: String) {
         self.map
             .entry(value)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(id);
     }
 
@@ -310,7 +310,7 @@ impl InvertedIndex {
         for term in text.to_lowercase().split_whitespace() {
             self.index
                 .entry(term.to_string())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(id.clone());
         }
     }
@@ -458,7 +458,7 @@ impl MetadataIndexManager {
     /// Insert metadata into all relevant indexes
     pub fn insert(
         &mut self,
-        metadata: &std::collections::HashMap<String, serde_json::Value>,
+        metadata: &HashMap<String, serde_json::Value>,
         id: String,
     ) -> Result<()> {
         for (index_name, index) in &mut self.indexes {
@@ -475,7 +475,7 @@ impl MetadataIndexManager {
     /// Remove metadata from all relevant indexes
     pub fn remove(
         &mut self,
-        metadata: &std::collections::HashMap<String, serde_json::Value>,
+        metadata: &HashMap<String, serde_json::Value>,
         id: &str,
     ) -> Result<()> {
         for (index_name, index) in &mut self.indexes {
@@ -672,7 +672,7 @@ mod tests {
         )?;
 
         // Insert metadata
-        let mut metadata = std::collections::HashMap::new();
+        let mut metadata = HashMap::new();
         metadata.insert("price".to_string(), serde_json::json!(100));
         metadata.insert("category".to_string(), serde_json::json!("tech"));
 
@@ -716,7 +716,7 @@ mod tests {
             },
         )?;
 
-        let mut metadata = std::collections::HashMap::new();
+        let mut metadata = HashMap::new();
         metadata.insert("price".to_string(), serde_json::json!(100));
 
         manager.insert(&metadata, "id1".to_string())?;

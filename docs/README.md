@@ -1,6 +1,6 @@
 # VecStore Documentation Index
 
-Quick pointers to the files that matter in the 0.0.1 alpha release.
+Quick pointers to the files that matter in the 0.1.0 alpha release (December 2025).
 
 | Topic | File |
 |-------|------|

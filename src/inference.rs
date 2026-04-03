@@ -279,8 +279,8 @@ impl EmbeddingCache {
 
     /// Get an embedding from cache
     pub fn get(&mut self, key: &str, model: &str) -> Option<Vec<f32>> {
-        if let Some(entry) = self.entries.get(key) {
-            if entry.model == model {
+        if let Some(entry) = self.entries.get(key)
+            && entry.model == model {
                 // Move to end (most recently used)
                 if let Some(pos) = self.order.iter().position(|k| k == key) {
                     self.order.remove(pos);
@@ -288,7 +288,6 @@ impl EmbeddingCache {
                 }
                 return Some(entry.embedding.clone());
             }
-        }
         None
     }
 
@@ -511,6 +510,62 @@ impl InferenceEngine {
     }
 
     /// OpenAI embedding implementation
+    #[cfg(feature = "openai-embeddings")]
+    fn embed_openai(
+        &self,
+        texts: &[String],
+        model: &str,
+        api_key: &str,
+        dimensions: Option<usize>,
+    ) -> Result<Vec<Vec<f32>>> {
+        let client = reqwest::blocking::Client::new();
+
+        let mut body = serde_json::json!({
+            "input": texts,
+            "model": model
+        });
+
+        if let Some(dim) = dimensions {
+            body["dimensions"] = serde_json::json!(dim);
+        }
+
+        let response = client
+            .post("https://api.openai.com/v1/embeddings")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("OpenAI embeddings request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().unwrap_or_default();
+            return Err(VecStoreError::Internal(format!(
+                "OpenAI embeddings API error {}: {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e)))?;
+
+        let embeddings: Vec<Vec<f32>> = json["data"]
+            .as_array()
+            .ok_or_else(|| VecStoreError::Internal("No data in OpenAI response".to_string()))?
+            .iter()
+            .filter_map(|item| {
+                item["embedding"]
+                    .as_array()
+                    .map(|arr| arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+            })
+            .collect();
+
+        Ok(embeddings)
+    }
+
+    /// OpenAI embedding fallback when feature not enabled
+    #[cfg(not(feature = "openai-embeddings"))]
     fn embed_openai(
         &self,
         texts: &[String],
@@ -518,8 +573,6 @@ impl InferenceEngine {
         _api_key: &str,
         dimensions: Option<usize>,
     ) -> Result<Vec<Vec<f32>>> {
-        // In production, this would make HTTP requests
-        // For now, we create placeholder embeddings that work
         let dim = dimensions.unwrap_or(self.dimension);
         Ok(texts.iter().map(|text| {
             Self::deterministic_embedding(text, dim)
@@ -551,6 +604,60 @@ impl InferenceEngine {
     }
 
     /// Ollama embedding implementation
+    #[cfg(feature = "ollama")]
+    fn embed_ollama(
+        &self,
+        texts: &[String],
+        model: &str,
+        base_url: &str,
+    ) -> Result<Vec<Vec<f32>>> {
+        let client = reqwest::blocking::Client::new();
+        let url = format!("{}/api/embeddings", base_url.trim_end_matches('/'));
+
+        // Ollama embedding API accepts one text at a time
+        let mut embeddings = Vec::with_capacity(texts.len());
+
+        for text in texts {
+            let body = serde_json::json!({
+                "model": model,
+                "prompt": text
+            });
+
+            let response = client
+                .post(&url)
+                .header("Content-Type", "application/json")
+                .json(&body)
+                .send()
+                .map_err(|e| VecStoreError::Internal(format!("Ollama embeddings request failed: {}", e)))?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let error_text = response.text().unwrap_or_default();
+                return Err(VecStoreError::Internal(format!(
+                    "Ollama embeddings API error {}: {}",
+                    status, error_text
+                )));
+            }
+
+            let json: serde_json::Value = response
+                .json()
+                .map_err(|e| VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e)))?;
+
+            let embedding: Vec<f32> = json["embedding"]
+                .as_array()
+                .ok_or_else(|| VecStoreError::Internal("No embedding in Ollama response".to_string()))?
+                .iter()
+                .filter_map(|v| v.as_f64().map(|f| f as f32))
+                .collect();
+
+            embeddings.push(embedding);
+        }
+
+        Ok(embeddings)
+    }
+
+    /// Ollama embedding fallback when feature not enabled
+    #[cfg(not(feature = "ollama"))]
     fn embed_ollama(
         &self,
         texts: &[String],
@@ -587,8 +694,16 @@ impl InferenceEngine {
         }).collect())
     }
 
-    /// Local ONNX placeholder
+    /// Fallback embedding when ONNX/VertexAI features are not enabled.
+    ///
+    /// This generates deterministic hash-based embeddings for testing and development.
+    /// For production use, enable the `embeddings` feature and configure a real embedding provider.
+    ///
+    /// # Note
+    /// These embeddings preserve some semantic similarity (same words produce similar hashes)
+    /// but are not suitable for production semantic search.
     fn embed_local_placeholder(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
+        tracing::debug!("Using placeholder embeddings - enable 'embeddings' feature for real ONNX inference");
         Ok(texts.iter().map(|text| {
             Self::deterministic_embedding(text, self.dimension)
         }).collect())

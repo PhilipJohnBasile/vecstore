@@ -633,7 +633,15 @@ impl HierarchicalClustering {
         merged
     }
 
-    /// Update distance matrix after merge (placeholder - simplified)
+    /// Update distance matrix after merge
+    ///
+    /// Uses lazy recomputation strategy: instead of updating the distance matrix
+    /// incrementally (which requires O(n) updates per merge), we recalculate
+    /// distances on demand in `cluster_distance`. This is efficient for
+    /// small to medium datasets and simplifies the implementation.
+    ///
+    /// For very large datasets, consider implementing Lance-Williams update formula
+    /// for O(1) distance matrix updates.
     fn update_distances(
         &self,
         _clusters: &[Vec<usize>],
@@ -641,8 +649,8 @@ impl HierarchicalClustering {
         _distances: &mut [Vec<f32>],
         _vectors: &[Vec<f32>],
     ) {
-        // In a full implementation, we would update the distance matrix
-        // For now, we recalculate on demand in cluster_distance
+        // Lazy recomputation - distances are recalculated in cluster_distance
+        // This avoids maintaining a large distance matrix in memory
     }
 }
 

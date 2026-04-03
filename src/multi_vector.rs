@@ -215,7 +215,7 @@ impl MultiVectorIndex {
 
                 doc_scores
                     .entry(doc_id.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(sim);
             }
         }

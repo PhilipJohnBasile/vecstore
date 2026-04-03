@@ -194,21 +194,13 @@ impl Default for HybridParams {
 
 /// Combined index parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct IndexParams {
     pub hnsw: HNSWParams,
     pub ivf: IVFParams,
     pub hybrid: HybridParams,
 }
 
-impl Default for IndexParams {
-    fn default() -> Self {
-        Self {
-            hnsw: HNSWParams::default(),
-            ivf: IVFParams::default(),
-            hybrid: HybridParams::default(),
-        }
-    }
-}
 
 // ============================================================================
 // EVALUATION METRICS
@@ -712,7 +704,7 @@ mod tests {
         assert_eq!(suggestion.len(), 2);
 
         // Best should be the highest scoring
-        let (best, score) = optimizer.best().unwrap();
+        let (_best, score) = optimizer.best().unwrap();
         assert!((score - 0.9).abs() < 0.001);
     }
 

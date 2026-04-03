@@ -23,7 +23,7 @@
 //! ```
 
 use vecstore::distributed::{
-    ConsistencyLevel, ConsistentHashRing, DistributedConfig, DistributedStore, NodeStatus,
+    ConsistencyLevel, ConsistentHashRing, DistributedConfig, DistributedStore,
     ReplicationStrategy, ShardingStrategy,
 };
 

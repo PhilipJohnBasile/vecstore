@@ -232,7 +232,73 @@ pub fn import(
             }
         }
         ImportFormat::Csv => {
-            anyhow::bail!("CSV import not yet implemented");
+            let file = File::open(file)?;
+            let mut rdr = csv::ReaderBuilder::new()
+                .has_headers(true)
+                .flexible(true)
+                .from_reader(BufReader::new(file));
+
+            // Get headers to determine column indices
+            let headers = rdr.headers()?.clone();
+            let id_idx = headers.iter().position(|h| h == "id")
+                .ok_or_else(|| anyhow::anyhow!("CSV must have 'id' column"))?;
+            let vector_idx = headers.iter().position(|h| h == "vector")
+                .ok_or_else(|| anyhow::anyhow!("CSV must have 'vector' column"))?;
+            let metadata_idx = headers.iter().position(|h| h == "metadata");
+
+            for result in rdr.records() {
+                let record = result?;
+
+                let id = record.get(id_idx)
+                    .ok_or_else(|| anyhow::anyhow!("Missing id column"))?
+                    .to_string();
+
+                let vector_str = record.get(vector_idx)
+                    .ok_or_else(|| anyhow::anyhow!("Missing vector column"))?;
+
+                // Parse vector - supports JSON array format: [1.0, 2.0, 3.0]
+                let vector: Vec<f32> = if vector_str.starts_with('[') {
+                    serde_json::from_str(vector_str)
+                        .context("Invalid vector JSON array")?
+                } else {
+                    // Also support comma-separated format: 1.0,2.0,3.0
+                    vector_str.split(',')
+                        .map(|s| s.trim().parse::<f32>())
+                        .collect::<Result<Vec<_>, _>>()
+                        .context("Invalid vector format")?
+                };
+
+                if !no_validate && vector.is_empty() {
+                    errors += 1;
+                    continue;
+                }
+
+                let metadata = if let Some(meta_idx) = metadata_idx {
+                    if let Some(meta_str) = record.get(meta_idx) {
+                        if !meta_str.is_empty() {
+                            serde_json::from_str(meta_str).unwrap_or(serde_json::json!({}))
+                        } else {
+                            serde_json::json!({})
+                        }
+                    } else {
+                        serde_json::json!({})
+                    }
+                } else {
+                    serde_json::json!({})
+                };
+
+                match store.upsert(id.clone(), vector, metadata) {
+                    Ok(_) => imported += 1,
+                    Err(e) => {
+                        eprintln!("Error importing {}: {}", id, e);
+                        errors += 1;
+                    }
+                }
+
+                if imported % batch_size == 0 && imported > 0 {
+                    println!("  Imported {} vectors...", imported);
+                }
+            }
         }
         ImportFormat::Auto => unreachable!(),
     }
@@ -291,7 +357,19 @@ pub fn export(
             }
         }
         ExportFormat::Csv => {
-            anyhow::bail!("CSV export not yet implemented");
+            let mut csv_writer = csv::Writer::from_writer(writer);
+
+            // Write header
+            csv_writer.write_record(["id", "vector", "metadata"])?;
+
+            // Write data rows
+            for item in &vectors {
+                let vector_json = serde_json::to_string(&item.vector)?;
+                let metadata_json = serde_json::to_string(&item.metadata)?;
+                csv_writer.write_record([&item.id, &vector_json, &metadata_json])?;
+            }
+
+            csv_writer.flush()?;
         }
     }
 

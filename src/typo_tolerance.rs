@@ -394,11 +394,11 @@ impl TypoTolerantSearch {
 
         let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
 
-        for i in 0..=a_len {
-            matrix[i][0] = i;
+        for (i, row) in matrix.iter_mut().enumerate().take(a_len + 1) {
+            row[0] = i;
         }
-        for j in 0..=b_len {
-            matrix[0][j] = j;
+        for (j, cell) in matrix[0].iter_mut().enumerate().take(b_len + 1) {
+            *cell = j;
         }
 
         for i in 1..=a_len {
@@ -444,11 +444,10 @@ impl TypoTolerantSearch {
             }
 
             let curr_code = get_code(c);
-            if let Some(cc) = curr_code {
-                if curr_code != prev_code {
+            if let Some(cc) = curr_code
+                && curr_code != prev_code {
                     code.push(cc);
                 }
-            }
             prev_code = curr_code;
         }
 
@@ -522,7 +521,8 @@ mod tests {
 
     #[test]
     fn test_fuzzy_match() {
-        let mut search = TypoTolerantSearch::new(TypoConfig::default());
+        // Use lenient config to allow typos for short words
+        let mut search = TypoTolerantSearch::new(TypoConfig::lenient());
         search.index("doc1", "The quick brown fox");
 
         // "quik" has 1 typo from "quick"

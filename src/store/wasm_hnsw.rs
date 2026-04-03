@@ -60,16 +60,16 @@ impl PartialEq for Candidate {
 
 impl Eq for Candidate {}
 
-impl PartialOrd for Candidate {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+impl Ord for Candidate {
+    fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap behavior
-        other.distance.partial_cmp(&self.distance)
+        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
     }
 }
 
-impl Ord for Candidate {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+impl PartialOrd for Candidate {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -197,15 +197,14 @@ impl WasmHnsw {
             // Add bidirectional links
             for neighbor_id in &neighbors_to_add {
                 // Add edge from new node to neighbor
-                if let Some(node) = self.nodes.get_mut(&id) {
-                    if lc < node.neighbors.len() {
+                if let Some(node) = self.nodes.get_mut(&id)
+                    && lc < node.neighbors.len() {
                         node.neighbors[lc].insert(neighbor_id.clone());
                     }
-                }
 
                 // Add edge from neighbor to new node
-                if let Some(neighbor_node) = self.nodes.get_mut(neighbor_id) {
-                    if lc < neighbor_node.neighbors.len() {
+                if let Some(neighbor_node) = self.nodes.get_mut(neighbor_id)
+                    && lc < neighbor_node.neighbors.len() {
                         neighbor_node.neighbors[lc].insert(id.clone());
 
                         // Prune neighbor's connections if exceeded max
@@ -214,7 +213,6 @@ impl WasmHnsw {
                             self.prune_connections(neighbor_id, lc, max_conn);
                         }
                     }
-                }
             }
 
             nearest = candidates;
@@ -276,11 +274,10 @@ impl WasmHnsw {
             // Remove edges from neighbors to deleted node
             for (layer, neighbor_ids) in node.neighbors.iter().enumerate() {
                 for neighbor_id in neighbor_ids {
-                    if let Some(neighbor) = self.nodes.get_mut(neighbor_id) {
-                        if layer < neighbor.neighbors.len() {
+                    if let Some(neighbor) = self.nodes.get_mut(neighbor_id)
+                        && layer < neighbor.neighbors.len() {
                             neighbor.neighbors[layer].remove(id);
                         }
-                    }
                 }
             }
 
@@ -327,11 +324,11 @@ impl WasmHnsw {
             }
 
             // Get node neighbors at this layer
-            if let Some(node) = self.nodes.get(&current.id) {
-                if layer < node.neighbors.len() {
+            if let Some(node) = self.nodes.get(&current.id)
+                && layer < node.neighbors.len() {
                     for neighbor_id in &node.neighbors[layer] {
-                        if visited.insert(neighbor_id.clone()) {
-                            if let Some(neighbor_node) = self.nodes.get(neighbor_id) {
+                        if visited.insert(neighbor_id.clone())
+                            && let Some(neighbor_node) = self.nodes.get(neighbor_id) {
                                 let dist = self.compute_distance(query, &neighbor_node.vector);
 
                                 if dist < worst_best || best.len() < num_closest {
@@ -348,10 +345,8 @@ impl WasmHnsw {
                                     }
                                 }
                             }
-                        }
                     }
                 }
-            }
         }
 
         // Convert to sorted vec (best first)
@@ -409,11 +404,10 @@ impl WasmHnsw {
                 .collect();
 
             // Update neighbors
-            if let Some(node) = self.nodes.get_mut(node_id) {
-                if layer < node.neighbors.len() {
+            if let Some(node) = self.nodes.get_mut(node_id)
+                && layer < node.neighbors.len() {
                     node.neighbors[layer] = to_keep;
                 }
-            }
         }
     }
 

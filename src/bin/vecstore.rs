@@ -3,10 +3,15 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use flate2::read::GzDecoder;
+use flate2::write::GzEncoder;
+use flate2::Compression;
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, File};
+use std::io::{BufReader, BufWriter};
 use std::path::PathBuf;
 use std::time::Instant;
+use tar::{Archive, Builder};
 use vecstore::{FilterExpr, Metadata, Query, Record, VecDatabase, VecStore};
 
 #[derive(Parser)]
@@ -523,23 +528,212 @@ fn main() -> Result<()> {
             output,
             compress,
         } => {
-            eprintln!("❌ Backup feature not yet implemented");
-            eprintln!(
-                "   Workaround: Copy the entire directory {:?} to create a backup",
-                dir
-            );
-            eprintln!("   Requested output: {:?}", output);
-            if compress {
-                eprintln!("   Compression requested: {}", compress);
+            println!("📦 Creating backup...");
+            println!("   Source: {:?}", dir);
+            println!("   Output: {:?}", output);
+
+            let start = Instant::now();
+
+            // Verify source directory exists
+            if !dir.exists() {
+                anyhow::bail!("Source directory does not exist: {:?}", dir);
             }
-            std::process::exit(1);
+
+            if !dir.is_dir() {
+                anyhow::bail!("Source path is not a directory: {:?}", dir);
+            }
+
+            // Determine output path with proper extension
+            let output_path = if compress {
+                if !output.to_string_lossy().ends_with(".tar.gz") && !output.to_string_lossy().ends_with(".tgz") {
+                    output.with_extension("tar.gz")
+                } else {
+                    output.clone()
+                }
+            } else if !output.to_string_lossy().ends_with(".tar") {
+                output.with_extension("tar")
+            } else {
+                output.clone()
+            };
+
+            // Create parent directories if needed
+            if let Some(parent) = output_path.parent()
+                && !parent.exists()
+            {
+                fs::create_dir_all(parent)
+                    .with_context(|| format!("Failed to create output directory: {:?}", parent))?;
+            }
+
+            // Create the backup archive
+            let file = File::create(&output_path)
+                .with_context(|| format!("Failed to create backup file: {:?}", output_path))?;
+
+            let mut file_count = 0u64;
+            let mut total_bytes = 0u64;
+
+            if compress {
+                println!("   Compression: enabled (gzip)");
+                let encoder = GzEncoder::new(BufWriter::new(file), Compression::default());
+                let mut archive = Builder::new(encoder);
+
+                // Add the directory contents to the archive
+                for entry in walkdir(&dir)? {
+                    let path = entry.as_path();
+                    let relative_path = path.strip_prefix(&dir).unwrap_or(path);
+
+                    if path.is_file() {
+                        let metadata = fs::metadata(path)?;
+                        total_bytes += metadata.len();
+                        file_count += 1;
+
+                        let mut f = File::open(path)?;
+                        archive.append_file(relative_path, &mut f)
+                            .with_context(|| format!("Failed to add file to archive: {:?}", path))?;
+                    } else if path.is_dir() && path != dir {
+                        archive.append_dir(relative_path, path)
+                            .with_context(|| format!("Failed to add directory to archive: {:?}", path))?;
+                    }
+                }
+
+                archive.finish()
+                    .context("Failed to finalize backup archive")?;
+            } else {
+                println!("   Compression: disabled");
+                let mut archive = Builder::new(BufWriter::new(file));
+
+                for entry in walkdir(&dir)? {
+                    let path = entry.as_path();
+                    let relative_path = path.strip_prefix(&dir).unwrap_or(path);
+
+                    if path.is_file() {
+                        let metadata = fs::metadata(path)?;
+                        total_bytes += metadata.len();
+                        file_count += 1;
+
+                        let mut f = File::open(path)?;
+                        archive.append_file(relative_path, &mut f)
+                            .with_context(|| format!("Failed to add file to archive: {:?}", path))?;
+                    } else if path.is_dir() && path != dir {
+                        archive.append_dir(relative_path, path)
+                            .with_context(|| format!("Failed to add directory to archive: {:?}", path))?;
+                    }
+                }
+
+                archive.finish()
+                    .context("Failed to finalize backup archive")?;
+            }
+
+            let elapsed = start.elapsed();
+            let output_size = fs::metadata(&output_path)?.len();
+            let compression_ratio = if total_bytes > 0 {
+                (output_size as f64 / total_bytes as f64) * 100.0
+            } else {
+                100.0
+            };
+
+            println!("✓ Backup complete!");
+            println!("   Files: {}", file_count);
+            println!("   Original size: {:.2} MB", total_bytes as f64 / 1_048_576.0);
+            println!("   Backup size: {:.2} MB", output_size as f64 / 1_048_576.0);
+            if compress {
+                println!("   Compression ratio: {:.1}%", compression_ratio);
+            }
+            println!("   Time: {:.2}s", elapsed.as_secs_f64());
+            println!("   Output: {:?}", output_path);
         }
 
         Commands::Restore { backup, dest } => {
-            eprintln!("❌ Restore feature not yet implemented");
-            eprintln!("   Workaround: Copy the backup directory to {:?}", dest);
-            eprintln!("   Requested backup: {:?}", backup);
-            std::process::exit(1);
+            println!("📥 Restoring from backup...");
+            println!("   Backup: {:?}", backup);
+            println!("   Destination: {:?}", dest);
+
+            let start = Instant::now();
+
+            // Verify backup file exists
+            if !backup.exists() {
+                anyhow::bail!("Backup file does not exist: {:?}", backup);
+            }
+
+            if !backup.is_file() {
+                anyhow::bail!("Backup path is not a file: {:?}", backup);
+            }
+
+            // Create destination directory if it doesn't exist
+            if dest.exists() {
+                println!("   ⚠️  Destination exists, files may be overwritten");
+            } else {
+                fs::create_dir_all(&dest)
+                    .with_context(|| format!("Failed to create destination directory: {:?}", dest))?;
+            }
+
+            let file = File::open(&backup)
+                .with_context(|| format!("Failed to open backup file: {:?}", backup))?;
+            let reader = BufReader::new(file);
+
+            // Detect if compressed by file extension
+            let is_compressed = backup.to_string_lossy().ends_with(".tar.gz")
+                || backup.to_string_lossy().ends_with(".tgz");
+
+            let mut file_count = 0u64;
+            let mut total_bytes = 0u64;
+
+            if is_compressed {
+                println!("   Format: compressed (gzip)");
+                let decoder = GzDecoder::new(reader);
+                let mut archive = Archive::new(decoder);
+
+                for entry in archive.entries()? {
+                    let mut entry = entry?;
+                    let path = entry.path()?;
+                    let dest_path = dest.join(&path);
+
+                    // Create parent directories
+                    if let Some(parent) = dest_path.parent()
+                        && !parent.exists()
+                    {
+                        fs::create_dir_all(parent)?;
+                    }
+
+                    // Extract the entry
+                    entry.unpack(&dest_path)?;
+
+                    if dest_path.is_file() {
+                        total_bytes += fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(0);
+                        file_count += 1;
+                    }
+                }
+            } else {
+                println!("   Format: uncompressed");
+                let mut archive = Archive::new(reader);
+
+                for entry in archive.entries()? {
+                    let mut entry = entry?;
+                    let path = entry.path()?;
+                    let dest_path = dest.join(&path);
+
+                    // Create parent directories
+                    if let Some(parent) = dest_path.parent()
+                        && !parent.exists()
+                    {
+                        fs::create_dir_all(parent)?;
+                    }
+
+                    // Extract the entry
+                    entry.unpack(&dest_path)?;
+
+                    if dest_path.is_file() {
+                        total_bytes += fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(0);
+                        file_count += 1;
+                    }
+                }
+            }
+
+            let elapsed = start.elapsed();
+            println!("✓ Restore complete!");
+            println!("   Files: {}", file_count);
+            println!("   Total size: {:.2} MB", total_bytes as f64 / 1_048_576.0);
+            println!("   Time: {:.2}s", elapsed.as_secs_f64());
+            println!("   Restored to: {:?}", dest);
         }
 
         Commands::Optimize { dir, rebuild } => {
@@ -699,5 +893,30 @@ fn main() -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Simple directory walker that recursively iterates through all files and directories
+fn walkdir(path: &std::path::Path) -> Result<Vec<std::path::PathBuf>> {
+    let mut entries = Vec::new();
+    walkdir_recursive(path, &mut entries)?;
+    Ok(entries)
+}
+
+fn walkdir_recursive(path: &std::path::Path, entries: &mut Vec<std::path::PathBuf>) -> Result<()> {
+    if path.is_dir() {
+        entries.push(path.to_path_buf());
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let entry_path = entry.path();
+            if entry_path.is_dir() {
+                walkdir_recursive(&entry_path, entries)?;
+            } else {
+                entries.push(entry_path);
+            }
+        }
+    } else {
+        entries.push(path.to_path_buf());
+    }
     Ok(())
 }

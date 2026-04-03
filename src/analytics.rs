@@ -175,15 +175,16 @@ pub struct VectorAnalytics {
     config: AnalyticsConfig,
 }
 
+impl Default for VectorAnalytics {
+    fn default() -> Self {
+        Self::new(AnalyticsConfig::default())
+    }
+}
+
 impl VectorAnalytics {
     /// Create new analytics engine
     pub fn new(config: AnalyticsConfig) -> Self {
         Self { config }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(AnalyticsConfig::default())
     }
 
     /// Analyze a collection of vectors
@@ -533,21 +534,105 @@ impl VectorAnalytics {
             .collect()
     }
 
-    /// Compute Hopkins statistic (simplified)
-    fn compute_hopkins_statistic(&self, _vectors: &[Vec<f32>]) -> f32 {
-        // Simplified Hopkins - actual implementation would use random sampling
-        // This is a placeholder that returns a reasonable value
-        0.5
+    /// Compute Hopkins statistic for cluster tendency
+    ///
+    /// The Hopkins statistic measures clustering tendency:
+    /// - Values close to 0.5 indicate random data (no clustering)
+    /// - Values close to 1.0 indicate highly clustered data
+    /// - Values close to 0.0 indicate evenly spaced data
+    fn compute_hopkins_statistic(&self, vectors: &[Vec<f32>]) -> f32 {
+        use rand::Rng;
+
+        if vectors.len() < 10 {
+            return 0.5; // Not enough data
+        }
+
+        let n = vectors.len();
+        let dim = vectors.first().map(|v| v.len()).unwrap_or(0);
+        if dim == 0 {
+            return 0.5;
+        }
+
+        // Sample size (typically 10% of data, min 10, max 100)
+        let m = (n / 10).clamp(10, 100).min(n);
+
+        // Compute data bounds for generating random points
+        let mut min_vals = vec![f32::MAX; dim];
+        let mut max_vals = vec![f32::MIN; dim];
+        for v in vectors {
+            for (i, &val) in v.iter().enumerate() {
+                if i < dim {
+                    min_vals[i] = min_vals[i].min(val);
+                    max_vals[i] = max_vals[i].max(val);
+                }
+            }
+        }
+
+        let mut rng = rand::rng();
+
+        // Sample m random data points
+        let mut sampled_indices: Vec<usize> = (0..n).collect();
+        for i in 0..m {
+            let j = rng.random_range(i..n);
+            sampled_indices.swap(i, j);
+        }
+
+        // Compute sum of nearest neighbor distances for sampled data points (u)
+        let mut sum_u = 0.0f64;
+        for &idx in sampled_indices.iter().take(m) {
+            let point = &vectors[idx];
+            let mut min_dist = f32::MAX;
+            for (j, v) in vectors.iter().enumerate() {
+                if j != idx {
+                    let dist: f32 = point.iter()
+                        .zip(v.iter())
+                        .map(|(a, b)| (a - b).powi(2))
+                        .sum::<f32>()
+                        .sqrt();
+                    min_dist = min_dist.min(dist);
+                }
+            }
+            sum_u += min_dist as f64;
+        }
+
+        // Generate m random points and compute NN distances (w)
+        let mut sum_w = 0.0f64;
+        for _ in 0..m {
+            // Generate random point in data space
+            let random_point: Vec<f32> = (0..dim)
+                .map(|i| rng.random_range(min_vals[i]..=max_vals[i]))
+                .collect();
+
+            // Find nearest neighbor distance to data
+            let mut min_dist = f32::MAX;
+            for v in vectors {
+                let dist: f32 = random_point.iter()
+                    .zip(v.iter())
+                    .map(|(a, b)| (a - b).powi(2))
+                    .sum::<f32>()
+                    .sqrt();
+                min_dist = min_dist.min(dist);
+            }
+            sum_w += min_dist as f64;
+        }
+
+        // Hopkins statistic = sum_w / (sum_u + sum_w)
+        let total = sum_u + sum_w;
+        if total > 0.0 {
+            (sum_w / total) as f32
+        } else {
+            0.5
+        }
     }
 
     /// Generate text report
     pub fn generate_report(&self, report: &AnalyticsReport) -> String {
         let mut output = String::new();
 
-        output.push_str(&format!("\n📊 Vector Analytics Report\n"));
+        output.push_str("\n📊 Vector Analytics Report\n");
         output.push_str(&format!("{}\n", "=".repeat(70)));
 
-        output.push_str(&format!("\n📈 Distribution Statistics:\n"));
+        output.push_str("\n📈 Distribution Statistics:\n");
         output.push_str(&format!(
             "  Vectors:          {}\n",
             report.distribution.vector_count
@@ -573,7 +658,7 @@ impl VectorAnalytics {
             report.distribution.kurtosis
         ));
 
-        output.push_str(&format!("\n🔗 Similarity Statistics:\n"));
+        output.push_str("\n🔗 Similarity Statistics:\n");
         output.push_str(&format!(
             "  Pairs analyzed:   {}\n",
             report.similarity.pairs_analyzed
@@ -591,7 +676,7 @@ impl VectorAnalytics {
             report.similarity.min_similarity, report.similarity.max_similarity
         ));
 
-        output.push_str(&format!("\n🎯 Cluster Tendency:\n"));
+        output.push_str("\n🎯 Cluster Tendency:\n");
         output.push_str(&format!(
             "  Avg NN distance:  {:.4}\n",
             report.cluster_tendency.avg_nn_distance
@@ -604,7 +689,7 @@ impl VectorAnalytics {
             output.push_str(&format!("  Hopkins stat:     {:.4}\n", hopkins));
         }
 
-        output.push_str(&format!("\n⚠️  Outliers:\n"));
+        output.push_str("\n⚠️  Outliers:\n");
         output.push_str(&format!(
             "  Count:            {}\n",
             report.outliers.outlier_count

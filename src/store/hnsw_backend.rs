@@ -3,9 +3,125 @@
 
 use super::types::{Distance, Id};
 use anyhow::{anyhow, Result};
-use hnsw_rs::prelude::*;
+use hnsw_rs::api::AnnT;
+use hnsw_rs::prelude::{
+    Hnsw, DistCosine, DistL2, DistDot, DistL1,
+    Distance as HnswDistance,
+};
 use std::collections::HashMap;
 use std::path::Path;
+
+// ============================================================================
+// CUSTOM DISTANCE METRICS FOR F32 VECTORS
+// ============================================================================
+
+/// Hamming distance for f32 vectors - counts differing elements
+/// Values are compared with epsilon tolerance, then normalized by vector length
+#[derive(Default, Clone, Copy)]
+pub struct DistHammingF32;
+
+impl HnswDistance<f32> for DistHammingF32 {
+    fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+        let threshold = 0.5;
+        let diff_count: usize = a.iter()
+            .zip(b.iter())
+            .filter(|&(x, y)| {
+                // Convert to binary: > threshold = 1, <= threshold = 0
+                (*x > threshold) != (*y > threshold)
+            })
+            .count();
+        diff_count as f32 / a.len() as f32
+    }
+}
+
+/// Jaccard distance for f32 vectors - measures set dissimilarity
+/// Treats vectors as presence/absence using 0.5 threshold
+#[derive(Default, Clone, Copy)]
+pub struct DistJaccardF32;
+
+impl HnswDistance<f32> for DistJaccardF32 {
+    fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
+        if a.is_empty() {
+            return 0.0;
+        }
+        let threshold = 0.5;
+        let mut intersection = 0usize;
+        let mut union = 0usize;
+
+        for (&x, &y) in a.iter().zip(b.iter()) {
+            let x_present = x > threshold;
+            let y_present = y > threshold;
+            if x_present || y_present {
+                union += 1;
+                if x_present && y_present {
+                    intersection += 1;
+                }
+            }
+        }
+
+        if union == 0 {
+            0.0
+        } else {
+            1.0 - (intersection as f32 / union as f32)
+        }
+    }
+}
+
+/// Chebyshev distance (L∞) - maximum absolute difference between elements
+#[derive(Default, Clone, Copy)]
+pub struct DistChebyshev;
+
+impl HnswDistance<f32> for DistChebyshev {
+    fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| (x - y).abs())
+            .fold(0.0_f32, |max, diff| max.max(diff))
+    }
+}
+
+/// Canberra distance - weighted Manhattan distance, sensitive to values near zero
+#[derive(Default, Clone, Copy)]
+pub struct DistCanberra;
+
+impl HnswDistance<f32> for DistCanberra {
+    fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
+        a.iter()
+            .zip(b.iter())
+            .map(|(x, y)| {
+                let diff = (x - y).abs();
+                let sum = x.abs() + y.abs();
+                if sum > f32::EPSILON {
+                    diff / sum
+                } else {
+                    0.0
+                }
+            })
+            .sum()
+    }
+}
+
+/// Bray-Curtis dissimilarity - ecological distance for compositional data
+#[derive(Default, Clone, Copy)]
+pub struct DistBrayCurtis;
+
+impl HnswDistance<f32> for DistBrayCurtis {
+    fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
+        let (diff_sum, total_sum) = a.iter()
+            .zip(b.iter())
+            .fold((0.0_f32, 0.0_f32), |(d, t), (x, y)| {
+                (d + (x - y).abs(), t + x.abs() + y.abs())
+            });
+        if total_sum > f32::EPSILON {
+            diff_sum / total_sum
+        } else {
+            0.0
+        }
+    }
+}
 
 /// Default HNSW parameters
 pub const DEFAULT_HNSW_M: usize = 16;
@@ -72,6 +188,12 @@ enum HnswInstance {
     Cosine(Hnsw<'static, f32, DistCosine>),
     Euclidean(Hnsw<'static, f32, DistL2>),
     DotProduct(Hnsw<'static, f32, DistDot>),
+    Manhattan(Hnsw<'static, f32, DistL1>),
+    Hamming(Hnsw<'static, f32, DistHammingF32>),
+    Jaccard(Hnsw<'static, f32, DistJaccardF32>),
+    Chebyshev(Hnsw<'static, f32, DistChebyshev>),
+    Canberra(Hnsw<'static, f32, DistCanberra>),
+    BrayCurtis(Hnsw<'static, f32, DistBrayCurtis>),
 }
 
 pub struct HnswBackend {
@@ -114,14 +236,48 @@ impl HnswBackend {
                 config.ef_construction,
                 DistDot,
             )),
-            _ => {
-                return Err(anyhow!(
-                    "Distance metric {:?} is not yet supported by the HNSW backend. \
-                     Supported metrics: Cosine, Euclidean, DotProduct. \
-                     See https://github.com/PhilipJohnBasile/vecstore/issues for updates.",
-                    distance
-                ))
-            }
+            Distance::Manhattan => HnswInstance::Manhattan(Hnsw::<f32, DistL1>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistL1,
+            )),
+            Distance::Hamming => HnswInstance::Hamming(Hnsw::<f32, DistHammingF32>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistHammingF32,
+            )),
+            Distance::Jaccard => HnswInstance::Jaccard(Hnsw::<f32, DistJaccardF32>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistJaccardF32,
+            )),
+            Distance::Chebyshev => HnswInstance::Chebyshev(Hnsw::<f32, DistChebyshev>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistChebyshev,
+            )),
+            Distance::Canberra => HnswInstance::Canberra(Hnsw::<f32, DistCanberra>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistCanberra,
+            )),
+            Distance::BrayCurtis => HnswInstance::BrayCurtis(Hnsw::<f32, DistBrayCurtis>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistBrayCurtis,
+            )),
         };
 
         Ok(Self {
@@ -202,6 +358,12 @@ impl HnswBackend {
             HnswInstance::Cosine(h) => h.insert((vector, idx)),
             HnswInstance::Euclidean(h) => h.insert((vector, idx)),
             HnswInstance::DotProduct(h) => h.insert((vector, idx)),
+            HnswInstance::Manhattan(h) => h.insert((vector, idx)),
+            HnswInstance::Hamming(h) => h.insert((vector, idx)),
+            HnswInstance::Jaccard(h) => h.insert((vector, idx)),
+            HnswInstance::Chebyshev(h) => h.insert((vector, idx)),
+            HnswInstance::Canberra(h) => h.insert((vector, idx)),
+            HnswInstance::BrayCurtis(h) => h.insert((vector, idx)),
         }
 
         self.id_to_idx.insert(id.clone(), idx);
@@ -241,6 +403,12 @@ impl HnswBackend {
             HnswInstance::Cosine(h) => h.search(vector, k, 30),
             HnswInstance::Euclidean(h) => h.search(vector, k, 30),
             HnswInstance::DotProduct(h) => h.search(vector, k, 30),
+            HnswInstance::Manhattan(h) => h.search(vector, k, 30),
+            HnswInstance::Hamming(h) => h.search(vector, k, 30),
+            HnswInstance::Jaccard(h) => h.search(vector, k, 30),
+            HnswInstance::Chebyshev(h) => h.search(vector, k, 30),
+            HnswInstance::Canberra(h) => h.search(vector, k, 30),
+            HnswInstance::BrayCurtis(h) => h.search(vector, k, 30),
         };
 
         neighbors
@@ -249,14 +417,16 @@ impl HnswBackend {
                 let idx = neighbor.d_id;
                 self.idx_to_id.get(&idx).map(|id| {
                     let score = match self.distance {
+                        // Similarity metrics: higher raw value = more similar
                         Distance::Cosine | Distance::DotProduct => neighbor.distance,
-                        Distance::Euclidean => {
-                            // For Euclidean, invert so higher score = closer
+                        // Distance metrics: lower raw value = more similar, invert for score
+                        Distance::Euclidean | Distance::Manhattan | Distance::Chebyshev
+                        | Distance::Canberra => {
                             1.0 / (1.0 + neighbor.distance)
                         }
-                        _ => {
-                            // This should never happen since we validate distance metric in new()
-                            neighbor.distance
+                        // Normalized distance metrics [0,1]: convert to similarity
+                        Distance::Hamming | Distance::Jaccard | Distance::BrayCurtis => {
+                            1.0 - neighbor.distance.clamp(0.0, 1.0)
                         }
                     };
                     (id.clone(), score)
@@ -275,17 +445,17 @@ impl HnswBackend {
             .and_then(|n| n.to_str())
             .ok_or_else(|| anyhow!("Invalid path: no file name"))?;
 
-        match &self.hnsw {
-            HnswInstance::Cosine(h) => {
-                h.file_dump(parent, file_name)?;
-            }
-            HnswInstance::Euclidean(h) => {
-                h.file_dump(parent, file_name)?;
-            }
-            HnswInstance::DotProduct(h) => {
-                h.file_dump(parent, file_name)?;
-            }
-        }
+        let _ = match &self.hnsw {
+            HnswInstance::Cosine(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Euclidean(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::DotProduct(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Manhattan(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Hamming(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Jaccard(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Chebyshev(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::Canberra(h) => h.file_dump(parent, file_name)?,
+            HnswInstance::BrayCurtis(h) => h.file_dump(parent, file_name)?,
+        };
 
         Ok(())
     }
@@ -343,14 +513,48 @@ impl HnswBackend {
                 config.ef_construction,
                 DistDot,
             )),
-            _ => {
-                return Err(anyhow!(
-                    "Distance metric {:?} is not yet supported by the HNSW backend. \
-                     Supported metrics: Cosine, Euclidean, DotProduct. \
-                     See https://github.com/PhilipJohnBasile/vecstore/issues for updates.",
-                    distance
-                ))
-            }
+            Distance::Manhattan => HnswInstance::Manhattan(Hnsw::<f32, DistL1>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistL1,
+            )),
+            Distance::Hamming => HnswInstance::Hamming(Hnsw::<f32, DistHammingF32>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistHammingF32,
+            )),
+            Distance::Jaccard => HnswInstance::Jaccard(Hnsw::<f32, DistJaccardF32>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistJaccardF32,
+            )),
+            Distance::Chebyshev => HnswInstance::Chebyshev(Hnsw::<f32, DistChebyshev>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistChebyshev,
+            )),
+            Distance::Canberra => HnswInstance::Canberra(Hnsw::<f32, DistCanberra>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistCanberra,
+            )),
+            Distance::BrayCurtis => HnswInstance::BrayCurtis(Hnsw::<f32, DistBrayCurtis>::new(
+                config.m,
+                config.max_elements,
+                config.m,
+                config.ef_construction,
+                DistBrayCurtis,
+            )),
         };
 
         Ok(Self {
@@ -409,7 +613,7 @@ impl HnswBackend {
         // Count ghost nodes (nodes in old index that aren't in the vectors list)
         let old_count = self.id_to_idx.len();
         let new_count = vectors.len();
-        let ghost_count = if old_count > new_count { old_count - new_count } else { 0 };
+        let ghost_count = old_count.saturating_sub(new_count);
 
         // Create a fresh HNSW instance with same configuration
         let new_hnsw = match self.distance {
@@ -434,12 +638,48 @@ impl HnswBackend {
                 self.config.ef_construction,
                 DistDot,
             )),
-            _ => {
-                return Err(anyhow!(
-                    "Distance metric {:?} is not supported for optimization",
-                    self.distance
-                ))
-            }
+            Distance::Manhattan => HnswInstance::Manhattan(Hnsw::<f32, DistL1>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistL1,
+            )),
+            Distance::Hamming => HnswInstance::Hamming(Hnsw::<f32, DistHammingF32>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistHammingF32,
+            )),
+            Distance::Jaccard => HnswInstance::Jaccard(Hnsw::<f32, DistJaccardF32>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistJaccardF32,
+            )),
+            Distance::Chebyshev => HnswInstance::Chebyshev(Hnsw::<f32, DistChebyshev>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistChebyshev,
+            )),
+            Distance::Canberra => HnswInstance::Canberra(Hnsw::<f32, DistCanberra>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistCanberra,
+            )),
+            Distance::BrayCurtis => HnswInstance::BrayCurtis(Hnsw::<f32, DistBrayCurtis>::new(
+                self.config.m,
+                self.config.max_elements,
+                self.config.m,
+                self.config.ef_construction,
+                DistBrayCurtis,
+            )),
         };
 
         // Replace the old HNSW with the new empty one
@@ -471,6 +711,12 @@ impl HnswBackend {
             HnswInstance::Cosine(h) => h.search(vector, k, ef_search),
             HnswInstance::Euclidean(h) => h.search(vector, k, ef_search),
             HnswInstance::DotProduct(h) => h.search(vector, k, ef_search),
+            HnswInstance::Manhattan(h) => h.search(vector, k, ef_search),
+            HnswInstance::Hamming(h) => h.search(vector, k, ef_search),
+            HnswInstance::Jaccard(h) => h.search(vector, k, ef_search),
+            HnswInstance::Chebyshev(h) => h.search(vector, k, ef_search),
+            HnswInstance::Canberra(h) => h.search(vector, k, ef_search),
+            HnswInstance::BrayCurtis(h) => h.search(vector, k, ef_search),
         };
 
         Ok(neighbors
@@ -479,14 +725,16 @@ impl HnswBackend {
                 let idx = neighbor.d_id;
                 self.idx_to_id.get(&idx).map(|id| {
                     let score = match self.distance {
+                        // Similarity metrics: higher raw value = more similar
                         Distance::Cosine | Distance::DotProduct => neighbor.distance,
-                        Distance::Euclidean => {
-                            // For Euclidean, invert so higher score = closer
+                        // Distance metrics: lower raw value = more similar, invert for score
+                        Distance::Euclidean | Distance::Manhattan | Distance::Chebyshev
+                        | Distance::Canberra => {
                             1.0 / (1.0 + neighbor.distance)
                         }
-                        _ => {
-                            // This should never happen since we validate distance metric in new()
-                            neighbor.distance
+                        // Normalized distance metrics [0,1]: convert to similarity
+                        Distance::Hamming | Distance::Jaccard | Distance::BrayCurtis => {
+                            1.0 - neighbor.distance.clamp(0.0, 1.0)
                         }
                     };
                     (id.clone(), score)

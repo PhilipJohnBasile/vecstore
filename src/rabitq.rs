@@ -114,7 +114,7 @@ impl RaBitQConfig {
     #[inline]
     #[must_use]
     pub const fn bytes_per_code(&self) -> usize {
-        (self.dimension + 7) / 8
+        self.dimension.div_ceil(8)
     }
 
     /// Calculate compression ratio
@@ -140,7 +140,7 @@ impl BinaryCode {
     /// Create a new binary code
     #[inline]
     pub fn new(dimension: usize) -> Self {
-        let num_u64s = (dimension + 63) / 64;
+        let num_u64s = dimension.div_ceil(64);
         Self {
             bits: vec![0u64; num_u64s],
             norm: 1.0,
@@ -278,13 +278,13 @@ impl RaBitQ {
                 .collect();
 
             // Gram-Schmidt orthogonalization
-            for j in 0..i {
+            for row in matrix.iter().take(i) {
                 let dot: f32 = vec.iter()
-                    .zip(matrix[j].iter())
+                    .zip(row.iter())
                     .map(|(a, b)| a * b)
                     .sum();
 
-                for (v, m) in vec.iter_mut().zip(matrix[j].iter()) {
+                for (v, m) in vec.iter_mut().zip(row.iter()) {
                     *v -= dot * m;
                 }
             }
@@ -375,8 +375,8 @@ impl RaBitQ {
 
         // Project query
         let mut projected = vec![0.0f32; dim];
-        for i in 0..dim {
-            projected[i] = self.projection[i].iter()
+        for (i, proj_val) in projected.iter_mut().enumerate().take(dim) {
+            *proj_val = self.projection[i].iter()
                 .zip(centered.iter())
                 .map(|(p, c)| p * c)
                 .sum();
@@ -384,11 +384,11 @@ impl RaBitQ {
 
         // Compute distance using binary code
         let mut ip: f32 = 0.0;
-        for i in 0..dim {
+        for (i, proj_val) in projected.iter().enumerate().take(dim) {
             if code.get_bit(i) {
-                ip += projected[i];
+                ip += proj_val;
             } else {
-                ip -= projected[i];
+                ip -= proj_val;
             }
         }
 
@@ -489,11 +489,10 @@ impl RaBitQIndex {
             self.ids.push(id.clone());
             self.codes.push(code);
 
-            if let Some(meta) = metadata {
-                if i < meta.len() {
+            if let Some(meta) = metadata
+                && i < meta.len() {
                     self.metadata.insert(id.clone(), meta[i].clone());
                 }
-            }
         }
 
         Ok(())
@@ -562,7 +561,7 @@ impl RaBitQPQ {
         let num_subvectors = config.num_subvectors;
         let subvector_dim = config.dimension / num_subvectors;
 
-        if config.dimension % num_subvectors != 0 {
+        if !config.dimension.is_multiple_of(num_subvectors) {
             return Err(VecStoreError::InvalidInput(
                 "Dimension must be divisible by num_subvectors".to_string()
             ));

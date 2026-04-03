@@ -2,7 +2,7 @@
 
 High-performance vector database with RAG toolkit for Python, powered by Rust.
 
-> **Status:** Python bindings track the 0.0.2 alpha release. APIs may change between versions.
+> **Status:** Python bindings track the 0.1.0 alpha release (December 2025). APIs may change between versions.
 
 ## Installation
 
@@ -160,9 +160,18 @@ See the `examples/` directory for complete examples:
 
 ## Development
 
+### Build Requirements
+
+- **Rust 1.92+** (Edition 2024)
+- Python 3.8+
+
 Building from source:
 
 ```bash
+# Install Rust (if needed)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+rustup update stable  # Ensure Rust 1.92+
+
 # Install maturin
 pip install maturin
 

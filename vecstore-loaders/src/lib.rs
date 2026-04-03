@@ -1,3 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
+#![warn(
+    rust_2024_compatibility,
+    clippy::all,
+    clippy::correctness,
+    clippy::suspicious,
+)]
+#![allow(dead_code, missing_docs)]
+
 //! # vecstore-loaders
 //!
 //! Document loaders for VecStore - load documents from various formats for RAG applications.

@@ -20,8 +20,7 @@ use clap::{Parser, Subcommand};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-// TODO: Re-enable once API is updated to match current VecStore interface
-// pub mod commands;
+pub mod commands;
 
 /// VecStore CLI - High-performance vector database tool
 #[derive(Parser, Debug)]

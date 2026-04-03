@@ -384,14 +384,12 @@ impl QueryRouter {
         let Ok(state) = node.state.read() else { return false; };
 
         // Check circuit breaker
-        if state.circuit_state == CircuitState::Open {
-            if let Some(opened_at) = state.circuit_opened_at {
-                if opened_at.elapsed() < self.config.circuit_breaker_timeout {
+        if state.circuit_state == CircuitState::Open
+            && let Some(opened_at) = state.circuit_opened_at
+                && opened_at.elapsed() < self.config.circuit_breaker_timeout {
                     return false;
                 }
                 // Allow half-open state
-            }
-        }
 
         state.health != HealthStatus::Unhealthy
     }
@@ -522,13 +520,11 @@ impl QueryRouter {
         }
 
         // Bonus for locality
-        if self.config.locality_aware_routing {
-            if let Some(ref local_zone) = self.config.local_zone {
-                if &node.zone == local_zone {
+        if self.config.locality_aware_routing
+            && let Some(ref local_zone) = self.config.local_zone
+                && &node.zone == local_zone {
                     score += 10.0;
                 }
-            }
-        }
 
         score.max(0.0)
     }
@@ -613,13 +609,12 @@ impl QueryRouter {
                 state.recent_errors += 1;
 
                 // Check circuit breaker threshold
-                if state.recent_errors >= self.config.circuit_breaker_threshold {
-                    if state.circuit_state == CircuitState::Closed {
+                if state.recent_errors >= self.config.circuit_breaker_threshold
+                    && state.circuit_state == CircuitState::Closed {
                         state.circuit_state = CircuitState::Open;
                         state.circuit_opened_at = Some(Instant::now());
                         self.metrics.circuit_breaks.fetch_add(1, Ordering::Relaxed);
                     }
-                }
             }
 
             state.active_connections = state.active_connections.saturating_sub(1);

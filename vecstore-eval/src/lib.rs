@@ -1,3 +1,14 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2025 VecStore Contributors
+
+#![warn(
+    rust_2024_compatibility,
+    clippy::all,
+    clippy::correctness,
+    clippy::suspicious,
+)]
+#![allow(dead_code, missing_docs)]
+
 //! # VecStore Evaluation Toolkit
 //!
 //! Measure and improve RAG (Retrieval-Augmented Generation) pipeline quality.

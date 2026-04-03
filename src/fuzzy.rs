@@ -140,11 +140,11 @@ pub fn damerau_levenshtein_distance(a: &str, b: &str) -> usize {
     let mut d = vec![vec![0; n + 1]; m + 1];
 
     // Initialize first row and column
-    for i in 0..=m {
-        d[i][0] = i;
+    for (i, row) in d.iter_mut().enumerate() {
+        row[0] = i;
     }
-    for j in 0..=n {
-        d[0][j] = j;
+    for (j, cell) in d[0].iter_mut().enumerate() {
+        *cell = j;
     }
 
     // Fill matrix

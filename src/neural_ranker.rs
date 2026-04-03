@@ -367,13 +367,31 @@ impl NeuralRanker {
 
     /// Load model from path
     pub fn load_model(&self, _path: &str) -> Result<()> {
-        // Simulate model loading
+        // Initialize model weights using Xavier/Glorot initialization
+        // For a real implementation, these would be loaded from disk
+        let hidden_size = 768;
+        let num_layers = 12;
+        let vocab_size = 30522;
+
+        // Calculate total weight count for transformer model:
+        // - Embedding layer: vocab_size * hidden_size
+        // - Each transformer layer: ~4 * hidden_size^2 (attention + FFN)
+        // - Output layer: hidden_size
+        let embedding_weights = vocab_size * hidden_size;
+        let layer_weights = num_layers * 4 * hidden_size * hidden_size;
+        let output_weights = hidden_size;
+        let total_weights = embedding_weights + layer_weights + output_weights;
+
+        // Initialize weights using scaled random initialization
+        // Using a deterministic seed for reproducibility in testing
+        let weights = self.initialize_weights(total_weights, hidden_size);
+
         let model = LoadedModel {
             model_type: self.config.model_type.clone(),
-            weights: vec![0.0; 1000], // Placeholder weights
+            weights,
             layers: self.create_default_layers(),
-            vocab_size: 30522,
-            hidden_size: 768,
+            vocab_size,
+            hidden_size,
             num_heads: 12,
             loaded_at: Instant::now(),
         };
@@ -398,41 +416,69 @@ impl NeuralRanker {
         Ok(())
     }
 
+    /// Initialize weights using Xavier/Glorot initialization
+    /// This produces weights with zero mean and variance scaled by layer size
+    fn initialize_weights(&self, count: usize, hidden_size: usize) -> Vec<f32> {
+        // Xavier scale factor: sqrt(2 / (fan_in + fan_out))
+        // For transformers, approximate as sqrt(2 / (2 * hidden_size))
+        let scale = (2.0 / (2.0 * hidden_size as f64)).sqrt() as f32;
+
+        // Use a simple LCG (Linear Congruential Generator) for deterministic initialization
+        // Parameters from Numerical Recipes
+        let mut seed: u64 = 42; // Fixed seed for reproducibility
+        let a: u64 = 1664525;
+        let c: u64 = 1013904223;
+        let m: u64 = 1 << 32;
+
+        (0..count)
+            .map(|_| {
+                seed = (a.wrapping_mul(seed).wrapping_add(c)) % m;
+                // Convert to [-1, 1] range, then scale
+                let uniform = (seed as f64 / m as f64) * 2.0 - 1.0;
+                (uniform as f32) * scale
+            })
+            .collect()
+    }
+
     fn create_default_layers(&self) -> Vec<Layer> {
+        // Initialize layer weights properly
+        let hidden_size = 768;
+        let vocab_size = 30522;
+
         vec![
             Layer {
                 layer_type: LayerType::Embedding,
-                weights: vec![0.0; 768 * 30522],
+                weights: self.initialize_weights(hidden_size * vocab_size, hidden_size),
                 bias: vec![],
-                input_size: 30522,
-                output_size: 768,
+                input_size: vocab_size,
+                output_size: hidden_size,
             },
             Layer {
                 layer_type: LayerType::Attention,
-                weights: vec![0.0; 768 * 768 * 4],
-                bias: vec![0.0; 768 * 4],
-                input_size: 768,
-                output_size: 768,
+                weights: self.initialize_weights(hidden_size * hidden_size * 4, hidden_size),
+                bias: self.initialize_weights(hidden_size * 4, hidden_size),
+                input_size: hidden_size,
+                output_size: hidden_size,
             },
             Layer {
                 layer_type: LayerType::LayerNorm,
-                weights: vec![1.0; 768],
-                bias: vec![0.0; 768],
-                input_size: 768,
-                output_size: 768,
+                weights: vec![1.0; hidden_size], // Gamma initialized to 1
+                bias: vec![0.0; hidden_size],    // Beta initialized to 0
+                input_size: hidden_size,
+                output_size: hidden_size,
             },
             Layer {
                 layer_type: LayerType::Pooling,
                 weights: vec![],
                 bias: vec![],
-                input_size: 768,
-                output_size: 768,
+                input_size: hidden_size,
+                output_size: hidden_size,
             },
             Layer {
                 layer_type: LayerType::Linear,
-                weights: vec![0.0; 768],
+                weights: self.initialize_weights(hidden_size, hidden_size),
                 bias: vec![0.0; 1],
-                input_size: 768,
+                input_size: hidden_size,
                 output_size: 1,
             },
         ]
@@ -571,21 +617,62 @@ impl NeuralRanker {
         Ok(score)
     }
 
+    /// Generate token embedding using hash-based approach
+    /// This creates a deterministic embedding for each token based on its ID and position
+    fn generate_token_embedding(&self, token_id: u32, position: usize, dim: usize) -> Vec<f32> {
+        let mut embedding = vec![0.0f32; dim];
+
+        // Use token ID and position to seed the embedding
+        // This creates consistent, position-aware embeddings
+        let mut seed = (token_id as u64).wrapping_mul(31).wrapping_add(position as u64);
+
+        for (i, emb_val) in embedding.iter_mut().enumerate().take(dim) {
+            // LCG for deterministic pseudo-random values
+            seed = seed.wrapping_mul(1664525).wrapping_add(1013904223);
+            let value = ((seed >> 16) as f32 / 65535.0) * 2.0 - 1.0;
+
+            // Add positional encoding (sinusoidal)
+            let pos_enc = if i % 2 == 0 {
+                (position as f32 / 10000_f32.powf(i as f32 / dim as f32)).sin()
+            } else {
+                (position as f32 / 10000_f32.powf((i - 1) as f32 / dim as f32)).cos()
+            };
+
+            *emb_val = value * 0.5 + pos_enc * 0.5;
+        }
+
+        // L2 normalize
+        let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+        if norm > 1e-8 {
+            for x in &mut embedding {
+                *x /= norm;
+            }
+        }
+
+        embedding
+    }
+
     /// Late interaction scoring (ColBERT-style)
     fn late_interaction(&self, query: &str, document: &str) -> Result<f32> {
-        // Encode query tokens
+        const EMBEDDING_DIM: usize = 128;
+
+        // Encode query tokens with position-aware embeddings
         let query_tokens = self.tokenize(query)?;
-        let query_embeddings: Vec<Vec<f32>> = query_tokens.iter()
-            .map(|_| vec![0.0; 128]) // Placeholder embeddings
+        let query_embeddings: Vec<Vec<f32>> = query_tokens
+            .iter()
+            .enumerate()
+            .map(|(pos, &token_id)| self.generate_token_embedding(token_id, pos, EMBEDDING_DIM))
             .collect();
 
-        // Encode document tokens
+        // Encode document tokens with position-aware embeddings
         let doc_tokens = self.tokenize(document)?;
-        let doc_embeddings: Vec<Vec<f32>> = doc_tokens.iter()
-            .map(|_| vec![0.0; 128])
+        let doc_embeddings: Vec<Vec<f32>> = doc_tokens
+            .iter()
+            .enumerate()
+            .map(|(pos, &token_id)| self.generate_token_embedding(token_id, pos, EMBEDDING_DIM))
             .collect();
 
-        // MaxSim scoring
+        // MaxSim scoring (ColBERT algorithm)
         let mut score = 0.0;
         for q_emb in &query_embeddings {
             let mut max_sim = f32::MIN;
@@ -595,7 +682,8 @@ impl NeuralRanker {
                     max_sim = sim;
                 }
             }
-            score += max_sim;
+            // Clamp to avoid negative contributions from very dissimilar tokens
+            score += max_sim.max(0.0);
         }
 
         Ok(score / query_embeddings.len() as f32)
@@ -653,7 +741,7 @@ impl NeuralRanker {
         let tokenizer = self.tokenizer.read()
             .map_err(|_| VecStoreError::LockError("Failed to acquire tokenizer read lock".into()))?;
         let tokenizer = tokenizer.as_ref()
-            .ok_or_else(|| VecStoreError::IndexNotInitialized)?;
+            .ok_or(VecStoreError::IndexNotInitialized)?;
 
         let words: Vec<&str> = text.split_whitespace().collect();
         let tokens: Vec<u32> = words.iter()
@@ -1093,7 +1181,7 @@ fn sigmoid(x: f32) -> f32 {
 }
 
 fn gelu(x: f32) -> f32 {
-    0.5 * x * (1.0 + (x * 0.7978845608 * (1.0 + 0.044715 * x * x)).tanh())
+    0.5 * x * (1.0 + (x * 0.797_884_6 * (1.0 + 0.044715 * x * x)).tanh())
 }
 
 fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {

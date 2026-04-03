@@ -254,7 +254,7 @@ impl RecallPredictor {
 
     /// Predict recall for given parameters
     pub fn predict(&self, params: &SearchParams, profile: &QueryProfile) -> f64 {
-        let features = vec![
+        let features = [
             1.0, // base
             params.ef_search as f64,
             params.beam_width as f64,
@@ -275,12 +275,10 @@ impl RecallPredictor {
         let predicted = self.predict(params, profile);
         let error = actual_recall - predicted;
 
-        let features = vec![
-            1.0,
+        let features = [1.0,
             params.ef_search as f64,
             params.beam_width as f64,
-            profile.filter_selectivity as f64,
-        ];
+            profile.filter_selectivity as f64];
 
         // Gradient descent update
         for (i, f) in features.iter().enumerate() {
@@ -477,7 +475,7 @@ impl LearnedIndex {
         self.vectors.insert(id.into(), vector);
 
         // Invalidate distribution cache
-        if self.vectors.len() % 100 == 0 {
+        if self.vectors.len().is_multiple_of(100) {
             self.update_distribution();
         }
 
@@ -670,7 +668,7 @@ impl LearnedIndex {
         }
 
         // Estimate average NN distance (sample-based)
-        let sample_size = (count / 10).max(10).min(100);
+        let sample_size = (count / 10).clamp(10, 100);
         let mut nn_distances = Vec::new();
         for i in 0..sample_size.min(count) {
             let v1 = &vectors[i];
@@ -741,7 +739,7 @@ impl LearnedIndex {
         // Variations on ef_search
         for factor in [0.5, 0.75, 1.0, 1.25, 1.5, 2.0] {
             let ef = (base.ef_search as f64 * factor) as usize;
-            if ef >= 10 && ef <= 500 {
+            if (10..=500).contains(&ef) {
                 let mut params = base.clone();
                 params.ef_search = ef;
                 candidates.push(params);
@@ -751,7 +749,7 @@ impl LearnedIndex {
         // Variations on beam width
         for factor in [0.5, 1.0, 1.5, 2.0] {
             let bw = (base.beam_width as f64 * factor) as usize;
-            if bw >= 8 && bw <= 256 {
+            if (8..=256).contains(&bw) {
                 let mut params = base.clone();
                 params.beam_width = bw;
                 candidates.push(params);
@@ -1102,7 +1100,7 @@ mod tests {
         let initial_ef = index.current_params().ef_search;
 
         // Simulate slow queries
-        for i in 0..10 {
+        for _i in 0..10 {
             let profile = QueryProfile {
                 vector: None,
                 k: 10,

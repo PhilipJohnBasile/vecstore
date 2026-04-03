@@ -57,19 +57,19 @@ impl EpubLoader {
         // Extract metadata if requested
         if self.extract_metadata {
             if let Some(title) = doc.mdata("title") {
-                metadata.insert("title".to_string(), title);
+                metadata.insert("title".to_string(), title.value.clone());
             }
             if let Some(creator) = doc.mdata("creator") {
-                metadata.insert("author".to_string(), creator);
+                metadata.insert("author".to_string(), creator.value.clone());
             }
             if let Some(publisher) = doc.mdata("publisher") {
-                metadata.insert("publisher".to_string(), publisher);
+                metadata.insert("publisher".to_string(), publisher.value.clone());
             }
             if let Some(date) = doc.mdata("date") {
-                metadata.insert("date".to_string(), date);
+                metadata.insert("date".to_string(), date.value.clone());
             }
             if let Some(language) = doc.mdata("language") {
-                metadata.insert("language".to_string(), language);
+                metadata.insert("language".to_string(), language.value.clone());
             }
         }
 

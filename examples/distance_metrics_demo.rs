@@ -62,7 +62,7 @@ fn main() -> anyhow::Result<()> {
     println!("2. Manhattan Distance (L1 - Robust to outliers)");
     println!("   Range: [0, ∞), lower is more similar\n");
 
-    let store_manhattan = VecStore::builder("./distance_demo/manhattan")
+    let _store_manhattan = VecStore::builder("./distance_demo/manhattan")
         .distance(Distance::Manhattan)
         .build()?;
 

@@ -250,6 +250,12 @@ pub struct Monitor {
     start_time: SystemTime,
 }
 
+impl Default for Monitor {
+    fn default() -> Self {
+        Self::new(MonitoringConfig::default())
+    }
+}
+
 impl Monitor {
     /// Create a new monitor
     pub fn new(config: MonitoringConfig) -> Self {
@@ -261,11 +267,6 @@ impl Monitor {
             last_alert_time: HashMap::new(),
             start_time: SystemTime::now(),
         }
-    }
-
-    /// Create monitor with default configuration
-    pub fn default() -> Self {
-        Self::new(MonitoringConfig::default())
     }
 
     /// Add an alert rule
@@ -309,13 +310,11 @@ impl Monitor {
             }
 
             // Check cooldown period
-            if let Some(last_time) = self.last_alert_time.get(&rule.name) {
-                if let Ok(elapsed) = SystemTime::now().duration_since(*last_time) {
-                    if elapsed < self.config.alert_cooldown {
+            if let Some(last_time) = self.last_alert_time.get(&rule.name)
+                && let Ok(elapsed) = SystemTime::now().duration_since(*last_time)
+                    && elapsed < self.config.alert_cooldown {
                         continue;
                     }
-                }
-            }
 
             // Evaluate condition
             if rule.condition.evaluate(value, rule.threshold) {

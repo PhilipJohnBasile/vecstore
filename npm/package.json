@@ -41,7 +41,7 @@
   },
   "homepage": "https://github.com/PhilipJohnBasile/vecstore#readme",
   "peerDependencies": {
-    "@vecstore/core": ">=0.0.1",
+    "@vecstore/core": ">=0.1.0",
     "@xenova/transformers": ">=2.0.0"
   },
   "devDependencies": {

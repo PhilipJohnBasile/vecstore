@@ -4,12 +4,6 @@
 //!
 //! Run with: cargo run --example 02_pdf_rag --features loaders
 
-use anyhow::Result;
-use std::collections::HashMap;
-use vecstore::{
-    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
-    Metadata, Query, VecStore,
-};
 #[cfg(feature = "loaders")]
 use vecstore_loaders::PDFLoader;
 

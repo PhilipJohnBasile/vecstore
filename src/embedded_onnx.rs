@@ -32,6 +32,8 @@
 
 use std::collections::HashMap;
 use std::sync::RwLock;
+#[cfg(feature = "embeddings")]
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::error::{VecStoreError, Result};
@@ -265,21 +267,25 @@ pub struct EmbeddingModel {
     /// Model dimension
     dimension: usize,
     /// ONNX Runtime session (uses RwLock for interior mutability as run() requires &mut)
-    session: std::sync::Arc<std::sync::RwLock<ort::Session>>,
+    session: Arc<RwLock<ort::session::Session>>,
     /// Tokenizer
-    tokenizer: std::sync::Arc<tokenizers::Tokenizer>,
+    tokenizer: Arc<tokenizers::Tokenizer>,
     /// Statistics
     stats: RwLock<ModelStats>,
 }
 
 /// Embedding model wrapper (fallback without embeddings feature)
+///
+/// This implementation provides deterministic pseudo-embeddings for testing
+/// and development when the `embeddings` feature is disabled. For production
+/// use, enable the `embeddings` feature to use real ONNX-based embeddings.
 #[cfg(not(feature = "embeddings"))]
 pub struct EmbeddingModel {
     /// Model configuration
     config: ModelConfig,
     /// Model dimension
     dimension: usize,
-    /// Simple vocabulary for tokenization (placeholder)
+    /// Simple vocabulary for tokenization (fallback - enable `embeddings` feature for real tokenization)
     vocab: HashMap<String, usize>,
     /// Statistics
     stats: RwLock<ModelStats>,
@@ -295,7 +301,7 @@ impl EmbeddingModel {
 
     /// Load with configuration
     pub fn with_config(config: ModelConfig) -> Result<Self> {
-        use std::path::PathBuf;
+        
 
         let dimension = config.model_type.dimension();
 
@@ -320,8 +326,8 @@ impl EmbeddingModel {
         let model = Self {
             config: config.clone(),
             dimension,
-            session: std::sync::Arc::new(std::sync::RwLock::new(session)),
-            tokenizer: std::sync::Arc::new(tokenizer),
+            session: Arc::new(RwLock::new(session)),
+            tokenizer: Arc::new(tokenizer),
             stats: RwLock::new(ModelStats::default()),
         };
 
@@ -364,8 +370,8 @@ impl EmbeddingModel {
         let model = Self {
             config: config.clone(),
             dimension,
-            session: std::sync::Arc::new(std::sync::RwLock::new(session)),
-            tokenizer: std::sync::Arc::new(tokenizer),
+            session: Arc::new(RwLock::new(session)),
+            tokenizer: Arc::new(tokenizer),
             stats: RwLock::new(ModelStats::default()),
         };
 
@@ -380,10 +386,10 @@ impl EmbeddingModel {
     fn create_session(
         model_path: &std::path::Path,
         config: &ModelConfig,
-    ) -> Result<ort::Session> {
-        use ort::GraphOptimizationLevel;
+    ) -> Result<ort::session::Session> {
+        use ort::session::builder::GraphOptimizationLevel;
 
-        let mut session_builder = ort::Session::builder()?;
+        let mut session_builder = ort::session::Session::builder()?;
 
         // Set optimization level based on quantization
         if config.quantize {
@@ -432,7 +438,7 @@ impl EmbeddingModel {
         model_type: &ModelType,
         model_dir: &std::path::Path,
     ) -> Result<()> {
-        use std::io::Write;
+        
 
         let base_url = format!(
             "https://huggingface.co/{}/resolve/main",
@@ -455,7 +461,7 @@ impl EmbeddingModel {
                 .call()
                 .map_err(|e| VecStoreError::Internal(format!("Failed to download {}: {}", url, e)))?;
 
-            let mut reader = response.into_reader();
+            let mut reader = response.into_body().into_reader();
             let mut file = std::fs::File::create(&dest)
                 .map_err(|e| VecStoreError::Io(e))?;
 
@@ -624,11 +630,10 @@ impl EmbeddingModel {
         // Extract embeddings from output
         // Most sentence transformers output shape: (batch_size, seq_length, hidden_size)
         let output_value = &outputs[0];
-        let embeddings_tensor = output_value
-            .try_extract_tensor::<f32>()
+        let embeddings_view = output_value
+            .try_extract_array::<f32>()
             .map_err(|e| VecStoreError::OnnxRuntime(format!("Failed to extract output: {}", e)))?;
 
-        let embeddings_view = embeddings_tensor.view();
         let shape = embeddings_view.shape();
 
         // Convert to owned array for processing
@@ -767,7 +772,7 @@ impl EmbeddingModel {
     pub fn with_config(config: ModelConfig) -> Result<Self> {
         let dimension = config.model_type.dimension();
 
-        // Build simple vocabulary (placeholder - would use tokenizers crate)
+        // Build simple vocabulary (fallback for testing - enable `embeddings` feature for real tokenization)
         let vocab = Self::build_simple_vocab();
 
         Ok(Self {
@@ -779,8 +784,10 @@ impl EmbeddingModel {
     }
 
     /// Build a simple vocabulary for demonstration
+    ///
+    /// Fallback implementation for testing when `embeddings` feature is disabled.
     fn build_simple_vocab() -> HashMap<String, usize> {
-        // This is a placeholder - real implementation would use the tokenizers crate
+        // Fallback vocabulary - enable `embeddings` feature for real BPE/WordPiece tokenization
         let words = [
             "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
             "have", "has", "had", "do", "does", "did", "will", "would", "could",
@@ -831,8 +838,8 @@ impl EmbeddingModel {
         // Tokenize
         let tokens = self.tokenize(text);
 
-        // Generate deterministic embedding based on tokens
-        // This is a placeholder - real implementation would run ONNX inference
+        // Generate deterministic pseudo-embedding based on tokens
+        // Fallback for testing - enable `embeddings` feature for real ONNX inference
         let mut embedding = vec![0.0; self.dimension];
 
         for (i, token_id) in tokens.iter().enumerate() {
@@ -1339,7 +1346,7 @@ impl Default for QuantizedModelConfig {
 /// Global model cache for reusing loaded models
 #[cfg(feature = "embeddings")]
 pub struct ModelRegistry {
-    models: RwLock<HashMap<String, std::sync::Arc<EmbeddingModel>>>,
+    models: RwLock<HashMap<String, Arc<EmbeddingModel>>>,
 }
 
 #[cfg(feature = "embeddings")]
@@ -1352,7 +1359,7 @@ impl ModelRegistry {
     }
 
     /// Get or load a model
-    pub fn get_or_load(&self, model_type: ModelType) -> Result<std::sync::Arc<EmbeddingModel>> {
+    pub fn get_or_load(&self, model_type: ModelType) -> Result<Arc<EmbeddingModel>> {
         let key = model_type.model_name().to_string();
 
         // Check if already loaded
@@ -1364,7 +1371,7 @@ impl ModelRegistry {
 
         // Load the model
         let model = EmbeddingModel::load(model_type)?;
-        let model = std::sync::Arc::new(model);
+        let model = Arc::new(model);
 
         // Cache it
         if let Ok(mut models) = self.models.write() {

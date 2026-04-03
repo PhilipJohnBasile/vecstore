@@ -264,8 +264,8 @@ impl Migrator {
             match self.parse_record(&line, source) {
                 Ok(record) => {
                     // Validate dimension
-                    if let Some(max_dim) = self.max_dimension {
-                        if record.vector.len() > max_dim {
+                    if let Some(max_dim) = self.max_dimension
+                        && record.vector.len() > max_dim {
                             stats.add_failure(format!(
                                 "Line {}: Vector dimension {} exceeds maximum {}",
                                 line_num + 1,
@@ -274,7 +274,6 @@ impl Migrator {
                             ));
                             continue;
                         }
-                    }
 
                     // Enforce dimension if specified
                     let record = if let Some(target_dim) = self.enforce_dimension {
@@ -497,8 +496,8 @@ impl Migrator {
 
             // Parse vector
             let mut vector = Vec::with_capacity(vector_cols);
-            for i in 1..=vector_cols {
-                match parts[i].parse::<f32>() {
+            for part in parts.iter().skip(1).take(vector_cols) {
+                match part.parse::<f32>() {
                     Ok(v) => vector.push(v),
                     Err(e) => {
                         stats.add_failure(format!(

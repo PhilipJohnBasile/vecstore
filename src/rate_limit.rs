@@ -703,8 +703,10 @@ mod tests {
 
 /// Scope for rate limiting (global, per-tenant, per-operation)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Default)]
 pub enum RateLimitScope {
     /// Global rate limit across all requests
+    #[default]
     Global,
     /// Per-tenant rate limiting
     Tenant,
@@ -716,11 +718,6 @@ pub enum RateLimitScope {
     Custom,
 }
 
-impl Default for RateLimitScope {
-    fn default() -> Self {
-        Self::Global
-    }
-}
 
 /// Multi-tier rate limiter that applies limits at different scopes
 ///
@@ -801,18 +798,16 @@ impl MultiTierRateLimiter {
         }
 
         // Check per-key limit if key is provided
-        if let Some(k) = key {
-            if !self.keyed.try_acquire(k) {
+        if let Some(k) = key
+            && !self.keyed.try_acquire(k) {
                 return false;
             }
-        }
 
         // Check per-operation limit if operation is provided
-        if let Some(op) = operation {
-            if !self.operations.try_acquire(op) {
+        if let Some(op) = operation
+            && !self.operations.try_acquire(op) {
                 return false;
             }
-        }
 
         true
     }

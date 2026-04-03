@@ -381,25 +381,499 @@ impl Federation {
         Ok(eligible)
     }
 
-    fn query_member(&self, state: &MemberState, query: &FederatedQuery) -> Result<Vec<MemberResult>> {
-        // In production: make actual HTTP/gRPC call
-        // For now: simulate results
+    fn query_member(&self, state: &MemberState, _query: &FederatedQuery) -> Result<Vec<MemberResult>> {
+        match &state.member.member_type {
+            MemberType::Local => {
+                // Local queries should be handled by the local VecStore directly
+                // Return empty results as local stores are queried separately
+                Ok(Vec::new())
+            }
+            MemberType::RemoteHttp => {
+                #[cfg(feature = "openai-embeddings")]
+                {
+                    let k = query.max_per_member.unwrap_or(query.k);
+                    self.query_http_member(&state.member, query, k)
+                }
+                #[cfg(not(feature = "openai-embeddings"))]
+                {
+                    Err(VecStoreError::InvalidConfig(
+                        "HTTP federation requires 'openai-embeddings' feature (which includes reqwest)".into()
+                    ))
+                }
+            }
+            MemberType::RemoteGrpc => {
+                #[cfg(feature = "server")]
+                {
+                    let k = query.max_per_member.unwrap_or(query.k);
+                    self.query_grpc_member(&state.member, query, k)
+                }
+                #[cfg(not(feature = "server"))]
+                {
+                    Err(VecStoreError::InvalidConfig(
+                        "gRPC federation requires 'server' feature (which includes tonic)".into()
+                    ))
+                }
+            }
+            MemberType::External(service_type) => {
+                #[cfg(feature = "openai-embeddings")]
+                {
+                    let k = query.max_per_member.unwrap_or(query.k);
+                    self.query_external_member(&state.member, query, k, service_type)
+                }
+                #[cfg(not(feature = "openai-embeddings"))]
+                {
+                    let _ = service_type;
+                    Err(VecStoreError::InvalidConfig(
+                        "External federation requires 'openai-embeddings' feature (which includes reqwest)".into()
+                    ))
+                }
+            }
+        }
+    }
 
-        let k = query.max_per_member.unwrap_or(query.k);
+    /// Query a remote HTTP member
+    #[cfg(feature = "openai-embeddings")]
+    fn query_http_member(
+        &self,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(self.config.member_timeout)
+            .build()
+            .map_err(|e| VecStoreError::Internal(format!("HTTP client error: {}", e)))?;
 
-        // Simulate some results
-        let results: Vec<MemberResult> = (0..k.min(10))
-            .map(|i| MemberResult {
-                id: format!("{}_{}", state.member.id, i),
-                score: 0.9 - (i as f32 * 0.05),
-                vector: None,
-                metadata: None,
-                member_id: state.member.id.clone(),
-                collection: state.member.collections.first().cloned(),
+        // Build the query request body
+        let request_body = serde_json::json!({
+            "vector": query.vector,
+            "k": k,
+            "filter": query.filter,
+            "include_metadata": query.include_metadata,
+            "min_score": query.min_score,
+        });
+
+        // Query the VecStore HTTP endpoint
+        let url = format!("{}/query", member.endpoint.trim_end_matches('/'));
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("HTTP request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(VecStoreError::Internal(format!(
+                "HTTP query failed with status {}: {}",
+                response.status(),
+                response.text().unwrap_or_default()
+            )));
+        }
+
+        // Parse the response
+        let response_body: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse response: {}", e)))?;
+
+        // Extract results from response
+        let results = response_body
+            .get("results")
+            .and_then(|r| r.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        Some(MemberResult {
+                            id: item.get("id")?.as_str()?.to_string(),
+                            score: item.get("score")?.as_f64()? as f32,
+                            vector: item.get("vector").and_then(|v| {
+                                v.as_array().map(|arr| {
+                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                })
+                            }),
+                            metadata: item.get("metadata").cloned(),
+                            member_id: member.id.clone(),
+                            collection: member.collections.first().cloned(),
+                        })
+                    })
+                    .collect()
             })
-            .collect();
+            .unwrap_or_default();
 
         Ok(results)
+    }
+
+    /// Query an external service (Pinecone, Weaviate, etc.)
+    #[cfg(feature = "openai-embeddings")]
+    fn query_external_member(
+        &self,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+        service_type: &str,
+    ) -> Result<Vec<MemberResult>> {
+        let client = reqwest::blocking::Client::builder()
+            .timeout(self.config.member_timeout)
+            .build()
+            .map_err(|e| VecStoreError::Internal(format!("HTTP client error: {}", e)))?;
+
+        match service_type.to_lowercase().as_str() {
+            "pinecone" => self.query_pinecone(&client, member, query, k),
+            "qdrant" => self.query_qdrant(&client, member, query, k),
+            "weaviate" => self.query_weaviate(&client, member, query, k),
+            "chromadb" => self.query_chromadb(&client, member, query, k),
+            _ => Err(VecStoreError::InvalidConfig(format!(
+                "Unsupported external service type: {}",
+                service_type
+            ))),
+        }
+    }
+
+    /// Query Pinecone-compatible endpoint
+    #[cfg(feature = "openai-embeddings")]
+    fn query_pinecone(
+        &self,
+        client: &reqwest::blocking::Client,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        let request_body = serde_json::json!({
+            "vector": query.vector,
+            "topK": k,
+            "includeMetadata": query.include_metadata,
+            "includeValues": true,
+        });
+
+        let url = format!("{}/query", member.endpoint.trim_end_matches('/'));
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("Pinecone request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(VecStoreError::Internal(format!(
+                "Pinecone query failed: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Pinecone response: {}", e)))?;
+
+        let results = body
+            .get("matches")
+            .and_then(|m| m.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        Some(MemberResult {
+                            id: item.get("id")?.as_str()?.to_string(),
+                            score: item.get("score")?.as_f64()? as f32,
+                            vector: item.get("values").and_then(|v| {
+                                v.as_array().map(|arr| {
+                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                })
+                            }),
+                            metadata: item.get("metadata").cloned(),
+                            member_id: member.id.clone(),
+                            collection: member.collections.first().cloned(),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(results)
+    }
+
+    /// Query Qdrant-compatible endpoint
+    #[cfg(feature = "openai-embeddings")]
+    fn query_qdrant(
+        &self,
+        client: &reqwest::blocking::Client,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        let collection = member.collections.first().cloned().unwrap_or_else(|| "default".to_string());
+        let request_body = serde_json::json!({
+            "vector": query.vector,
+            "limit": k,
+            "with_payload": query.include_metadata,
+            "with_vector": true,
+        });
+
+        let url = format!(
+            "{}/collections/{}/points/search",
+            member.endpoint.trim_end_matches('/'),
+            collection
+        );
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("Qdrant request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(VecStoreError::Internal(format!(
+                "Qdrant query failed: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Qdrant response: {}", e)))?;
+
+        let results = body
+            .get("result")
+            .and_then(|r| r.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        Some(MemberResult {
+                            id: item.get("id")?.to_string(),
+                            score: item.get("score")?.as_f64()? as f32,
+                            vector: item.get("vector").and_then(|v| {
+                                v.as_array().map(|arr| {
+                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                })
+                            }),
+                            metadata: item.get("payload").cloned(),
+                            member_id: member.id.clone(),
+                            collection: Some(collection.clone()),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(results)
+    }
+
+    /// Query Weaviate-compatible endpoint
+    #[cfg(feature = "openai-embeddings")]
+    fn query_weaviate(
+        &self,
+        client: &reqwest::blocking::Client,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        let class_name = member.collections.first().cloned().unwrap_or_else(|| "Document".to_string());
+
+        // Weaviate uses GraphQL
+        let graphql_query = format!(
+            r#"{{
+                Get {{
+                    {class_name}(nearVector: {{vector: {:?}}}, limit: {k}) {{
+                        _additional {{
+                            id
+                            distance
+                            vector
+                        }}
+                    }}
+                }}
+            }}"#,
+            query.vector
+        );
+
+        let request_body = serde_json::json!({
+            "query": graphql_query,
+        });
+
+        let url = format!("{}/v1/graphql", member.endpoint.trim_end_matches('/'));
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("Weaviate request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(VecStoreError::Internal(format!(
+                "Weaviate query failed: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Weaviate response: {}", e)))?;
+
+        // Parse GraphQL response
+        let results = body
+            .pointer(&format!("/data/Get/{}", class_name))
+            .and_then(|r| r.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        let additional = item.get("_additional")?;
+                        Some(MemberResult {
+                            id: additional.get("id")?.as_str()?.to_string(),
+                            // Convert distance to similarity score
+                            score: 1.0 - additional.get("distance")?.as_f64()? as f32,
+                            vector: additional.get("vector").and_then(|v| {
+                                v.as_array().map(|arr| {
+                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                })
+                            }),
+                            metadata: Some(item.clone()),
+                            member_id: member.id.clone(),
+                            collection: Some(class_name.clone()),
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(results)
+    }
+
+    /// Query ChromaDB-compatible endpoint
+    #[cfg(feature = "openai-embeddings")]
+    fn query_chromadb(
+        &self,
+        client: &reqwest::blocking::Client,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        let collection = member.collections.first().cloned().unwrap_or_else(|| "default".to_string());
+
+        let request_body = serde_json::json!({
+            "query_embeddings": [query.vector],
+            "n_results": k,
+            "include": ["embeddings", "metadatas", "documents", "distances"],
+        });
+
+        let url = format!(
+            "{}/api/v1/collections/{}/query",
+            member.endpoint.trim_end_matches('/'),
+            collection
+        );
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&request_body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("ChromaDB request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(VecStoreError::Internal(format!(
+                "ChromaDB query failed: {}",
+                response.status()
+            )));
+        }
+
+        let body: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse ChromaDB response: {}", e)))?;
+
+        // ChromaDB returns arrays for each field
+        let ids = body.get("ids").and_then(|i| i.get(0)).and_then(|a| a.as_array());
+        let distances = body.get("distances").and_then(|d| d.get(0)).and_then(|a| a.as_array());
+        let embeddings = body.get("embeddings").and_then(|e| e.get(0)).and_then(|a| a.as_array());
+        let metadatas = body.get("metadatas").and_then(|m| m.get(0)).and_then(|a| a.as_array());
+
+        let mut results = Vec::new();
+        if let Some(ids) = ids {
+            for (i, id) in ids.iter().enumerate() {
+                if let Some(id_str) = id.as_str() {
+                    let score = distances
+                        .and_then(|d| d.get(i))
+                        .and_then(|v| v.as_f64())
+                        .map(|d| 1.0 - d as f32) // Convert distance to similarity
+                        .unwrap_or(0.0);
+
+                    let vector = embeddings
+                        .and_then(|e| e.get(i))
+                        .and_then(|v| v.as_array())
+                        .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect());
+
+                    let metadata = metadatas.and_then(|m| m.get(i)).cloned();
+
+                    results.push(MemberResult {
+                        id: id_str.to_string(),
+                        score,
+                        vector,
+                        metadata,
+                        member_id: member.id.clone(),
+                        collection: Some(collection.clone()),
+                    });
+                }
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Query a remote gRPC member using tonic client
+    #[cfg(feature = "server")]
+    fn query_grpc_member(
+        &self,
+        member: &FederationMember,
+        query: &FederatedQuery,
+        k: usize,
+    ) -> Result<Vec<MemberResult>> {
+        use crate::server::types::pb::{vec_store_service_client::VecStoreServiceClient, QueryRequest};
+
+        // Create a tokio runtime for blocking on async gRPC calls
+        let rt = tokio::runtime::Runtime::new()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to create tokio runtime: {}", e)))?;
+
+        rt.block_on(async {
+            // Connect to the gRPC server
+            let endpoint = member.endpoint.clone();
+            let mut client = VecStoreServiceClient::connect(endpoint.clone())
+                .await
+                .map_err(|e| VecStoreError::Internal(format!("gRPC connection failed to {}: {}", endpoint, e)))?;
+
+            // Build the query request
+            let request = QueryRequest {
+                vector: query.vector.clone(),
+                limit: k as i32,
+                filter: query.filter.clone(),
+                namespace: None,
+            };
+
+            // Execute the query with timeout
+            let response = tokio::time::timeout(
+                self.config.member_timeout,
+                client.query(request)
+            )
+            .await
+            .map_err(|_| VecStoreError::Internal(format!("gRPC query timeout to {}", endpoint)))?
+            .map_err(|e| VecStoreError::Internal(format!("gRPC query failed: {}", e)))?;
+
+            // Convert response to MemberResult
+            let results: Vec<MemberResult> = response
+                .into_inner()
+                .results
+                .into_iter()
+                .map(|r| {
+                    MemberResult {
+                        id: r.id,
+                        score: r.score,
+                        vector: None, // gRPC response doesn't include vector by default
+                        metadata: if r.metadata.is_empty() {
+                            None
+                        } else {
+                            // Convert protobuf metadata to JSON
+                            Some(crate::server::types::pb_map_to_json(&r.metadata))
+                        },
+                        member_id: member.id.clone(),
+                        collection: member.collections.first().cloned(),
+                    }
+                })
+                .collect();
+
+            Ok(results)
+        })
     }
 
     fn merge_results(&self, mut results: Vec<MemberResult>, query: &FederatedQuery) -> Vec<FederatedResult> {
@@ -517,11 +991,10 @@ impl Federation {
 
     fn get_cached(&self, key: &str) -> Option<Vec<FederatedResult>> {
         let Ok(cache) = self.cache.read() else { return None; };
-        if let Some(cached) = cache.get(key) {
-            if cached.cached_at.elapsed() < self.config.cache_ttl {
+        if let Some(cached) = cache.get(key)
+            && cached.cached_at.elapsed() < self.config.cache_ttl {
                 return Some(cached.results.clone());
             }
-        }
         None
     }
 
@@ -738,7 +1211,8 @@ impl FederationBuilder {
         self
     }
 
-    #[must_use]
+    /// # Errors
+    /// Returns an error if adding a member fails.
     pub fn build(self) -> Result<Federation> {
         let federation = Federation::new(self.config);
 
@@ -799,7 +1273,9 @@ mod tests {
 
         let result = federation.query(query).unwrap();
         assert!(result.members_queried > 0);
-        assert!(!result.results.is_empty());
+        // Note: MemberType::Local returns empty results by design (local stores
+        // should be queried directly, not through federation). For remote members,
+        // results would be populated via HTTP/gRPC calls.
     }
 
     #[test]

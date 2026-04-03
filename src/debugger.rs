@@ -424,7 +424,7 @@ impl EmbeddingDebugger {
         // Median
         let mut sorted = embedding.to_vec();
         sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-        let median = if embedding.len() % 2 == 0 {
+        let median = if embedding.len().is_multiple_of(2) {
             (sorted[embedding.len() / 2 - 1] + sorted[embedding.len() / 2]) / 2.0
         } else {
             sorted[embedding.len() / 2]

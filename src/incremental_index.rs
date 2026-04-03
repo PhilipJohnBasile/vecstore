@@ -344,18 +344,16 @@ impl IncrementalIndex {
     /// Check if vector exists
     pub fn exists(&self, id: &str) -> bool {
         // Check tombstones first
-        if let Ok(tombstones) = self.tombstones.read() {
-            if tombstones.contains_key(id) {
+        if let Ok(tombstones) = self.tombstones.read()
+            && tombstones.contains_key(id) {
                 return false;
             }
-        }
 
         // Check delta
-        if let Ok(delta) = self.delta.vectors.read() {
-            if delta.contains_key(id) {
+        if let Ok(delta) = self.delta.vectors.read()
+            && delta.contains_key(id) {
                 return true;
             }
-        }
 
         // Check base indexes
         if let Ok(bases) = self.base_indexes.read() {

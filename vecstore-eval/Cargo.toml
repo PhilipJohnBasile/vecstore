@@ -2,15 +2,16 @@
 name = "vecstore-eval"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.92"
 license = "MIT"
 description = "RAG evaluation toolkit for VecStore - measure retrieval quality, answer faithfulness, and correctness"
-repository = "https://github.com/yourusername/vecstore"
+repository = "https://github.com/PhilipJohnBasile/vecstore"
 
 [dependencies]
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-thiserror = "1"
+thiserror = "2"
 
 # For embeddings in answer correctness metric
 vecstore = { path = "..", default-features = false }

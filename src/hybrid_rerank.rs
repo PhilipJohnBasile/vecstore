@@ -435,7 +435,7 @@ impl InvertedIndex {
         for (term, freq) in term_freqs {
             self.postings
                 .entry(term)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .insert(doc_id.to_string(), freq);
         }
 
@@ -507,7 +507,7 @@ impl SparseIndex {
         for (&idx, &val) in sparse.indices.iter().zip(&sparse.values) {
             self.postings
                 .entry(idx)
-                .or_insert_with(HashMap::new)
+                .or_default()
                 .insert(doc_id.to_string(), val);
         }
     }
@@ -633,8 +633,8 @@ impl HybridPipeline {
         let mut all_signals: Vec<Vec<SignalResult>> = Vec::new();
 
         // Dense search
-        if let Some(ref vector) = query.dense_vector {
-            if weights.0 > 0.0 {
+        if let Some(ref vector) = query.dense_vector
+            && weights.0 > 0.0 {
                 let dense = self.dense_index.read()
                     .map_err(|_| VecStoreError::LockError("dense_index lock poisoned".into()))?;
                 let results = dense.search(vector, self.config.max_candidates);
@@ -650,11 +650,10 @@ impl HybridPipeline {
                     .collect();
                 all_signals.push(signal_results);
             }
-        }
 
         // Sparse search
-        if let Some(ref sparse) = query.sparse_vector {
-            if weights.1 > 0.0 {
+        if let Some(ref sparse) = query.sparse_vector
+            && weights.1 > 0.0 {
                 let sparse_idx = self.sparse_index.read()
                     .map_err(|_| VecStoreError::LockError("sparse_index lock poisoned".into()))?;
                 let results = sparse_idx.search(sparse, self.config.max_candidates);
@@ -670,7 +669,6 @@ impl HybridPipeline {
                     .collect();
                 all_signals.push(signal_results);
             }
-        }
 
         // BM25 search
         if weights.2 > 0.0 && !query.text.is_empty() {

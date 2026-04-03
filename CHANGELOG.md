@@ -5,6 +5,70 @@ All notable changes to VecStore will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2025-12-28
+
+### Changed
+
+#### Post-Modernization Audit Fixes
+- Fixed production panic in `distributed/mod.rs` with defensive programming
+- Fixed failing federation test (Local members return empty by design)
+- Fixed object_store cache test (enabled read_through_cache)
+- Removed unnecessary `std::collections::HashMap` qualifications
+- Fixed all unused variable warnings in tests
+- Fixed all example warnings (12 files)
+- Updated CLI module documentation for disabled state
+
+#### Version Consistency
+- All documentation now references v0.1.0
+- Python bindings updated to 0.1.0
+- pyproject.toml updated to 0.1.0
+
+## [0.0.3] - 2025-12-27
+
+### Changed
+
+#### Rust 1.92 Modernization
+- Upgraded to Rust Edition 2024 with full 1.92 feature support
+- Updated all dependencies to latest stable versions
+- Added comprehensive lint configuration via `.cargo/config.toml` and `clippy.toml`
+- Improved code quality with modern Rust idioms (if-let chains, const fn, etc.)
+
+#### GPU Backends (Complete Implementation)
+- Full CPU backend with SIMD-optimized operations
+- Complete CUDA backend with cuBLAS integration for NVIDIA GPUs
+- Complete Metal backend with Apple Silicon optimization
+- Complete WebGPU backend with WGSL compute shaders
+- GPU operations: batch distance (Euclidean, Cosine, Dot), KNN search, matrix multiply, normalization
+
+#### Distributed System (Complete Implementation)
+- Full Raft consensus implementation with leader election
+- Snapshot installation for state transfer
+- Consistent hash ring for shard distribution
+- Node health monitoring and failure detection
+- gRPC-based inter-node communication
+
+#### Agent Module Enhancements
+- Implemented proper confidence computation from execution traces
+- Added comprehensive agent planning and execution APIs
+- Full filter expression support for agent tools
+
+#### Filter Selectivity Estimation
+- Heuristic-based selectivity estimation for query optimization
+- Support for all filter operators (Eq, Neq, Lt, Gt, Lte, Gte, Contains, In, NotIn, StartsWith)
+- AND/OR/NOT combination rules
+
+### Added
+
+#### New Test Coverage
+- `tests/agent_tests.rs` - Agent module integration tests
+- `tests/gpu_tests.rs` - GPU backend tests (CPU, CUDA, Metal, WebGPU)
+- `tests/distributed_tests.rs` - Distributed system tests
+- `tests/selectivity_tests.rs` - Filter selectivity tests
+
+#### Embeddings Improvements
+- True batching in Candle backend with padding/truncation
+- Dynamic hidden size configuration
+
 ## [0.0.2] - 2025-12-26
 
 ### Added
@@ -361,10 +425,10 @@ See [ROADMAP.md](ROADMAP.md) for planned features.
 
 ## Links
 
-- **Repository:** https://github.com/yourusername/vecstore
+- **Repository:** https://github.com/PhilipJohnBasile/vecstore
 - **Documentation:** https://docs.rs/vecstore
 - **crates.io:** https://crates.io/crates/vecstore
-- **PyPI:** https://pypi.org/project/vecstore (when published)
+- **PyPI:** https://pypi.org/project/vecstore
 
 ---
 

@@ -270,11 +270,10 @@ impl SemanticCache {
             // Calculate similarity
             let similarity = Self::cosine_similarity(embedding, &entry.embedding);
 
-            if similarity >= self.config.similarity_threshold {
-                if best_match.is_none() || similarity > best_match.unwrap().1 {
+            if similarity >= self.config.similarity_threshold
+                && (best_match.is_none() || similarity > best_match.unwrap().1) {
                     best_match = Some((i, similarity));
                 }
-            }
         }
 
         if let Some((idx, similarity)) = best_match {

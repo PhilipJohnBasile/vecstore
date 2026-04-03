@@ -256,7 +256,7 @@ fn main() {
     println!("  Dictionary size: {} words", large_dict.len());
 
     // Measure BK-tree search
-    let mut tree_large = BKTree::from_words(large_dict.clone());
+    let tree_large = BKTree::from_words(large_dict.clone());
 
     let search_query = "word0500";
     let start = std::time::Instant::now();

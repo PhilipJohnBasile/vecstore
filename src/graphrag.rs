@@ -435,24 +435,22 @@ impl GraphRAG {
             // Follow outgoing edges
             if let Some(rels) = self.outgoing.get(&entity_id) {
                 for rel in rels {
-                    if visited.insert(rel.to.clone()) {
-                        if let Some(entity) = self.entities.get(&rel.to) {
+                    if visited.insert(rel.to.clone())
+                        && let Some(entity) = self.entities.get(&rel.to) {
                             result.push(entity.clone());
                             queue.push_back((rel.to.clone(), depth + 1));
                         }
-                    }
                 }
             }
 
             // Follow incoming edges
             if let Some(rels) = self.incoming.get(&entity_id) {
                 for rel in rels {
-                    if visited.insert(rel.from.clone()) {
-                        if let Some(entity) = self.entities.get(&rel.from) {
+                    if visited.insert(rel.from.clone())
+                        && let Some(entity) = self.entities.get(&rel.from) {
                             result.push(entity.clone());
                             queue.push_back((rel.from.clone(), depth + 1));
                         }
-                    }
                 }
             }
         }

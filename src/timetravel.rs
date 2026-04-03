@@ -448,15 +448,14 @@ impl TimeTravelIndex {
 
         for (ts, ids) in ts_idx.range(from..=to) {
             for id in ids {
-                if let Some(history) = histories.get(id) {
-                    if let Some(entry) = history.versions.iter().find(|v| v.timestamp == *ts) {
+                if let Some(history) = histories.get(id)
+                    && let Some(entry) = history.versions.iter().find(|v| v.timestamp == *ts) {
                         changes.push(ChangeRecord {
                             id: id.clone(),
                             timestamp: *ts,
                             op: entry.op,
                         });
                     }
-                }
             }
         }
 
@@ -662,7 +661,7 @@ mod tests {
 
         // Update
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let ts2 = index.upsert("doc1", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
+        let _ts2 = index.upsert("doc1", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
 
         // Current should return updated
         let current = index.get("doc1").unwrap().unwrap();

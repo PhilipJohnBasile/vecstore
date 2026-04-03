@@ -492,13 +492,11 @@ impl VersionedStore {
 
     /// Reset uncommitted changes
     pub fn reset(&self) {
-        if let Ok(branch) = self.current_branch.read().map(|b| b.clone()) {
-            if let Ok(mut storages) = self.storages.write() {
-                if let Some(storage) = storages.get_mut(&branch) {
+        if let Ok(branch) = self.current_branch.read().map(|b| b.clone())
+            && let Ok(mut storages) = self.storages.write()
+                && let Some(storage) = storages.get_mut(&branch) {
                     storage.reset();
                 }
-            }
-        }
     }
 
     /// Delete a branch
@@ -581,8 +579,8 @@ impl VersionedStore {
             let from_data = from_storage.get(id);
             let to_data = to_storage.get(id);
 
-            if let (Some(f), Some(t)) = (from_data, to_data) {
-                if f.vector != t.vector {
+            if let (Some(f), Some(t)) = (from_data, to_data)
+                && f.vector != t.vector {
                     conflicts.push(MergeConflict {
                         id: id.clone(),
                         conflict_type: ConflictType::ModifyModify,
@@ -590,7 +588,6 @@ impl VersionedStore {
                         theirs: Some(f.vector.clone()),
                     });
                 }
-            }
         }
 
         // Handle conflicts based on resolution strategy

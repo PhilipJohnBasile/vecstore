@@ -118,15 +118,16 @@ pub struct Deduplicator {
     config: DeduplicationConfig,
 }
 
+impl Default for Deduplicator {
+    fn default() -> Self {
+        Self::new(DeduplicationConfig::default())
+    }
+}
+
 impl Deduplicator {
     /// Create new deduplicator
     pub fn new(config: DeduplicationConfig) -> Self {
         Self { config }
-    }
-
-    /// Create with default configuration
-    pub fn default() -> Self {
-        Self::new(DeduplicationConfig::default())
     }
 
     /// Find all duplicate groups in the store
@@ -141,8 +142,7 @@ impl Deduplicator {
         let mut groups = Vec::new();
         let mut processed = HashSet::new();
 
-        // Get all vectors from store (simplified - in practice we'd iterate)
-        // This is a placeholder for the actual implementation
+        // Get all active vectors from store using list_active()
         let vectors = self.get_all_vectors(store)?;
 
         for (i, (id1, vec1)) in vectors.iter().enumerate() {
@@ -346,28 +346,61 @@ impl Deduplicator {
         }
     }
 
-    fn get_all_vectors(&self, _store: &VecStore) -> Result<Vec<(String, Vec<f32>)>> {
-        // Placeholder - in practice, this would iterate over store contents
-        // For now, return empty vec as the actual implementation depends on VecStore internals
-        Ok(vec![])
+    /// Get all vectors from the store for deduplication
+    fn get_all_vectors(&self, store: &VecStore) -> Result<Vec<(String, Vec<f32>)>> {
+        // Use list_active() to get non-deleted records
+        let records = store.list_active();
+        Ok(records
+            .into_iter()
+            .map(|r| (r.id.to_string(), r.vector))
+            .collect())
     }
 
     fn vector_to_bytes(&self, vec: &[f32]) -> Vec<u8> {
         vec.iter().flat_map(|f| f.to_le_bytes()).collect()
     }
 
-    fn select_most_metadata<'a>(&self, ids: &'a [String], _store: &VecStore) -> Result<&'a String> {
-        // Placeholder - would query metadata for each ID and select the one with most fields
-        Ok(&ids[0])
+    /// Select the record with the most metadata fields as the canonical version
+    fn select_most_metadata<'a>(&self, ids: &'a [String], store: &VecStore) -> Result<&'a String> {
+        let mut best_id = &ids[0];
+        let mut max_fields = 0;
+
+        for id in ids {
+            if let Some(record) = store.get(id) {
+                let field_count = record.metadata.fields.len();
+                if field_count > max_fields {
+                    max_fields = field_count;
+                    best_id = id;
+                }
+            }
+        }
+
+        Ok(best_id)
     }
 
+    /// Select the record with the highest quality score as the canonical version
     fn select_highest_quality<'a>(
         &self,
         ids: &'a [String],
-        _store: &VecStore,
+        store: &VecStore,
     ) -> Result<&'a String> {
-        // Placeholder - would check "quality" metadata field
-        Ok(&ids[0])
+        let mut best_id = &ids[0];
+        let mut max_quality = f64::MIN;
+
+        for id in ids {
+            if let Some(record) = store.get(id) {
+                // Check for "quality" field in metadata
+                if let Some(quality) = record.metadata.fields.get("quality") {
+                    let q = quality.as_f64().unwrap_or(0.0);
+                    if q > max_quality {
+                        max_quality = q;
+                        best_id = id;
+                    }
+                }
+            }
+        }
+
+        Ok(best_id)
     }
 }
 
@@ -395,7 +428,7 @@ impl BatchDeduplicator {
             duplication_ratio: 0.0,
         };
 
-        let num_chunks = (total + self.chunk_size - 1) / self.chunk_size;
+        let num_chunks = total.div_ceil(self.chunk_size);
 
         for chunk_idx in 0..num_chunks {
             println!("Processing chunk {}/{}...", chunk_idx + 1, num_chunks);
@@ -425,9 +458,6 @@ impl BatchDeduplicator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Metadata;
-    use std::collections::HashMap;
-    use tempfile::TempDir;
 
     #[test]
     fn test_deduplication_config() {

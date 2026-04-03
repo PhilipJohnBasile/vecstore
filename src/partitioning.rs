@@ -208,17 +208,15 @@ impl PartitionedStore {
         metadata: Metadata,
     ) -> Result<()> {
         // Check partition size limit
-        if let Some(max_size) = self.config.max_vectors_per_partition {
-            if let Some(info) = self.partition_info.get(partition_id) {
-                if info.vector_count >= max_size {
+        if let Some(max_size) = self.config.max_vectors_per_partition
+            && let Some(info) = self.partition_info.get(partition_id)
+                && info.vector_count >= max_size {
                     return Err(anyhow::anyhow!(
                         "Partition '{}' has reached maximum size of {} vectors",
                         partition_id,
                         max_size
                     ));
                 }
-            }
-        }
 
         let partition = self.get_or_create_partition(partition_id)?;
         partition.upsert(id, vector, metadata)?;

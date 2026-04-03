@@ -217,7 +217,7 @@ pub fn dot_product_simd(a: &[f32], b: &[f32]) -> f32 {
         target_feature = "sse2"
     ))]
     unsafe {
-        return dot_product_sse2(a, b);
+        dot_product_sse2(a, b)
     }
 
     #[cfg(not(any(
@@ -324,7 +324,7 @@ pub fn manhattan_distance_simd(a: &[f32], b: &[f32]) -> f32 {
         target_feature = "sse2"
     ))]
     unsafe {
-        return manhattan_distance_sse2(a, b);
+        manhattan_distance_sse2(a, b)
     }
 
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]

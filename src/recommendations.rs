@@ -181,15 +181,15 @@ impl PartialEq for Recommendation {
     }
 }
 
-impl PartialOrd for Recommendation {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        self.score.partial_cmp(&other.score)
+impl Ord for Recommendation {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.score.partial_cmp(&other.score).unwrap_or(Ordering::Equal)
     }
 }
 
-impl Ord for Recommendation {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+impl PartialOrd for Recommendation {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -352,13 +352,13 @@ impl RecommendationEngine {
                 if other_item != item_id {
                     *self.cooccurrence
                         .entry(item_id.to_string())
-                        .or_insert_with(HashMap::new)
+                        .or_default()
                         .entry(other_item.clone())
                         .or_insert(0) += 1;
 
                     *self.cooccurrence
                         .entry(other_item.clone())
-                        .or_insert_with(HashMap::new)
+                        .or_default()
                         .entry(item_id.to_string())
                         .or_insert(0) += 1;
                 }
@@ -429,8 +429,8 @@ impl RecommendationEngine {
     fn build_query_vector(&self, request: &RecommendRequest) -> Result<Vec<f32>> {
         if request.positive.is_empty() {
             // Use user profile if available
-            if let Some(user_id) = &request.user_id {
-                if let Some(user) = self.users.get(user_id) {
+            if let Some(user_id) = &request.user_id
+                && let Some(user) = self.users.get(user_id) {
                     if let Some(pref) = &user.preference_vector {
                         return Ok(pref.clone());
                     }
@@ -440,7 +440,6 @@ impl RecommendationEngine {
                         .collect();
                     return self.average_vectors(&positive_ids);
                 }
-            }
             return Err(VecStoreError::InvalidInput(
                 "No positive examples or user profile".to_string()
             ));
@@ -551,12 +550,11 @@ impl RecommendationEngine {
             let mut count = 0;
 
             for positive_id in &request.positive {
-                if let Some(cooc) = self.cooccurrence.get(positive_id) {
-                    if let Some(&freq) = cooc.get(&candidate.id) {
+                if let Some(cooc) = self.cooccurrence.get(positive_id)
+                    && let Some(&freq) = cooc.get(&candidate.id) {
                         collab_score += freq as f32;
                         count += 1;
                     }
-                }
             }
 
             if count > 0 {

@@ -221,7 +221,7 @@ fn main() -> anyhow::Result<()> {
     // Demo 8: Aggregate statistics
     println!("9️⃣  Aggregate statistics across all namespaces...\n");
 
-    let agg_stats = manager.get_aggregate_stats();
+    let agg_stats = manager.get_aggregate_stats()?;
     println!("📊 Global Statistics:");
     println!("   Total namespaces: {}", agg_stats.total_namespaces);
     println!("   Active namespaces: {}", agg_stats.active_namespaces);

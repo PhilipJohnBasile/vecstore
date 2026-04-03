@@ -235,11 +235,10 @@ impl Autoscaler {
         } else if desired < current_replicas {
             // Check scale down delay
             let Ok(last_scale) = self.last_scale_down.read() else { return ScalingDecision::NoChange; };
-            if let Some(last) = *last_scale {
-                if last.elapsed() < Duration::from_secs(self.config.scale_down_delay_secs) {
+            if let Some(last) = *last_scale
+                && last.elapsed() < Duration::from_secs(self.config.scale_down_delay_secs) {
                     return ScalingDecision::NoChange;
                 }
-            }
             ScalingDecision::ScaleDown(current_replicas - desired)
         } else {
             ScalingDecision::NoChange
@@ -336,7 +335,7 @@ impl LoadBalancer {
                 use std::hash::{Hash, Hasher};
 
                 let mut hasher = DefaultHasher::new();
-                std::time::Instant::now().hash(&mut hasher);
+                Instant::now().hash(&mut hasher);
                 let idx = hasher.finish() as usize % ready.len();
                 Some(ready[idx].id.clone())
             }
@@ -667,7 +666,7 @@ fn uuid_simple() -> String {
     use std::hash::{Hash, Hasher};
 
     let mut hasher = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut hasher);
+    Instant::now().hash(&mut hasher);
     format!("{:016x}", hasher.finish())
 }
 

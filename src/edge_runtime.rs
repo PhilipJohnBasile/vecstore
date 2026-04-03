@@ -256,7 +256,7 @@ impl EdgeVectorStore {
             }
             4 => {
                 let scale = if range > 0.0 { range / 15.0 } else { 1.0 };
-                let mut data = Vec::with_capacity((vector.len() + 1) / 2);
+                let mut data = Vec::with_capacity(vector.len().div_ceil(2));
                 for chunk in vector.chunks(2) {
                     let lo = ((chunk[0] - min) / scale).round() as u8;
                     let hi = if chunk.len() > 1 {

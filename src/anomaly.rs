@@ -186,7 +186,7 @@ impl IsolationForest {
         if n <= 1 {
             0.0
         } else {
-            2.0 * ((n as f32).ln() + 0.5772156649) - 2.0 * (n as f32 - 1.0) / (n as f32)
+            2.0 * ((n as f32).ln() + 0.577_215_7) - 2.0 * (n as f32 - 1.0) / (n as f32)
         }
     }
 }
@@ -367,8 +367,8 @@ impl AnomalyDetector for LocalOutlierFactor {
                 let lof = lrd_ratios / neighbors.len() as f32;
 
                 // Normalize: LOF ~ 1 is normal, >> 1 is outlier
-                // Convert to 0-1 scale: (lof - 1).max(0)
-                (lof - 1.0).max(0.0).min(10.0) / 10.0
+                // Convert to 0-1 scale: clamp (lof - 1) to [0, 10]
+                (lof - 1.0).clamp(0.0, 10.0) / 10.0
             })
             .collect();
 

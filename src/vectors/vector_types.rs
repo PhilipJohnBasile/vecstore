@@ -102,15 +102,14 @@ impl Vector {
                 values.len()
             ));
         }
-        if let Some(&max_idx) = indices.iter().max() {
-            if max_idx >= dimension {
+        if let Some(&max_idx) = indices.iter().max()
+            && max_idx >= dimension {
                 return Err(anyhow!(
                     "Sparse vector index {} out of bounds (dimension: {})",
                     max_idx,
                     dimension
                 ));
             }
-        }
         Ok(Vector::Sparse {
             dimension,
             indices,
@@ -277,22 +276,22 @@ impl Vector {
     /// Estimate memory usage in bytes
     pub fn memory_usage(&self) -> usize {
         match self {
-            Vector::Dense(v) => v.len() * std::mem::size_of::<f32>(),
+            Vector::Dense(v) => v.len() * size_of::<f32>(),
             Vector::Sparse {
                 indices, values, ..
             } => {
-                indices.len() * std::mem::size_of::<usize>()
-                    + values.len() * std::mem::size_of::<f32>()
-                    + std::mem::size_of::<usize>() // dimension field
+                indices.len() * size_of::<usize>()
+                    + values.len() * size_of::<f32>()
+                    + size_of::<usize>() // dimension field
             }
             Vector::Hybrid {
                 dense,
                 sparse_indices,
                 sparse_values,
             } => {
-                dense.len() * std::mem::size_of::<f32>()
-                    + sparse_indices.len() * std::mem::size_of::<usize>()
-                    + sparse_values.len() * std::mem::size_of::<f32>()
+                dense.len() * size_of::<f32>()
+                    + sparse_indices.len() * size_of::<usize>()
+                    + sparse_values.len() * size_of::<f32>()
             }
         }
     }

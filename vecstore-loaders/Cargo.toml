@@ -2,16 +2,17 @@
 name = "vecstore-loaders"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.92"
 authors = ["VecStore Contributors"]
 description = "Document loaders for VecStore - PDF, web, markdown, and more"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/yourusername/vecstore"
+repository = "https://github.com/PhilipJohnBasile/vecstore"
 keywords = ["vector-database", "document-loader", "rag", "pdf", "markdown"]
 categories = ["database", "text-processing"]
 
 [dependencies]
 anyhow = "1.0"
-thiserror = "1.0"
+thiserror = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
@@ -43,9 +44,12 @@ web = ["reqwest", "scraper"]
 json = []
 csv = ["dep:csv"]
 code = ["tree-sitter"]
-docx = ["docx-rs"]
+docx = ["docx-rs", "zip", "quick-xml"]
 pptx = ["zip", "quick-xml"]
 epub = ["dep:epub"]
 
+# Extended loaders (XLSX, ODS, RTF, LaTeX, XML, YAML, TOML, SQL, EML, Jupyter, Archives)
+extended = []
+
 # Convenience features
-all = ["text", "markdown", "pdf", "web", "json", "csv", "code", "docx", "pptx", "epub"]
+all = ["text", "markdown", "pdf", "web", "json", "csv", "code", "docx", "pptx", "epub", "extended"]

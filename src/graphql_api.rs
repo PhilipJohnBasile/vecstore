@@ -62,7 +62,7 @@ impl GqlType {
             GqlType::Int => "Int".to_string(),
             GqlType::Float => "Float".to_string(),
             GqlType::Boolean => "Boolean".to_string(),
-            GqlType::Vector(_dim) => format!("[Float!]"),
+            GqlType::Vector(_dim) => "[Float!]".to_string(),
             GqlType::Object(name) => name.clone(),
             GqlType::List(inner) => format!("[{}]", inner.to_sdl()),
             GqlType::NonNull(inner) => format!("{}!", inner.to_sdl()),
@@ -291,11 +291,10 @@ impl GraphQLExecutor {
                 let certainty = (similarity + 1.0) / 2.0;  // Convert to 0-1 range
 
                 // Check certainty threshold
-                if let Some(min_cert) = near_vector.certainty {
-                    if certainty < min_cert {
+                if let Some(min_cert) = near_vector.certainty
+                    && certainty < min_cert {
                         continue;
                     }
-                }
 
                 // Check distance threshold
                 if let Some(max_dist) = near_vector.distance {
@@ -343,11 +342,7 @@ impl GraphQLExecutor {
                     id: Some(id),
                     certainty: Some((score + 1.0) / 2.0),
                     distance: Some(1.0 - score),
-                    vector: if query.additional.contains(&"vector".to_string()) {
-                        None  // Would include vector here
-                    } else {
-                        None
-                    },
+                    vector: None, // Vector retrieval not yet implemented
                     creation_time: None,
                     last_update_time: None,
                     explanation: None,
@@ -382,23 +377,19 @@ impl GraphQLExecutor {
                 }
             }
             WhereOperator::Equal => {
-                if let Some(path) = &filter.path {
-                    if let Some(field) = path.first() {
-                        if let Some(value) = props.get(field) {
+                if let Some(path) = &filter.path
+                    && let Some(field) = path.first()
+                        && let Some(value) = props.get(field) {
                             return self.compare_equal(value, filter);
                         }
-                    }
-                }
                 false
             }
             WhereOperator::NotEqual => {
-                if let Some(path) = &filter.path {
-                    if let Some(field) = path.first() {
-                        if let Some(value) = props.get(field) {
+                if let Some(path) = &filter.path
+                    && let Some(field) = path.first()
+                        && let Some(value) = props.get(field) {
                             return !self.compare_equal(value, filter);
                         }
-                    }
-                }
                 true
             }
             WhereOperator::GreaterThan => {
@@ -414,21 +405,18 @@ impl GraphQLExecutor {
                 self.compare_numeric(filter, props, |a, b| a <= b)
             }
             WhereOperator::Like => {
-                if let (Some(path), Some(pattern)) = (&filter.path, &filter.value_string) {
-                    if let Some(field) = path.first() {
-                        if let Some(JsonValue::String(s)) = props.get(field) {
+                if let (Some(path), Some(pattern)) = (&filter.path, &filter.value_string)
+                    && let Some(field) = path.first()
+                        && let Some(JsonValue::String(s)) = props.get(field) {
                             return self.match_like(s, pattern);
                         }
-                    }
-                }
                 false
             }
             WhereOperator::IsNull => {
-                if let Some(path) = &filter.path {
-                    if let Some(field) = path.first() {
+                if let Some(path) = &filter.path
+                    && let Some(field) = path.first() {
                         return props.get(field).map(|v| v.is_null()).unwrap_or(true);
                     }
-                }
                 false
             }
             _ => true,
@@ -455,10 +443,10 @@ impl GraphQLExecutor {
     where
         F: Fn(f64, f64) -> bool,
     {
-        if let Some(path) = &filter.path {
-            if let Some(field) = path.first() {
-                if let Some(value) = props.get(field) {
-                    if let Some(v) = value.as_f64() {
+        if let Some(path) = &filter.path
+            && let Some(field) = path.first()
+                && let Some(value) = props.get(field)
+                    && let Some(v) = value.as_f64() {
                         if let Some(n) = filter.value_number {
                             return cmp(v, n);
                         }
@@ -466,9 +454,6 @@ impl GraphQLExecutor {
                             return cmp(v, i as f64);
                         }
                     }
-                }
-            }
-        }
         false
     }
 
@@ -560,26 +545,111 @@ impl Default for GraphQLExecutor {
 // ============================================================================
 
 /// Parse a GraphQL query string into VectorQuery
+///
+/// # Implementation Note
+/// This is a simplified parser that handles common query patterns.
+/// For production use with complex queries, consider using the `graphql-parser` crate
+/// or the `async-graphql` crate for full GraphQL specification compliance.
+///
+/// # Supported Patterns
+/// - `Get { CollectionName (...) { fields } }`
+/// - `nearVector: { vector: [...], certainty: X }`
+/// - `where: { path: [...], operator: X, value: Y }`
+/// - `limit: N`
+///
+/// # Example
+/// ```ignore
+/// let query = r#"
+///     query {
+///         Get {
+///             MyCollection(
+///                 nearVector: { vector: [0.1, 0.2, 0.3] }
+///                 limit: 10
+///             ) {
+///                 name
+///                 _additional { certainty }
+///             }
+///         }
+///     }
+/// "#;
+/// let parsed = parse_query(query)?;
+/// ```
 pub fn parse_query(query_str: &str) -> Result<VectorQuery> {
-    // Simplified parser - would use a proper GraphQL parser in production
-    // This is a placeholder that extracts basic information
+    // Simplified parser for common GraphQL-like vector query patterns
+    // Supports the most common query structures used in vector databases
 
     let collection = extract_collection(query_str)?;
     let near_vector = extract_near_vector(query_str);
     let where_filter = extract_where(query_str);
     let limit = extract_limit(query_str);
+    let offset = extract_offset(query_str);
     let fields = extract_fields(query_str);
+    let additional = extract_additional(query_str);
 
     Ok(VectorQuery {
         collection,
         near_vector,
-        near_text: None,
+        near_text: extract_near_text(query_str),
         where_filter,
         limit,
-        offset: None,
+        offset,
         fields,
-        additional: vec!["certainty".to_string(), "distance".to_string()],
+        additional,
     })
+}
+
+fn extract_offset(query: &str) -> Option<usize> {
+    if let Some(start) = query.find("offset:") {
+        let rest = &query[start + 7..];
+        let num_str: String = rest.trim().chars().take_while(|c| c.is_numeric()).collect();
+        num_str.parse().ok()
+    } else {
+        None
+    }
+}
+
+fn extract_near_text(query: &str) -> Option<NearTextInput> {
+    if let Some(start) = query.find("nearText:") {
+        // Look for concepts array
+        if let Some(concepts_start) = query[start..].find("concepts:")
+            && let Some(bracket_start) = query[start + concepts_start..].find('[')
+            && let Some(bracket_end) = query[start + concepts_start + bracket_start..].find(']')
+        {
+            let concepts_str = &query[start + concepts_start + bracket_start + 1
+                ..start + concepts_start + bracket_start + bracket_end];
+            let concepts: Vec<String> = concepts_str
+                .split(',')
+                .map(|s| s.trim().trim_matches('"').to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+
+            if !concepts.is_empty() {
+                return Some(NearTextInput {
+                    concepts,
+                    certainty: extract_float(query, "certainty:"),
+                    distance: extract_float(query, "distance:"),
+                    move_to: None,
+                    move_away_from: None,
+                });
+            }
+        }
+    }
+    None
+}
+
+fn extract_additional(query: &str) -> Vec<String> {
+    if let Some(start) = query.find("_additional")
+        && let Some(brace_start) = query[start..].find('{')
+        && let Some(brace_end) = query[start + brace_start..].find('}')
+    {
+        let fields_str = &query[start + brace_start + 1..start + brace_start + brace_end];
+        return fields_str
+            .split_whitespace()
+            .filter(|s| !s.is_empty() && s.chars().all(|c| c.is_alphanumeric() || c == '_'))
+            .map(|s| s.to_string())
+            .collect();
+    }
+    vec!["certainty".to_string(), "distance".to_string()]
 }
 
 fn extract_collection(query: &str) -> Result<String> {
@@ -603,9 +673,9 @@ fn extract_collection(query: &str) -> Result<String> {
 fn extract_near_vector(query: &str) -> Option<NearVectorInput> {
     if let Some(start) = query.find("nearVector:") {
         // Very simplified - would need proper parsing
-        if let Some(vec_start) = query[start..].find("vector:") {
-            if let Some(bracket_start) = query[start + vec_start..].find('[') {
-                if let Some(bracket_end) = query[start + vec_start + bracket_start..].find(']') {
+        if let Some(vec_start) = query[start..].find("vector:")
+            && let Some(bracket_start) = query[start + vec_start..].find('[')
+                && let Some(bracket_end) = query[start + vec_start + bracket_start..].find(']') {
                     let vec_str = &query[start + vec_start + bracket_start + 1..start + vec_start + bracket_start + bracket_end];
                     let vector: Vec<f32> = vec_str.split(',')
                         .filter_map(|s| s.trim().parse().ok())
@@ -618,8 +688,6 @@ fn extract_near_vector(query: &str) -> Option<NearVectorInput> {
                         });
                     }
                 }
-            }
-        }
     }
     None
 }

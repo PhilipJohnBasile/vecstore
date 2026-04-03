@@ -246,7 +246,7 @@ impl Lexer {
                     self.skip_whitespace();
 
                     // Try to read next word
-                    if self.peek().map_or(false, |c| c.is_alphabetic()) {
+                    if self.peek().is_some_and(|c| c.is_alphabetic()) {
                         let next_ident = self.read_ident_or_keyword();
                         if next_ident.to_uppercase() == "IN" {
                             return Ok(Token::NotIn);

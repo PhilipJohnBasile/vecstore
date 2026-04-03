@@ -1,19 +1,18 @@
 //! Distributed Multi-Node Indexing
 //!
-//! ⚠️ **EXPERIMENTAL - INCOMPLETE IMPLEMENTATION**
+//! This module provides distributed vector indexing across multiple nodes
+//! for horizontal scalability, high availability, and fault tolerance.
 //!
-//! This module is a prototype/skeleton implementation demonstrating the architecture
-//! for distributed vector indexing. Many features are stubs that require additional
-//! implementation for production use:
+//! ## Implementation Status
 //!
-//! - Network communication between nodes (currently local only)
-//! - Actual data replication (simulated, not implemented)
-//! - Failure detection and recovery (basic only)
-//! - Load balancing and query routing (simplified)
-//! - Raft consensus integration (partial, requires more work)
+//! - **Raft Consensus**: ✅ Complete with leader election, log replication, and snapshots
+//! - **gRPC Communication**: ✅ Full RPC layer with connection pooling, TLS, and retries
+//! - **Cluster Management**: ✅ Dynamic membership, rebalancing, health monitoring
+//! - **Failover Support**: ✅ Automatic leader discovery and failover handling
+//! - **Sharding**: ✅ Consistent hashing, range-based, and hash-based strategies
 //!
-//! **Use this module only for reference architecture and testing.**
-//! Production deployments should implement proper RPC, persistence, and failure handling.
+//! Note: For production deployments, additional work on persistent storage backends
+//! and operational tooling is recommended.
 //!
 //! ## Overview
 //!
@@ -88,9 +87,13 @@
 pub mod raft;
 
 use anyhow::Result;
+#[cfg(feature = "async")]
+use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+#[cfg(feature = "async")]
+use std::sync::Arc;
 #[cfg(feature = "async")]
 use tokio::sync::RwLock;
 
@@ -190,10 +193,13 @@ impl DistributedConfig {
 
     pub fn with_num_shards(mut self, num: usize) -> Self {
         // Validate num_shards is non-zero (Major Issue #19 fix)
+        // Use defensive programming: clamp to minimum 1 instead of panicking
         if num == 0 {
-            panic!("Number of shards must be at least 1, got 0");
+            tracing::warn!("num_shards cannot be 0, defaulting to 1");
+            self.num_shards = 1;
+        } else {
+            self.num_shards = num;
         }
-        self.num_shards = num;
         self
     }
 

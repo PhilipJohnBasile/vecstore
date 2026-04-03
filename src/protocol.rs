@@ -47,7 +47,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-use crate::store::{Metadata, Query, VecStore};
+use crate::store::{FilterExpr, FilterOp, Metadata, Query, VecStore};
 
 /// Supported vector database protocols
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -393,8 +393,8 @@ impl ProtocolAdapter {
 
             let vectors: Vec<VectorData> = embeddings_array
                 .into_iter()
-                .zip(ids.into_iter())
-                .zip(metadatas.into_iter())
+                .zip(ids)
+                .zip(metadatas)
                 .map(|((vector, id), metadata)| VectorData {
                     id,
                     vector,
@@ -487,28 +487,36 @@ impl ProtocolAdapter {
             UniversalRequest::Query {
                 vector,
                 top_k,
-                filter: _,
+                filter,
                 include_metadata,
             } => {
+                // Convert filter HashMap to FilterExpr if provided
+                let filter_expr = filter.and_then(|f| self.convert_filter_to_expr(&f));
+
                 let query = Query {
                     vector,
                     k: top_k,
-                    filter: None, // TODO: Convert filter to FilterExpr
+                    filter: filter_expr,
                 };
 
                 let results = self.store.query(query)?;
 
                 let matches: Vec<Match> = results
                     .into_iter()
-                    .map(|neighbor| Match {
-                        id: neighbor.id,
-                        score: neighbor.score,
-                        metadata: if include_metadata.unwrap_or(false) {
-                            Some(self.metadata_to_value_map(&neighbor.metadata))
-                        } else {
-                            None
-                        },
-                        values: None, // TODO: Fetch actual vectors if requested
+                    .map(|neighbor| {
+                        // Fetch vector values from store if needed
+                        let values = self.store.get(&neighbor.id).map(|r| r.vector.clone());
+
+                        Match {
+                            id: neighbor.id,
+                            score: neighbor.score,
+                            metadata: if include_metadata.unwrap_or(false) {
+                                Some(self.metadata_to_value_map(&neighbor.metadata))
+                            } else {
+                                None
+                            },
+                            values,
+                        }
                     })
                     .collect();
 
@@ -527,11 +535,23 @@ impl ProtocolAdapter {
                 })
             }
 
-            UniversalRequest::Fetch { ids: _ } => {
-                // TODO: Implement fetch - requires get_by_id method on VecStore
-                Ok(UniversalResponse::Fetch {
-                    vectors: HashMap::new(),
-                })
+            UniversalRequest::Fetch { ids } => {
+                let mut vectors = HashMap::new();
+
+                for id in ids {
+                    if let Some(record) = self.store.get(&id) {
+                        vectors.insert(
+                            id.clone(),
+                            VectorData {
+                                id,
+                                vector: record.vector.clone(),
+                                metadata: self.metadata_to_value_map(&record.metadata),
+                            },
+                        );
+                    }
+                }
+
+                Ok(UniversalResponse::Fetch { vectors })
             }
         }
     }
@@ -541,7 +561,8 @@ impl ProtocolAdapter {
         match protocol {
             Protocol::Pinecone => self.format_pinecone(response),
             Protocol::Qdrant => self.format_qdrant(response),
-            Protocol::Universal | _ => {
+            // Universal and other protocols fall back to the native JSON format
+            Protocol::Universal | Protocol::Weaviate | Protocol::ChromaDB | Protocol::Milvus => {
                 serde_json::to_string(&response).map_err(|e| anyhow!("Serialization error: {}", e))
             }
         }
@@ -625,6 +646,109 @@ impl ProtocolAdapter {
     /// Helper: Convert Metadata to Value map
     fn metadata_to_value_map(&self, metadata: &Metadata) -> HashMap<String, Value> {
         metadata.fields.clone()
+    }
+
+    /// Helper: Convert filter HashMap to FilterExpr
+    ///
+    /// Supports common filter formats:
+    /// - `{"field": value}` -> equals comparison
+    /// - `{"field": {"$eq": value}}` -> equals
+    /// - `{"field": {"$ne": value}}` -> not equals
+    /// - `{"field": {"$gt": value}}` -> greater than
+    /// - `{"field": {"$gte": value}}` -> greater than or equal
+    /// - `{"field": {"$lt": value}}` -> less than
+    /// - `{"field": {"$lte": value}}` -> less than or equal
+    /// - `{"field": {"$in": [values]}}` -> in list
+    /// - `{"$and": [filters]}` -> AND combination
+    /// - `{"$or": [filters]}` -> OR combination
+    fn convert_filter_to_expr(&self, filter: &HashMap<String, Value>) -> Option<FilterExpr> {
+        if filter.is_empty() {
+            return None;
+        }
+
+        let mut conditions = Vec::new();
+
+        for (key, value) in filter {
+            match key.as_str() {
+                "$and" => {
+                    if let Some(arr) = value.as_array() {
+                        let sub_filters: Vec<FilterExpr> = arr
+                            .iter()
+                            .filter_map(|v| {
+                                if let Some(obj) = v.as_object() {
+                                    let map: HashMap<String, Value> =
+                                        obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                                    self.convert_filter_to_expr(&map)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        if !sub_filters.is_empty() {
+                            conditions.push(FilterExpr::And(sub_filters));
+                        }
+                    }
+                }
+                "$or" => {
+                    if let Some(arr) = value.as_array() {
+                        let sub_filters: Vec<FilterExpr> = arr
+                            .iter()
+                            .filter_map(|v| {
+                                if let Some(obj) = v.as_object() {
+                                    let map: HashMap<String, Value> =
+                                        obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+                                    self.convert_filter_to_expr(&map)
+                                } else {
+                                    None
+                                }
+                            })
+                            .collect();
+                        if !sub_filters.is_empty() {
+                            conditions.push(FilterExpr::Or(sub_filters));
+                        }
+                    }
+                }
+                field => {
+                    // Check if value is an operator object
+                    if let Some(obj) = value.as_object() {
+                        for (op, op_value) in obj {
+                            let filter_op = match op.as_str() {
+                                "$eq" => Some(FilterOp::Eq),
+                                "$ne" | "$neq" => Some(FilterOp::Neq),
+                                "$gt" => Some(FilterOp::Gt),
+                                "$gte" => Some(FilterOp::Gte),
+                                "$lt" => Some(FilterOp::Lt),
+                                "$lte" => Some(FilterOp::Lte),
+                                "$in" => Some(FilterOp::In),
+                                "$contains" => Some(FilterOp::Contains),
+                                _ => None,
+                            };
+
+                            if let Some(op) = filter_op {
+                                conditions.push(FilterExpr::Cmp {
+                                    field: field.to_string(),
+                                    op,
+                                    value: op_value.clone(),
+                                });
+                            }
+                        }
+                    } else {
+                        // Simple equality: {"field": value}
+                        conditions.push(FilterExpr::Cmp {
+                            field: field.to_string(),
+                            op: FilterOp::Eq,
+                            value: value.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        match conditions.len() {
+            0 => None,
+            1 => Some(conditions.into_iter().next().unwrap()),
+            _ => Some(FilterExpr::And(conditions)),
+        }
     }
 
     /// Get mutable reference to store

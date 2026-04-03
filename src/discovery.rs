@@ -584,8 +584,8 @@ impl DiscoveryIndex {
 
             for c in 0..k {
                 if counts[c] > 0 {
-                    for j in 0..dim {
-                        new_centroids[c][j] /= counts[c] as f32;
+                    for val in new_centroids[c].iter_mut().take(dim) {
+                        *val /= counts[c] as f32;
                     }
                     // Normalize
                     let norm: f32 = new_centroids[c].iter().map(|x| x * x).sum::<f32>().sqrt();
@@ -604,7 +604,7 @@ impl DiscoveryIndex {
         let mut regions: Vec<Region> = Vec::new();
         let mut representatives: HashMap<usize, Vec<String>> = HashMap::new();
 
-        for c in 0..k {
+        for (c, centroid) in centroids.iter().enumerate().take(k) {
             let members: Vec<String> = vec_list
                 .iter()
                 .enumerate()
@@ -617,7 +617,7 @@ impl DiscoveryIndex {
                 let radius: f32 = members
                     .iter()
                     .filter_map(|id| vectors.get(id))
-                    .map(|v| 1.0 - cosine_similarity(v, &centroids[c]))
+                    .map(|v| 1.0 - cosine_similarity(v, centroid))
                     .fold(0.0f32, f32::max);
 
                 // Find representatives (closest to centroid)
@@ -625,7 +625,7 @@ impl DiscoveryIndex {
                     .iter()
                     .filter_map(|id| {
                         vectors.get(id).map(|v| {
-                            (id.clone(), cosine_similarity(v, &centroids[c]))
+                            (id.clone(), cosine_similarity(v, centroid))
                         })
                     })
                     .collect();

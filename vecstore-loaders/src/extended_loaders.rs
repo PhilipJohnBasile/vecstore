@@ -3,10 +3,9 @@
 //! Additional loaders for specialized formats: XLSX, ODS, RTF, LaTeX, XML, YAML, TOML,
 //! SQL, EML, Jupyter Notebooks, Archives, and enhanced code support.
 
-use crate::{Document, DocumentLoader, LoaderError, LoaderOptions, Result};
+use crate::{Document, DocumentLoader, Result};
 use std::collections::HashMap;
 use std::fs;
-use std::io::Read;
 use std::path::Path;
 
 // ============================================================================
@@ -135,7 +134,7 @@ impl RtfLoader {
     pub fn strip_rtf(rtf_content: &str) -> String {
         let mut result = String::new();
         let mut in_control = false;
-        let mut in_group = 0;
+        let mut in_group: usize = 0;
 
         for ch in rtf_content.chars() {
             match ch {
@@ -215,7 +214,6 @@ impl LatexLoader {
     /// Extract text from LaTeX, removing commands and comments
     pub fn extract_text(latex: &str, strip_comments: bool, strip_commands: bool) -> String {
         let mut result = String::new();
-        let mut in_command = false;
         let lines = latex.lines();
 
         for line in lines {
@@ -605,21 +603,35 @@ impl DocumentLoader for EmlLoader {
 /// Jupyter Notebook (.ipynb) loader
 pub struct JupyterLoader {
     include_outputs: bool,
-    include_markdown: bool,
+    include_code: bool,
 }
 
 impl JupyterLoader {
     pub fn new() -> Self {
         Self {
             include_outputs: true,
-            include_markdown: true,
+            include_code: true,
         }
     }
 
-    pub fn code_only(mut self) -> Self {
-        self.include_markdown = false;
+    pub fn markdown_only(mut self) -> Self {
+        self.include_code = false;
         self.include_outputs = false;
         self
+    }
+
+    /// Extract source from a Jupyter cell source field (can be string or array of strings)
+    fn extract_source(source: &serde_json::Value) -> String {
+        match source {
+            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Array(arr) => {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .collect::<Vec<_>>()
+                    .join("")
+            }
+            _ => String::new(),
+        }
     }
 }
 
@@ -633,17 +645,87 @@ impl DocumentLoader for JupyterLoader {
     fn load(&self, source: &str) -> Result<Document> {
         let notebook_content = fs::read_to_string(source)?;
 
-        // Parse JSON
-        // Real implementation would use serde_json to parse cells
-        let mut content = String::new();
+        // Parse JSON notebook
+        let notebook: serde_json::Value = serde_json::from_str(&notebook_content)
+            .map_err(|e| crate::LoaderError::ParseError(format!("Invalid notebook JSON: {}", e)))?;
+
+        let mut content_parts = Vec::new();
         let mut metadata = HashMap::new();
 
         metadata.insert("format".to_string(), "ipynb".to_string());
         metadata.insert("loader".to_string(), "JupyterLoader".to_string());
 
-        content.push_str("Jupyter Notebook\n\n");
-        content.push_str("Note: Full parsing requires serde_json.\n");
+        // Extract notebook metadata
+        if let Some(nb_metadata) = notebook.get("metadata") {
+            if let Some(kernel) = nb_metadata.get("kernelspec").and_then(|k| k.get("display_name")) {
+                if let Some(kernel_name) = kernel.as_str() {
+                    metadata.insert("kernel".to_string(), kernel_name.to_string());
+                }
+            }
+            if let Some(lang) = nb_metadata.get("language_info").and_then(|l| l.get("name")) {
+                if let Some(lang_name) = lang.as_str() {
+                    metadata.insert("language".to_string(), lang_name.to_string());
+                }
+            }
+        }
 
+        // Extract cells
+        let mut cell_count = 0;
+        let mut code_cells = 0;
+        let mut markdown_cells = 0;
+
+        if let Some(cells) = notebook.get("cells").and_then(|c| c.as_array()) {
+            for cell in cells {
+                cell_count += 1;
+                let cell_type = cell.get("cell_type").and_then(|t| t.as_str()).unwrap_or("unknown");
+
+                match cell_type {
+                    "code" => {
+                        code_cells += 1;
+                        if self.include_code {
+                            if let Some(source) = cell.get("source") {
+                                let code = Self::extract_source(source);
+                                if !code.is_empty() {
+                                    content_parts.push(format!("```\n{}\n```", code));
+                                }
+                            }
+                        }
+                        // Include outputs if requested
+                        if self.include_outputs {
+                            if let Some(outputs) = cell.get("outputs").and_then(|o| o.as_array()) {
+                                for output in outputs {
+                                    if let Some(text) = output.get("text").and_then(|t| t.as_array()) {
+                                        let output_text: String = text.iter()
+                                            .filter_map(|s| s.as_str())
+                                            .collect::<Vec<_>>()
+                                            .join("");
+                                        if !output_text.is_empty() {
+                                            content_parts.push(format!("Output:\n{}", output_text));
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "markdown" => {
+                        markdown_cells += 1;
+                        if let Some(source) = cell.get("source") {
+                            let md_content = Self::extract_source(source);
+                            if !md_content.is_empty() {
+                                content_parts.push(md_content);
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        metadata.insert("cell_count".to_string(), cell_count.to_string());
+        metadata.insert("code_cells".to_string(), code_cells.to_string());
+        metadata.insert("markdown_cells".to_string(), markdown_cells.to_string());
+
+        let content = content_parts.join("\n\n");
         Ok(Document::with_metadata(content, source.to_string(), metadata))
     }
 

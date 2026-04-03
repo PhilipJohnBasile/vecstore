@@ -50,13 +50,13 @@ use anyhow::Result;
 use anyhow::{anyhow, Context};
 
 #[cfg(feature = "embeddings")]
-use ndarray::{Array2, CowArray};
+use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::{Environment, GraphOptimizationLevel, Session, SessionBuilder, Value};
+use ort::session::{builder::GraphOptimizationLevel, Session};
 #[cfg(feature = "embeddings")]
 use std::path::{Path, PathBuf};
 #[cfg(feature = "embeddings")]
-use std::sync::Arc;
+use std::sync::Mutex;
 #[cfg(feature = "embeddings")]
 use tokenizers::tokenizer::Tokenizer;
 
@@ -176,8 +176,7 @@ impl TextEmbedder for SimpleEmbedder {
 /// It uses sentence-transformer models exported to ONNX format.
 #[cfg(feature = "embeddings")]
 pub struct Embedder {
-    environment: Arc<Environment>,
-    session: Session,
+    session: Mutex<Session>,
     tokenizer: Tokenizer,
     max_length: usize,
 }
@@ -199,19 +198,14 @@ impl Embedder {
     /// println!("Embedding dimension: {}", embedding.len());
     /// ```
     pub fn new(model_path: impl AsRef<Path>, tokenizer_path: impl AsRef<Path>) -> Result<Self> {
-        // Initialize ONNX Runtime environment
-        let environment = Arc::new(
-            Environment::builder()
-                .with_name("vecstore")
-                .build()
-                .context("Failed to create ONNX Runtime environment")?,
-        );
-
-        // Initialize ONNX Runtime session
-        let session = SessionBuilder::new(&environment)?
-            .with_optimization_level(GraphOptimizationLevel::Level3)?
-            .with_intra_threads(4)?
-            .with_model_from_file(model_path.as_ref())
+        // Initialize ONNX Runtime session with ort 2.0 API
+        let session = Session::builder()
+            .context("Failed to create session builder")?
+            .with_optimization_level(GraphOptimizationLevel::Level3)
+            .context("Failed to set optimization level")?
+            .with_intra_threads(4)
+            .context("Failed to set intra threads")?
+            .commit_from_file(model_path.as_ref())
             .context("Failed to load ONNX model")?;
 
         // Load tokenizer
@@ -219,8 +213,7 @@ impl Embedder {
             .map_err(|e| anyhow!("Failed to load tokenizer: {}", e))?;
 
         Ok(Self {
-            environment,
-            session,
+            session: Mutex::new(session),
             tokenizer,
             max_length: 512, // Standard max length for most sentence transformers
         })
@@ -314,36 +307,32 @@ impl Embedder {
         let token_type_ids_array =
             Array2::from_shape_vec((batch_size, seq_length), token_type_ids)?;
 
-        // Convert to CowArray for ORT
-        let input_ids_cow = CowArray::from(&input_ids_array).into_dyn();
-        let attention_mask_cow = CowArray::from(&attention_mask_array).into_dyn();
-        let token_type_ids_cow = CowArray::from(&token_type_ids_array).into_dyn();
+        // Create Tensor objects for ort 2.0
+        let input_ids_tensor = ort::value::Tensor::from_array(input_ids_array)?;
+        let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
+        let token_type_ids_tensor = ort::value::Tensor::from_array(token_type_ids_array)?;
 
-        // Create Value objects for ORT
-        let input_ids_value = Value::from_array(self.session.allocator(), &input_ids_cow)?;
-        let attention_mask_value =
-            Value::from_array(self.session.allocator(), &attention_mask_cow)?;
-        let token_type_ids_value =
-            Value::from_array(self.session.allocator(), &token_type_ids_cow)?;
+        // Run inference using ort 2.0 inputs! macro and extract results
+        // We need to extract data while holding the lock, then release it
+        let embeddings_array = {
+            let mut session_guard = self.session.lock()
+                .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
+            let outputs = session_guard
+                .run(ort::inputs![
+                    input_ids_tensor,
+                    attention_mask_tensor,
+                    token_type_ids_tensor
+                ])
+                .context("ONNX inference failed")?;
 
-        // Run inference
-        let outputs = self
-            .session
-            .run(vec![
-                input_ids_value,
-                attention_mask_value,
-                token_type_ids_value,
-            ])
-            .context("ONNX inference failed")?;
-
-        // Extract embeddings from output
-        // Most sentence transformers output shape: (batch_size, seq_length, hidden_size)
-        // We need to apply mean pooling over the sequence dimension
-        let embeddings_array = outputs[0]
-            .try_extract::<f32>()
-            .context("Failed to extract output tensor")?
-            .view()
-            .to_owned();
+            // Extract embeddings from output using ort 2.0 API
+            // Most sentence transformers output shape: (batch_size, seq_length, hidden_size)
+            // We need to apply mean pooling over the sequence dimension
+            let embeddings_view = outputs[0]
+                .try_extract_array::<f32>()
+                .context("Failed to extract output tensor")?;
+            embeddings_view.to_owned()
+        };
 
         // Apply mean pooling
         let embeddings = self.mean_pooling(&embeddings_array, &attention_mask_for_pooling)?;
@@ -578,7 +567,7 @@ impl EmbeddingStore {
     }
 
     /// Save the store to disk
-    pub fn save(&self) -> Result<()> {
+    pub fn save(&mut self) -> Result<()> {
         self.store.save()
     }
 

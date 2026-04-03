@@ -103,16 +103,14 @@ impl DateRangeFilter {
 
     /// Check if a timestamp matches this filter
     pub fn matches(&self, timestamp: i64) -> bool {
-        if let Some(start) = self.start {
-            if timestamp < start {
+        if let Some(start) = self.start
+            && timestamp < start {
                 return false;
             }
-        }
-        if let Some(end) = self.end {
-            if timestamp > end {
+        if let Some(end) = self.end
+            && timestamp > end {
                 return false;
             }
-        }
         true
     }
 
@@ -134,16 +132,14 @@ impl NumericRangeFilter {
     }
 
     pub fn matches(&self, value: f64) -> bool {
-        if let Some(min) = self.min {
-            if value < min {
+        if let Some(min) = self.min
+            && value < min {
                 return false;
             }
-        }
-        if let Some(max) = self.max {
-            if value > max {
+        if let Some(max) = self.max
+            && value > max {
                 return false;
             }
-        }
         true
     }
 }
@@ -182,16 +178,14 @@ impl ArrayFilter {
 
             ArrayFilter::Length { min, max } => {
                 let len = arr.len();
-                if let Some(min_len) = min {
-                    if len < *min_len {
+                if let Some(min_len) = min
+                    && len < *min_len {
                         return false;
                     }
-                }
-                if let Some(max_len) = max {
-                    if len > *max_len {
+                if let Some(max_len) = max
+                    && len > *max_len {
                         return false;
                     }
-                }
                 true
             }
         }

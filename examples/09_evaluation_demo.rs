@@ -54,7 +54,7 @@ fn main() -> Result<()> {
     ];
 
     let mut total_score = 0.0;
-    for (query, expected) in &test_cases {
+    for (query, _expected) in &test_cases {
         println!("❓ Query: {}", query);
 
         // Retrieve

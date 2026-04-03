@@ -79,6 +79,17 @@ pub fn metadata_to_pb_metadata(metadata: &Metadata) -> HashMap<String, pb::Value
         .collect()
 }
 
+/// Convert protobuf metadata map to serde_json::Value
+pub fn pb_map_to_json(pb_map: &HashMap<String, pb::Value>) -> serde_json::Value {
+    let mut map = serde_json::Map::new();
+    for (k, v) in pb_map {
+        if let Ok(json_val) = pb_value_to_json(v) {
+            map.insert(k.clone(), json_val);
+        }
+    }
+    serde_json::Value::Object(map)
+}
+
 /// Convert Neighbor to protobuf QueryResult
 pub fn neighbor_to_query_result(neighbor: &Neighbor) -> pb::QueryResult {
     pb::QueryResult {

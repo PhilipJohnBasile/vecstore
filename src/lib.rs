@@ -1,8 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025 VecStore Contributors
 
-// Allow dead code for comprehensive library with many optional features
-#![allow(dead_code)]
+//! Lint configuration for Rust 1.92 / Edition 2024
+#![warn(
+    // Rust 2024 edition lints
+    rust_2024_compatibility,
+    // Documentation lints
+    missing_docs,
+    rustdoc::broken_intra_doc_links,
+    rustdoc::private_intra_doc_links,
+    // Safety lints
+    unsafe_op_in_unsafe_fn,
+    // Code quality
+    unused_qualifications,
+    trivial_casts,
+    trivial_numeric_casts,
+    // Clippy categories
+    clippy::all,
+    clippy::correctness,
+    clippy::suspicious,
+    clippy::style,
+    clippy::complexity,
+    clippy::perf,
+)]
+#![allow(
+    // Allow dead code for comprehensive library with many optional features
+    dead_code,
+    // Allow missing docs for now (too many to add at once)
+    missing_docs,
+    // Some clippy lints that are too strict for this codebase
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::module_inception,
+    // These create noise in numeric/systems code
+    trivial_casts,
+    trivial_numeric_casts,
+)]
 
 //! # vecstore
 //!
@@ -535,7 +568,8 @@ pub use profiler::{ProfileStage, ProfileSummary, ProfilerConfig, QueryProfile, Q
 #[cfg(feature = "async")]
 // Export Kafka connector types
 pub use kafka_connector::{
-    ConsumerStats, KafkaConfig, KafkaConsumer, KafkaProducer, Operation, PipelineStats,
+    ConsumerStats, KafkaConfig, KafkaConsumer, KafkaProducer,
+    Operation as KafkaOperation, PipelineStats as KafkaPipelineStats,
     ProducerStats, StreamingPipeline, VectorMessage,
 };
 
@@ -654,7 +688,7 @@ pub use hybrid_rerank::{
     SignalType, SparseQueryVector,
 };
 pub use managed_embeddings::{
-    EmbeddingCollection, EmbeddingProvider as ManagedEmbeddingProvider, EmbeddingRequest,
+    EmbeddingCollection as ManagedEmbeddingCollection, EmbeddingProvider as ManagedEmbeddingProvider, EmbeddingRequest,
     EmbeddingResponse, EmbeddingService, EmbeddingServiceConfig,
     ModelConfig as EmbeddingModelConfig, QueryResult as EmbeddingQueryResult, TaskType, UsageStats,
 };

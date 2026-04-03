@@ -763,7 +763,7 @@ pub fn apply_autocut<T: Clone>(results: Vec<(T, f32)>, autocut: usize) -> Vec<(T
     // Find median drop to determine what counts as a "jump"
     let mut sorted_drops = drops.clone();
     sorted_drops.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    let median_drop = if sorted_drops.len() % 2 == 0 {
+    let median_drop = if sorted_drops.len().is_multiple_of(2) {
         let mid = sorted_drops.len() / 2;
         (sorted_drops[mid - 1] + sorted_drops[mid]) / 2.0
     } else {

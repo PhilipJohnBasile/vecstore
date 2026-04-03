@@ -19,6 +19,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.92
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -43,6 +45,8 @@ jobs:
         with:
           python-version: '3.12'
           architecture: ${{ matrix.target }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.92
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
@@ -65,6 +69,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@1.92
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:

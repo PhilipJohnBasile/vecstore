@@ -580,11 +580,10 @@ impl CircuitBreaker {
             *last_failure = Some(Instant::now());
         }
 
-        if count >= self.failure_threshold {
-            if let Ok(mut state) = self.state.write() {
+        if count >= self.failure_threshold
+            && let Ok(mut state) = self.state.write() {
                 *state = CircuitState::Open;
             }
-        }
     }
 
     fn is_open(&self) -> bool {
@@ -596,15 +595,14 @@ impl CircuitBreaker {
             CircuitState::Open => {
                 // Check if timeout has passed
                 let Ok(last_failure_guard) = self.last_failure.read() else { return true; };
-                if let Some(last) = *last_failure_guard {
-                    if last.elapsed() > Duration::from_secs(self.timeout_seconds) {
+                if let Some(last) = *last_failure_guard
+                    && last.elapsed() > Duration::from_secs(self.timeout_seconds) {
                         drop(last_failure_guard);
                         if let Ok(mut state) = self.state.write() {
                             *state = CircuitState::HalfOpen;
                         }
                         return false;
                     }
-                }
                 true
             }
             _ => false,

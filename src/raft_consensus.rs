@@ -193,6 +193,7 @@ pub struct InstallSnapshotRequest {
 
 /// Persistent state (must be saved to stable storage)
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct PersistentState {
     /// Current term
     pub current_term: u64,
@@ -204,19 +205,10 @@ pub struct PersistentState {
     pub snapshot_metadata: Option<SnapshotMetadata>,
 }
 
-impl Default for PersistentState {
-    fn default() -> Self {
-        Self {
-            current_term: 0,
-            voted_for: None,
-            log: Vec::new(),
-            snapshot_metadata: None,
-        }
-    }
-}
 
 /// Volatile state (rebuilt after restart)
 #[derive(Debug, Clone)]
+#[derive(Default)]
 pub struct VolatileState {
     /// Index of highest log entry known to be committed
     pub commit_index: u64,
@@ -224,14 +216,6 @@ pub struct VolatileState {
     pub last_applied: u64,
 }
 
-impl Default for VolatileState {
-    fn default() -> Self {
-        Self {
-            commit_index: 0,
-            last_applied: 0,
-        }
-    }
-}
 
 /// Leader-specific volatile state
 #[derive(Debug, Clone)]
@@ -383,8 +367,8 @@ impl RaftNode {
         };
 
         // Add to pending
-        if let Ok(mut leader_guard) = self.leader_state.write() {
-            if let Some(ref mut leader_state) = *leader_guard {
+        if let Ok(mut leader_guard) = self.leader_state.write()
+            && let Some(ref mut leader_state) = *leader_guard {
                 leader_state.pending.push_back(PendingProposal {
                     index,
                     term,
@@ -392,7 +376,6 @@ impl RaftNode {
                     proposed_at: Instant::now(),
                 });
             }
-        }
 
         self.proposals.fetch_add(1, Ordering::Relaxed);
         Ok(index)
@@ -714,8 +697,8 @@ impl RaftNode {
         while volatile.last_applied < volatile.commit_index {
             volatile.last_applied += 1;
 
-            if let Some(entry) = persistent.log.iter().find(|e| e.index == volatile.last_applied) {
-                if entry.entry_type == EntryType::Command {
+            if let Some(entry) = persistent.log.iter().find(|e| e.index == volatile.last_applied)
+                && entry.entry_type == EntryType::Command {
                     let Ok(callback_guard) = self.apply_callback.read() else { continue; };
                     if let Some(ref callback) = *callback_guard {
                         callback(&entry.data);
@@ -723,7 +706,6 @@ impl RaftNode {
                     drop(callback_guard);
                     self.commits.fetch_add(1, Ordering::Relaxed);
                 }
-            }
         }
     }
 

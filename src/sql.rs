@@ -405,7 +405,22 @@ impl VectorSQL {
             }
 
             let name = parts[0].to_string();
-            let type_str = parts[1..].join(" ");
+
+            // Extract data type, handling VECTOR(n) which includes parentheses
+            // Also skip modifiers like PRIMARY KEY, NOT NULL, etc.
+            let type_str = if parts[1].to_uppercase().starts_with("VECTOR") {
+                // Handle VECTOR(384) type - find the closing paren
+                let type_start = col_def.to_uppercase().find("VECTOR").unwrap();
+                let after_type = &col_def[type_start..];
+                if let Some(paren_end) = after_type.find(')') {
+                    after_type[..paren_end + 1].to_string()
+                } else {
+                    parts[1].to_string()
+                }
+            } else {
+                // Simple types - just take the first word after name
+                parts[1].to_string()
+            };
             let data_type = DataType::parse(&type_str)?;
 
             columns.push(ColumnDef {

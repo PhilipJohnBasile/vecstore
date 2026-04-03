@@ -386,11 +386,10 @@ impl GraphVectorEngine {
         // BFS/Dijkstra-style exploration
         while let Some(current) = heap.pop() {
             // Skip if we've seen this node with a better score
-            if let Some(existing) = visited.get(&current.node_id) {
-                if existing.score >= current.score {
+            if let Some(existing) = visited.get(&current.node_id)
+                && existing.score >= current.score {
                     continue;
                 }
-            }
 
             // Get node info
             let node = match self.nodes.get(&current.node_id) {
@@ -872,7 +871,6 @@ impl GraphBuilder {
     }
 
     /// Build the graph
-    #[must_use]
     pub fn build(self) -> Result<GraphVectorEngine, VecStoreError> {
         let mut engine = GraphVectorEngine::new();
 

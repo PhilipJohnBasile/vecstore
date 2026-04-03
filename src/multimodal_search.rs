@@ -499,7 +499,7 @@ impl MultimodalIndex {
 
                     // Apply metadata filters
                     let passes_filters = query.filters.iter().all(|(key, value)| {
-                        doc.metadata.get(key).map_or(false, |v| v == value)
+                        doc.metadata.get(key) == Some(value)
                     });
 
                     if passes_filters {

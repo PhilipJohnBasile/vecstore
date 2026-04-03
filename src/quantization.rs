@@ -197,7 +197,7 @@ impl ScalarQuantizer4 {
             return Err(anyhow!("Vector dimension mismatch"));
         }
 
-        let num_bytes = (self.dimension + 1) / 2;
+        let num_bytes = self.dimension.div_ceil(2);
         let mut quantized = vec![0u8; num_bytes];
 
         for (i, &val) in vector.iter().enumerate() {
@@ -238,7 +238,7 @@ impl ScalarQuantizer4 {
 
     /// Memory footprint in bytes
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
-        num_vectors * ((self.dimension + 1) / 2)  // 0.5 bytes per dimension
+        num_vectors * self.dimension.div_ceil(2)  // 0.5 bytes per dimension
             + self.dimension * 8 // min/range storage
     }
 }
@@ -304,7 +304,7 @@ impl BinaryQuantizer {
             return Err(anyhow!("Vector dimension mismatch"));
         }
 
-        let num_bytes = (self.dimension + 7) / 8;
+        let num_bytes = self.dimension.div_ceil(8);
         let mut binary = vec![0u8; num_bytes];
 
         for (i, &val) in vector.iter().enumerate() {
@@ -341,7 +341,7 @@ impl BinaryQuantizer {
 
     /// Memory footprint in bytes
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
-        num_vectors * ((self.dimension + 7) / 8)  // 0.125 bytes per dimension
+        num_vectors * self.dimension.div_ceil(8)  // 0.125 bytes per dimension
             + self.dimension * 4 // threshold storage
     }
 }
@@ -645,7 +645,7 @@ impl ScalarQuantizer2 {
         }
 
         // Pack 4 2-bit values into each byte
-        let num_bytes = (self.dimension + 3) / 4;
+        let num_bytes = self.dimension.div_ceil(4);
         let mut quantized = vec![0u8; num_bytes];
 
         for (i, &val) in vector.iter().enumerate() {
@@ -698,7 +698,7 @@ impl ScalarQuantizer2 {
 
     /// Memory footprint in bytes
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
-        num_vectors * ((self.dimension + 3) / 4) // 0.25 bytes per dimension
+        num_vectors * self.dimension.div_ceil(4) // 0.25 bytes per dimension
             + self.dimension * (3 * 4 + 4 * 4) // thresholds + centroids
     }
 }
@@ -770,7 +770,7 @@ impl TernaryQuantizer {
         }
 
         // Pack 4 ternary values into each byte (2 bits each)
-        let num_bytes = (self.dimension + 3) / 4;
+        let num_bytes = self.dimension.div_ceil(4);
         let mut encoded = vec![0u8; num_bytes];
 
         for (i, &val) in vector.iter().enumerate() {
@@ -836,7 +836,7 @@ impl TernaryQuantizer {
 
     /// Memory footprint
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
-        num_vectors * ((self.dimension + 3) / 4)
+        num_vectors * self.dimension.div_ceil(4)
             + self.dimension * 8 // threshold + scale per dimension
     }
 }
@@ -1123,12 +1123,11 @@ pub fn compare_quantizers(vectors: &[Vec<f32>], _test_queries: &[Vec<f32>], _k: 
 fn compute_reconstruction_mse(sq8: &ScalarQuantizer8, vectors: &[Vec<f32>]) -> f32 {
     let mut total_mse = 0.0;
     for v in vectors {
-        if let Ok(encoded) = sq8.encode(v) {
-            if let Ok(decoded) = sq8.decode(&encoded) {
+        if let Ok(encoded) = sq8.encode(v)
+            && let Ok(decoded) = sq8.decode(&encoded) {
                 let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
                 total_mse += mse / v.len() as f32;
             }
-        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1136,12 +1135,11 @@ fn compute_reconstruction_mse(sq8: &ScalarQuantizer8, vectors: &[Vec<f32>]) -> f
 fn compute_reconstruction_mse_sq4(sq4: &ScalarQuantizer4, vectors: &[Vec<f32>]) -> f32 {
     let mut total_mse = 0.0;
     for v in vectors {
-        if let Ok(encoded) = sq4.encode(v) {
-            if let Ok(decoded) = sq4.decode(&encoded) {
+        if let Ok(encoded) = sq4.encode(v)
+            && let Ok(decoded) = sq4.decode(&encoded) {
                 let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
                 total_mse += mse / v.len() as f32;
             }
-        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1149,12 +1147,11 @@ fn compute_reconstruction_mse_sq4(sq4: &ScalarQuantizer4, vectors: &[Vec<f32>]) 
 fn compute_reconstruction_mse_sq2(sq2: &ScalarQuantizer2, vectors: &[Vec<f32>]) -> f32 {
     let mut total_mse = 0.0;
     for v in vectors {
-        if let Ok(encoded) = sq2.encode(v) {
-            if let Ok(decoded) = sq2.decode(&encoded) {
+        if let Ok(encoded) = sq2.encode(v)
+            && let Ok(decoded) = sq2.decode(&encoded) {
                 let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
                 total_mse += mse / v.len() as f32;
             }
-        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1162,12 +1159,11 @@ fn compute_reconstruction_mse_sq2(sq2: &ScalarQuantizer2, vectors: &[Vec<f32>]) 
 fn compute_reconstruction_mse_ternary(ternary: &TernaryQuantizer, vectors: &[Vec<f32>]) -> f32 {
     let mut total_mse = 0.0;
     for v in vectors {
-        if let Ok(encoded) = ternary.encode(v) {
-            if let Ok(decoded) = ternary.decode(&encoded) {
+        if let Ok(encoded) = ternary.encode(v)
+            && let Ok(decoded) = ternary.decode(&encoded) {
                 let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
                 total_mse += mse / v.len() as f32;
             }
-        }
     }
     total_mse / vectors.len() as f32
 }

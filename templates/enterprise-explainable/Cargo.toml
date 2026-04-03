@@ -2,6 +2,7 @@
 name = "enterprise-explainable-rag"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.92"
 description = "Enterprise RAG with explainability, lineage, and compliance features"
 
 [dependencies]

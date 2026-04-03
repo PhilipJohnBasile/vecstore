@@ -1,6 +1,6 @@
 # VecStore Architecture
 
-> **Status:** Information reflects the 0.0.1 alpha release. Interfaces and file formats may change.
+> **Status:** Information reflects the 0.1.0 alpha release (December 2025). Interfaces and file formats may change.
 
 This note captures how the current codebase is structured so that future doc updates can refer to the real implementation rather than the earlier marketing copy.
 
@@ -10,7 +10,7 @@ This note captures how the current codebase is structured so that future doc upd
 |-----------|--------------|-----------|
 | `VecStore` | Owns vectors, metadata, the on-disk layout, and the HNSW index | Operates in-process and expects exclusive mutable access. |
 | `disk.rs` | Persists records, ID mappings, and configuration to JSON + bincode files | Snapshots reuse the same layout under `snapshots/<name>`. |
-| `hnsw_backend.rs` | Wraps [`hnsw_rs`](https://github.com/jerry73204/hnsw-rs) for search | Only `Cosine`, `Euclidean`, and `DotProduct` distances are wired up today. |
+| `hnsw_backend.rs` | Wraps [`hnsw_rs`](https://github.com/jerry73204/hnsw-rs) for search | All 9 distance metrics are fully implemented: Cosine, Euclidean, DotProduct, Manhattan, Hamming, Jaccard, Chebyshev, Canberra, and BrayCurtis. |
 | `hybrid.rs` | Maintains an inverted index and BM25 scorer for keyword queries | The default tokenizer is “Simple”; pluggable tokenizers live under `src/tokenizer`. |
 | `quantization.rs` | Provides a product-quantization helper that callers can opt into | Not automatically engaged by `VecStore`; applications call it explicitly. |
 | `filters.rs` | Evaluates SQL-like filter ASTs produced by `filter_parser.rs` | Supports `=`, `!=`, `<`, `<=`, `>`, `>=`, `IN`, `NOT IN`, `CONTAINS`, and boolean operators. |

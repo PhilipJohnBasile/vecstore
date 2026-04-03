@@ -117,7 +117,7 @@ pub fn init_telemetry_json() -> Result<()> {
 /// ```
 pub async fn traced_async<F, T>(operation: &str, future: F) -> Result<T>
 where
-    F: std::future::Future<Output = Result<T>>,
+    F: Future<Output = Result<T>>,
 {
     let span = tracing::info_span!("async_operation", operation = operation);
     let _guard = span.enter();

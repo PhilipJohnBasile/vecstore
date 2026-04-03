@@ -74,8 +74,10 @@ pub struct AnomalyDetector {
 }
 
 /// Internal detector model
+#[allow(clippy::upper_case_acronyms)]
 enum DetectorModel {
     IsolationForest(IsolationForestModel),
+    /// Local Outlier Factor
     LOF(LOFModel),
     Statistical(StatisticalModel),
     Ensemble(Vec<Box<dyn Detector + Send + Sync>>),
@@ -426,7 +428,7 @@ impl AnomalyDetector {
 
         let model = self.model.read()
             .map_err(|_| VecStoreError::LockError("model lock poisoned".into()))?;
-        let model = model.as_ref().ok_or_else(|| {
+        let model = model.as_ref().ok_or({
             VecStoreError::IndexNotInitialized
         })?;
 
@@ -1073,28 +1075,24 @@ impl AnomalyDetectorBuilder {
     }
 
     #[inline]
-    #[must_use]
     pub fn method(mut self, method: DetectionMethod) -> Self {
         self.config.method = method;
         self
     }
 
     #[inline]
-    #[must_use]
     pub fn contamination(mut self, contamination: f64) -> Self {
         self.config.contamination = contamination;
         self
     }
 
     #[inline]
-    #[must_use]
     pub fn sensitivity(mut self, sensitivity: f64) -> Self {
         self.config.sensitivity = sensitivity;
         self
     }
 
     #[inline]
-    #[must_use]
     pub fn alert_threshold(mut self, threshold: f64) -> Self {
         self.config.alert_threshold = threshold;
         self
@@ -1124,7 +1122,7 @@ fn random_usize(min: usize, max: usize) -> usize {
     use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
     let mut hasher = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut hasher);
+    Instant::now().hash(&mut hasher);
     let hash = hasher.finish();
     min + (hash as usize % (max - min))
 }
@@ -1133,7 +1131,7 @@ fn random_f32(min: f32, max: f32) -> f32 {
     use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
     let mut hasher = DefaultHasher::new();
-    std::time::Instant::now().hash(&mut hasher);
+    Instant::now().hash(&mut hasher);
     let hash = hasher.finish();
     min + (hash as f32 / u64::MAX as f32) * (max - min)
 }
@@ -1235,7 +1233,9 @@ mod tests {
 
     #[test]
     fn test_c_factor() {
-        assert!((c_factor(256) - 8.0).abs() < 1.0);
+        // c_factor(256) ≈ 10.245 based on the Isolation Forest formula
+        // c(n) = 2 * (H(n-1) - (n-1)/n) where H is the harmonic number approximation
+        assert!((c_factor(256) - 10.245).abs() < 0.5);
     }
 
     #[test]

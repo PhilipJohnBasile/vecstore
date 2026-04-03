@@ -101,33 +101,31 @@ impl HashIndex {
     /// Insert a document
     pub fn insert(&mut self, doc_id: &str, value: &str) {
         // Remove old value if exists
-        if let Some(old_value) = self.reverse.remove(doc_id) {
-            if let Some(docs) = self.index.get_mut(&old_value) {
+        if let Some(old_value) = self.reverse.remove(doc_id)
+            && let Some(docs) = self.index.get_mut(&old_value) {
                 docs.remove(doc_id);
                 if docs.is_empty() {
                     self.index.remove(&old_value);
                 }
             }
-        }
 
         // Insert new value
         self.index
             .entry(value.to_string())
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(doc_id.to_string());
         self.reverse.insert(doc_id.to_string(), value.to_string());
     }
 
     /// Remove a document
     pub fn remove(&mut self, doc_id: &str) {
-        if let Some(value) = self.reverse.remove(doc_id) {
-            if let Some(docs) = self.index.get_mut(&value) {
+        if let Some(value) = self.reverse.remove(doc_id)
+            && let Some(docs) = self.index.get_mut(&value) {
                 docs.remove(doc_id);
                 if docs.is_empty() {
                     self.index.remove(&value);
                 }
             }
-        }
     }
 
     /// Get documents with exact value
@@ -187,33 +185,31 @@ impl BTreeIndex {
         let value = OrderedFloat(value);
 
         // Remove old value if exists
-        if let Some(old_value) = self.reverse.remove(doc_id) {
-            if let Some(docs) = self.index.get_mut(&old_value) {
+        if let Some(old_value) = self.reverse.remove(doc_id)
+            && let Some(docs) = self.index.get_mut(&old_value) {
                 docs.remove(doc_id);
                 if docs.is_empty() {
                     self.index.remove(&old_value);
                 }
             }
-        }
 
         // Insert new value
         self.index
             .entry(value)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(doc_id.to_string());
         self.reverse.insert(doc_id.to_string(), value);
     }
 
     /// Remove a document
     pub fn remove(&mut self, doc_id: &str) {
-        if let Some(value) = self.reverse.remove(doc_id) {
-            if let Some(docs) = self.index.get_mut(&value) {
+        if let Some(value) = self.reverse.remove(doc_id)
+            && let Some(docs) = self.index.get_mut(&value) {
                 docs.remove(doc_id);
                 if docs.is_empty() {
                     self.index.remove(&value);
                 }
             }
-        }
     }
 
     /// Get documents in range [min, max]
@@ -342,7 +338,7 @@ impl GeoIndex {
         let cell = self.cell(&point);
         self.grid
             .entry(cell)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(doc_id.to_string());
         self.points.insert(doc_id.to_string(), point);
     }
@@ -413,15 +409,14 @@ impl GeoIndex {
             for lon_cell in min_cell.1..=max_cell.1 {
                 if let Some(docs) = self.grid.get(&(lat_cell, lon_cell)) {
                     for doc_id in docs {
-                        if let Some(point) = self.points.get(doc_id) {
-                            if point.lat >= min_lat
+                        if let Some(point) = self.points.get(doc_id)
+                            && point.lat >= min_lat
                                 && point.lat <= max_lat
                                 && point.lon >= min_lon
                                 && point.lon <= max_lon
                             {
                                 results.insert(doc_id.clone());
                             }
-                        }
                     }
                 }
             }
@@ -485,7 +480,7 @@ impl FullTextIndex {
         for token in &tokens {
             self.index
                 .entry(token.clone())
-                .or_insert_with(HashSet::new)
+                .or_default()
                 .insert(doc_id.to_string());
         }
         self.doc_tokens.insert(doc_id.to_string(), tokens);
@@ -633,11 +628,10 @@ impl PayloadIndexManager {
         if let serde_json::Value::Object(map) = payload {
             for (field, value) in map {
                 // Hash index
-                if let Some(idx) = self.hash_indexes.write()?.get_mut(field) {
-                    if let Some(s) = value.as_str() {
+                if let Some(idx) = self.hash_indexes.write()?.get_mut(field)
+                    && let Some(s) = value.as_str() {
                         idx.insert(doc_id, s);
                     }
-                }
 
                 // B-tree index
                 if let Some(idx) = self.btree_indexes.write()?.get_mut(field) {
@@ -649,23 +643,20 @@ impl PayloadIndexManager {
                 }
 
                 // Geo index
-                if let Some(idx) = self.geo_indexes.write()?.get_mut(field) {
-                    if let serde_json::Value::Object(geo) = value {
-                        if let (Some(lat), Some(lon)) = (
+                if let Some(idx) = self.geo_indexes.write()?.get_mut(field)
+                    && let serde_json::Value::Object(geo) = value
+                        && let (Some(lat), Some(lon)) = (
                             geo.get("lat").and_then(|v| v.as_f64()),
                             geo.get("lon").and_then(|v| v.as_f64()),
                         ) {
                             idx.insert(doc_id, GeoPoint::new(lat, lon));
                         }
-                    }
-                }
 
                 // Full-text index
-                if let Some(idx) = self.fulltext_indexes.write()?.get_mut(field) {
-                    if let Some(s) = value.as_str() {
+                if let Some(idx) = self.fulltext_indexes.write()?.get_mut(field)
+                    && let Some(s) = value.as_str() {
                         idx.insert(doc_id, s);
                     }
-                }
             }
         }
         Ok(())
@@ -932,6 +923,8 @@ impl Filter {
         Filter::Or(filters)
     }
 
+    /// Create a NOT filter (negation)
+    #[allow(clippy::should_implement_trait)]
     pub fn not(filter: Filter) -> Self {
         Filter::Not(Box::new(filter))
     }

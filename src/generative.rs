@@ -36,9 +36,11 @@
 //! ```
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
+use crate::store::{Query, VecStore};
 
 /// LLM provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -383,13 +385,46 @@ pub struct GenerationMetadata {
 /// Generative search engine
 pub struct GenerativeSearch {
     config: GenerativeConfig,
-    // In production, this would hold a reference to the vector store
+    /// Optional vector store for retrieval
+    store: Option<Arc<std::sync::RwLock<VecStore>>>,
+    /// Optional query embedding function
+    embed_fn: Option<Box<dyn Fn(&str) -> Result<Vec<f32>> + Send + Sync>>,
 }
 
 impl GenerativeSearch {
     /// Create a new generative search engine
     pub fn new(config: GenerativeConfig) -> Result<Self> {
-        Ok(Self { config })
+        Ok(Self {
+            config,
+            store: None,
+            embed_fn: None,
+        })
+    }
+
+    /// Create with a vector store for retrieval
+    pub fn with_store(
+        config: GenerativeConfig,
+        store: Arc<std::sync::RwLock<VecStore>>,
+    ) -> Result<Self> {
+        Ok(Self {
+            config,
+            store: Some(store),
+            embed_fn: None,
+        })
+    }
+
+    /// Set the embedding function for query embedding
+    pub fn with_embedder<F>(mut self, embed_fn: F) -> Self
+    where
+        F: Fn(&str) -> Result<Vec<f32>> + Send + Sync + 'static,
+    {
+        self.embed_fn = Some(Box::new(embed_fn));
+        self
+    }
+
+    /// Set the vector store
+    pub fn set_store(&mut self, store: Arc<std::sync::RwLock<VecStore>>) {
+        self.store = Some(store);
     }
 
     /// Generate a response for a query
@@ -440,22 +475,71 @@ impl GenerativeSearch {
         })
     }
 
-    /// Retrieve relevant documents (placeholder)
+    /// Retrieve relevant documents from vector store
     fn retrieve_documents(
         &self,
         query: &str,
         options: &GenerativeQuery,
     ) -> Result<Vec<RetrievedDocument>> {
-        // In production, this would query the vector store
-        // For now, return placeholder documents
+        // If we have a store and embedder, perform real retrieval
+        if let (Some(store), Some(embed_fn)) = (&self.store, &self.embed_fn) {
+            // Embed the query
+            let query_vector = embed_fn(query)?;
+
+            // Query the store
+            let store_guard = store.read().map_err(|e| {
+                crate::error::VecStoreError::LockError(format!("Failed to acquire store lock: {}", e))
+            })?;
+
+            let results = store_guard.query(Query {
+                vector: query_vector,
+                k: options.limit,
+                filter: None, // Filter support planned for future release
+            }).map_err(|e| crate::error::VecStoreError::Internal(format!("Query failed: {}", e)))?;
+
+            // Convert to RetrievedDocument format
+            return Ok(results
+                .into_iter()
+                .map(|neighbor| {
+                    // Get the actual document content from metadata
+                    let content = neighbor
+                        .metadata
+                        .fields
+                        .get("content")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string())
+                        .or_else(|| {
+                            neighbor
+                                .metadata
+                                .fields
+                                .get("text")
+                                .and_then(|v| v.as_str())
+                                .map(|s| s.to_string())
+                        })
+                        .unwrap_or_else(|| format!("Document {}", neighbor.id));
+
+                    RetrievedDocument {
+                        id: neighbor.id,
+                        content,
+                        score: neighbor.score,
+                        metadata: Some(serde_json::to_value(&neighbor.metadata.fields).unwrap_or_default()),
+                    }
+                })
+                .collect());
+        }
+
+        // Fallback: return placeholder documents when no store/embedder configured
+        // Useful for testing RAG pipelines without full vector store setup
+        tracing::debug!("No store/embedder configured - returning placeholder documents for testing");
         Ok((0..options.limit.min(3))
             .map(|i| RetrievedDocument {
-                id: format!("doc_{}", i),
-                content: format!("This is document {} relevant to: {}", i, query),
+                id: format!("placeholder_doc_{}", i),
+                content: format!("Placeholder document {} for query: {}", i, query),
                 score: 0.9 - (i as f32 * 0.1),
                 metadata: Some(serde_json::json!({
-                    "source": format!("source_{}", i),
-                    "title": format!("Document {}", i),
+                    "source": "placeholder",
+                    "title": format!("Test Document {}", i),
+                    "note": "Configure store and embedder for real retrieval"
                 })),
             })
             .collect())
@@ -509,16 +593,164 @@ impl GenerativeSearch {
         Ok(prompt)
     }
 
-    /// Call the LLM (placeholder)
+    /// Call the LLM to generate a response
+    #[cfg(any(feature = "openai-embeddings", feature = "ollama"))]
+    fn call_llm(&self, prompt: &str) -> Result<String> {
+        match &self.config.provider {
+            LLMProvider::OpenAI {
+                model,
+                api_key,
+                temperature,
+                max_tokens,
+            } => self.call_openai(prompt, model, api_key, *temperature, *max_tokens),
+
+            LLMProvider::Ollama { model, base_url } => {
+                self.call_ollama(prompt, model, base_url)
+            }
+
+            // For other providers, return a message indicating they're not yet implemented
+            _ => Ok(format!(
+                "LLM provider '{}' is not yet implemented. \
+                 Supported providers: OpenAI, Ollama.",
+                self.config.provider.name()
+            )),
+        }
+    }
+
+    /// Fallback when LLM features are not enabled
+    #[cfg(not(any(feature = "openai-embeddings", feature = "ollama")))]
     fn call_llm(&self, _prompt: &str) -> Result<String> {
-        // In production, this would make actual API calls
-        // For now, return a placeholder response
         Ok(format!(
-            "Based on the provided context, here is a response to your query. \
-             This is a placeholder generated response. In production, this would \
-             call {} with model {}.",
+            "LLM integration requires feature flags. Enable 'openai-embeddings' for OpenAI \
+             or 'ollama' for Ollama support. Using placeholder response from {} with model {}.",
             self.config.provider.name(),
             self.config.provider.model()
+        ))
+    }
+
+    /// Call OpenAI API
+    #[cfg(feature = "openai-embeddings")]
+    fn call_openai(
+        &self,
+        prompt: &str,
+        model: &str,
+        api_key: &str,
+        temperature: Option<f32>,
+        max_tokens: Option<usize>,
+    ) -> Result<String> {
+        use crate::error::VecStoreError;
+
+        let client = reqwest::blocking::Client::new();
+
+        let mut body = serde_json::json!({
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ]
+        });
+
+        if let Some(temp) = temperature {
+            body["temperature"] = serde_json::json!(temp);
+        }
+        if let Some(max) = max_tokens {
+            body["max_tokens"] = serde_json::json!(max);
+        }
+
+        let response = client
+            .post("https://api.openai.com/v1/chat/completions")
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("OpenAI request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().unwrap_or_default();
+            return Err(VecStoreError::Internal(format!(
+                "OpenAI API error {}: {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e)))?;
+
+        json["choices"][0]["message"]["content"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| VecStoreError::Internal("No content in OpenAI response".to_string()))
+    }
+
+    /// Call Ollama API
+    #[cfg(feature = "ollama")]
+    fn call_ollama(&self, prompt: &str, model: &str, base_url: &str) -> Result<String> {
+        use crate::error::VecStoreError;
+
+        let client = reqwest::blocking::Client::new();
+
+        let body = serde_json::json!({
+            "model": model,
+            "prompt": prompt,
+            "stream": false
+        });
+
+        let url = format!("{}/api/generate", base_url.trim_end_matches('/'));
+
+        let response = client
+            .post(&url)
+            .header("Content-Type", "application/json")
+            .json(&body)
+            .send()
+            .map_err(|e| VecStoreError::Internal(format!("Ollama request failed: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().unwrap_or_default();
+            return Err(VecStoreError::Internal(format!(
+                "Ollama API error {}: {}",
+                status, error_text
+            )));
+        }
+
+        let json: serde_json::Value = response
+            .json()
+            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e)))?;
+
+        json["response"]
+            .as_str()
+            .map(|s| s.to_string())
+            .ok_or_else(|| VecStoreError::Internal("No response in Ollama output".to_string()))
+    }
+
+    /// Stub for Ollama when feature is not enabled
+    #[cfg(not(feature = "ollama"))]
+    fn call_ollama(&self, _prompt: &str, model: &str, _base_url: &str) -> Result<String> {
+        Ok(format!(
+            "Ollama support requires the 'ollama' feature flag. \
+             Would call model '{}' if enabled.",
+            model
+        ))
+    }
+
+    /// Stub for OpenAI when feature is not enabled
+    #[cfg(not(feature = "openai-embeddings"))]
+    fn call_openai(
+        &self,
+        _prompt: &str,
+        model: &str,
+        _api_key: &str,
+        _temperature: Option<f32>,
+        _max_tokens: Option<usize>,
+    ) -> Result<String> {
+        Ok(format!(
+            "OpenAI support requires the 'openai-embeddings' feature flag. \
+             Would call model '{}' if enabled.",
+            model
         ))
     }
 

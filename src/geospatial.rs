@@ -79,10 +79,23 @@ impl GeoPoint {
     }
 
     /// Get S2 cell ID at given level (0-30)
+    #[cfg(feature = "geospatial")]
     pub fn s2_cell_id(&self, level: u8) -> u64 {
-        // Simplified S2 cell ID calculation
-        // Real implementation would use S2 geometry library
+        use s2::cellid::CellID;
+        use s2::latlng::LatLng;
 
+        let level = level.min(30) as u64;
+
+        // Create S2 LatLng and get cell ID at the specified level
+        let latlng = LatLng::from_degrees(self.lat, self.lon);
+        let cell_id = CellID::from(latlng).parent(level);
+        cell_id.0
+    }
+
+    /// Get S2 cell ID at given level (0-30) - fallback implementation
+    #[cfg(not(feature = "geospatial"))]
+    pub fn s2_cell_id(&self, level: u8) -> u64 {
+        // Simplified S2 cell ID calculation (fallback when s2 crate not available)
         let level = level.min(30);
 
         // Normalize coordinates to [0, 1]
@@ -180,7 +193,7 @@ impl GeoIndex {
         // Add to cell index
         self.cell_index
             .entry(cell_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(id.clone());
 
         // Add document

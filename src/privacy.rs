@@ -64,10 +64,12 @@ impl Distribution<f64> for Laplace {
 
 /// Differential privacy mechanism
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[derive(Default)]
 pub enum DPMechanism {
     /// Laplace mechanism (pure DP)
     Laplace,
     /// Gaussian mechanism (approximate DP)
+    #[default]
     Gaussian,
     /// Discrete Laplace for integer values
     DiscreteLaplace,
@@ -75,11 +77,6 @@ pub enum DPMechanism {
     RandomizedResponse,
 }
 
-impl Default for DPMechanism {
-    fn default() -> Self {
-        DPMechanism::Gaussian
-    }
-}
 
 /// Privacy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -224,7 +224,7 @@ impl TimeSeriesIndex {
 
         self.entries
             .entry(timestamp)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(entry);
 
         self.num_vectors += 1;
@@ -350,9 +350,9 @@ impl TimeSeriesIndex {
     pub fn group_by_pattern(&self, grouping: TemporalGroup) -> BTreeMap<i64, Vec<String>> {
         let mut groups: BTreeMap<i64, Vec<String>> = BTreeMap::new();
 
-        for (_, entries) in &self.entries {
+        for entries in self.entries.values() {
             for entry in entries {
-                let dt = DateTime::from_timestamp(entry.timestamp, 0).unwrap_or_else(|| Utc::now());
+                let dt = DateTime::from_timestamp(entry.timestamp, 0).unwrap_or_else(Utc::now);
 
                 let group_key = match grouping {
                     TemporalGroup::HourOfDay => dt.hour() as i64,
@@ -363,7 +363,7 @@ impl TimeSeriesIndex {
 
                 groups
                     .entry(group_key)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(entry.id.clone());
             }
         }
@@ -375,7 +375,7 @@ impl TimeSeriesIndex {
     pub fn remove(&mut self, id: &str) -> Result<bool> {
         let mut found = false;
 
-        for (_, entries) in &mut self.entries {
+        for entries in self.entries.values_mut() {
             if let Some(pos) = entries.iter().position(|e| e.id == id) {
                 entries.remove(pos);
                 found = true;

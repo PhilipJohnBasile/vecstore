@@ -8,8 +8,6 @@
 //!
 //! Run with: cargo run --example phrase_matching_demo
 
-use std::collections::HashMap;
-use vecstore::tokenizer::{LanguageTokenizer, SimpleTokenizer, Tokenizer};
 
 // Mock TextIndex for demonstration (in practice, use VecStore's internal TextIndex)
 fn main() {

@@ -459,7 +459,7 @@ impl SdkGenerator {
 
         // Methods
         for method in &self.methods {
-            let params = self.method_params_ts(&method);
+            let params = self.method_params_ts(method);
             let return_type = method.response_type.as_deref().unwrap_or("void");
 
             output.push_str(&format!("  /** {} */\n", method.description));
@@ -540,7 +540,7 @@ impl SdkGenerator {
 
         // Methods
         for method in &self.methods {
-            let params = self.method_params_py(&method);
+            let params = self.method_params_py(method);
             let return_type = method.response_type.as_deref().unwrap_or("None");
 
             output.push_str(&format!("    def {}(self{}) -> {}:\n",
@@ -663,7 +663,7 @@ impl SdkGenerator {
             output.push_str(&format!("// {} - {}\n", func_name, method.description));
 
             // Build function signature
-            let params = self.method_params_go(&method);
+            let params = self.method_params_go(method);
             let return_type = self.response_type_to_go(method.response_type.as_deref());
 
             output.push_str(&format!("func (c *Client) {}(ctx context.Context{}) {} {{\n",
@@ -676,8 +676,8 @@ impl SdkGenerator {
 
             if method.response_type.is_some() {
                 output.push_str("\tvar result ");
-                output.push_str(&method.response_type.as_ref().unwrap().replace("[]", "[]"));
-                output.push_str("\n");
+                output.push_str(method.response_type.as_ref().unwrap());
+                output.push('\n');
 
                 if method.request_type.is_some() {
                     output.push_str(&format!("\terr := c.request(ctx, \"{}\", {}, body, &result)\n",
@@ -687,14 +687,12 @@ impl SdkGenerator {
                         method.http_method, path));
                 }
                 output.push_str("\treturn result, err\n");
+            } else if method.request_type.is_some() {
+                output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, body, nil)\n",
+                    method.http_method, path));
             } else {
-                if method.request_type.is_some() {
-                    output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, body, nil)\n",
-                        method.http_method, path));
-                } else {
-                    output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, nil, nil)\n",
-                        method.http_method, path));
-                }
+                output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, nil, nil)\n",
+                    method.http_method, path));
             }
 
             output.push_str("}\n\n");
@@ -739,7 +737,7 @@ impl SdkGenerator {
             output.push_str(&format!("    public {} {}({}) throws Exception {{\n",
                 java_return,
                 method.name,
-                self.method_params_java(&method)
+                self.method_params_java(method)
             ));
 
             output.push_str("        // Implementation\n");
@@ -934,7 +932,8 @@ impl SdkGenerator {
     }
 
     fn interpolate_path_py(&self, path: &str, _params: &[ParamDef]) -> String {
-        path.replace("{", "{").to_string()
+        // Python uses f-string syntax: f"/collections/{collection}/search"
+        path.to_string()
     }
 
     fn interpolate_path_go(&self, path: &str, _params: &[ParamDef]) -> String {
@@ -947,8 +946,8 @@ impl SdkGenerator {
         if rt == "None" {
             return "None".to_string();
         }
-        if rt.ends_with("[]") {
-            format!("List[{}]", &rt[..rt.len()-2])
+        if let Some(stripped) = rt.strip_suffix("[]") {
+            format!("List[{}]", stripped)
         } else {
             rt.to_string()
         }
@@ -957,8 +956,8 @@ impl SdkGenerator {
     fn response_type_to_go(&self, rt: Option<&str>) -> String {
         match rt {
             Some(t) => {
-                if t.ends_with("[]") {
-                    format!("([]{}, error)", &t[..t.len()-2])
+                if let Some(stripped) = t.strip_suffix("[]") {
+                    format!("([]{}, error)", stripped)
                 } else {
                     format!("({}, error)", t)
                 }
@@ -971,8 +970,8 @@ impl SdkGenerator {
         if rt == "void" {
             return "void".to_string();
         }
-        if rt.ends_with("[]") {
-            format!("List<{}>", &rt[..rt.len()-2])
+        if let Some(stripped) = rt.strip_suffix("[]") {
+            format!("List<{}>", stripped)
         } else {
             rt.to_string()
         }

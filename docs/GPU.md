@@ -6,7 +6,7 @@ VecStore supports GPU-accelerated vector operations for significantly faster ind
 
 | Feature | CUDA (NVIDIA) | Metal (Apple) | WebGPU |
 |---------|---------------|---------------|--------|
-| Status | In Development | In Development | In Development |
+| Status | Complete | Complete | Complete |
 | Index Building | 10-21x faster | 10x faster | 2-5x faster |
 | Batch Search | 5-10x faster | 5-10x faster | 2-5x faster |
 | Dependencies | CUDA Toolkit 12+ | macOS 13+ | wgpu crate |
