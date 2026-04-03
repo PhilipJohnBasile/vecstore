@@ -77,9 +77,9 @@ memmap2 = "0.9"
 tempfile = "3"
 ordered-float = { version = "5", features = ["serde"] }
 flate2 = "1"  # Compression for object storage tier and backup
-tar = "0.4"   # Archive format for backup/restore
+tar = ">=0.4.45"   # Archive format for backup/restore
 csv = "1.3"   # CSV parsing for import/export
-lz4_flex = { version = "0.12", optional = true }  # LZ4 compression (pure Rust)
+lz4_flex = { version = ">=0.12.1", optional = true }  # LZ4 compression (pure Rust)
 zstd = { version = "0.13", optional = true }  # Zstandard compression
 s2 = { version = "0.0.13", optional = true }  # S2 geometry for geospatial
 
