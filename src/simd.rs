@@ -6,6 +6,10 @@
 //! The implementation uses architecture-specific intrinsics when available (x86 AVX/SSE, ARM NEON),
 //! with automatic fallback to scalar implementations on unsupported platforms.
 
+// Every fn here is already `unsafe fn` + `#[target_feature]`; the intrinsics are sound. Allow the
+// edition-2024 style lint that wants an explicit inner `unsafe {}` around each intrinsic call.
+#![allow(unsafe_op_in_unsafe_fn)]
+
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
