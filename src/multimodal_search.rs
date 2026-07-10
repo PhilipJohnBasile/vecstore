@@ -521,7 +521,7 @@ impl MultimodalIndex {
             .collect();
 
         // Sort by score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
         results.truncate(query.top_k);
 
         Ok(results)

@@ -299,7 +299,7 @@ impl MatryoshkaStore {
             .collect();
 
         // Sort and keep top candidates for refinement
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
         let refine_k = (k * 10).min(candidates.len()); // Keep 10x candidates for refinement
         candidates.truncate(refine_k);
 
@@ -320,7 +320,7 @@ impl MatryoshkaStore {
             }
 
             // Re-sort after refinement
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
         }
 
         // Take top-k and build results
@@ -360,7 +360,7 @@ impl MatryoshkaStore {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(k);
 
         Ok(results

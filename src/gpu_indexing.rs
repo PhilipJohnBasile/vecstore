@@ -363,7 +363,7 @@ impl GpuHnswIndex {
         impl Ord for Candidate {
             fn cmp(&self, other: &Self) -> Ordering {
                 // Reverse for min-heap behavior
-                other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
+                other.distance.total_cmp(&self.distance)
             }
         }
 
@@ -598,7 +598,7 @@ impl GpuIndexBuilder {
                     })
                     .collect();
 
-                distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                distances.sort_by(|a, b| a.1.total_cmp(&b.1));
 
                 // Keep M neighbors
                 let neighbors: Vec<usize> = distances.iter()

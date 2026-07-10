@@ -549,7 +549,7 @@ impl NeuralRanker {
         }
 
         // Sort by neural score
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         // Create results with rank changes
         let mut results = Vec::new();
@@ -993,7 +993,7 @@ impl LateInteractionModel {
             .map(|(id, emb)| (id.clone(), self.score(&query_embeddings, emb)))
             .collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         scores.truncate(top_k);
 
         Ok(scores)

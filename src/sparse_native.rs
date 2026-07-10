@@ -269,7 +269,7 @@ impl InvertedSparseIndex {
 
         // Sort by score descending
         let mut results: Vec<_> = scores.into_iter().collect();
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
         results
     }
@@ -437,7 +437,7 @@ impl HybridSparseIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
         results.into_iter()
@@ -504,7 +504,7 @@ impl HybridSparseIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
         results.into_iter()
@@ -655,7 +655,7 @@ impl SpladeEncoder {
             .collect();
 
         // Sort by weight descending, then truncate to top_k
-        pairs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        pairs.sort_by(|a, b| b.1.total_cmp(&a.1));
         pairs.truncate(self.config.top_k_tokens);
 
         // Sort by index for consistent sparse vector format

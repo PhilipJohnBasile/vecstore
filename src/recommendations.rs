@@ -183,7 +183,7 @@ impl PartialEq for Recommendation {
 
 impl Ord for Recommendation {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.score.partial_cmp(&other.score).unwrap_or(Ordering::Equal)
+        self.score.total_cmp(&other.score)
     }
 }
 
@@ -388,7 +388,7 @@ impl RecommendationEngine {
         }
 
         // Sort by final score and take top-k
-        candidates.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        candidates.sort_by(|a, b| b.score.total_cmp(&a.score));
         candidates.truncate(request.limit);
 
         Ok(RecommendResult {
@@ -419,7 +419,7 @@ impl RecommendationEngine {
             })
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
         results.truncate(limit);
 
         Ok(results)
@@ -576,7 +576,7 @@ impl RecommendationEngine {
         }
 
         // Sort by content score first
-        candidates.sort_by(|a, b| b.content_score.partial_cmp(&a.content_score).unwrap_or(Ordering::Equal));
+        candidates.sort_by(|a, b| b.content_score.total_cmp(&a.content_score));
 
         // Apply MMR-like reranking
         let mut selected: Vec<&Vec<f32>> = Vec::new();

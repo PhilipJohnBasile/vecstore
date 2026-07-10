@@ -291,8 +291,7 @@ impl TypoTolerantSearch {
 
         // Sort by score (descending), then by typos (ascending)
         results.sort_by(|a, b| {
-            b.score.partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.score.total_cmp(&a.score)
                 .then_with(|| a.typos.cmp(&b.typos))
         });
 

@@ -63,7 +63,7 @@ impl Eq for Candidate {}
 impl Ord for Candidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse ordering for min-heap behavior
-        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
+        other.distance.total_cmp(&self.distance)
     }
 }
 
@@ -353,8 +353,7 @@ impl WasmHnsw {
         let mut result: Vec<_> = best.into_iter().collect();
         result.sort_by(|a, b| {
             a.distance
-                .partial_cmp(&b.distance)
-                .unwrap_or(Ordering::Equal)
+                .total_cmp(&b.distance)
         });
         result
     }
@@ -392,8 +391,7 @@ impl WasmHnsw {
             // Sort by distance
             candidates.sort_by(|a, b| {
                 a.distance
-                    .partial_cmp(&b.distance)
-                    .unwrap_or(Ordering::Equal)
+                    .total_cmp(&b.distance)
             });
 
             // Keep only best max_conn

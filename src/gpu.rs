@@ -1212,12 +1212,12 @@ impl GpuOps for MetalBackend {
         // Partial sort for efficiency when k << n
         if k < indexed.len() / 2 {
             indexed.select_nth_unstable_by(k, |a, b| {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                a.1.total_cmp(&b.1)
             });
             indexed.truncate(k);
-            indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            indexed.sort_by(|a, b| a.1.total_cmp(&b.1));
         } else {
-            indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            indexed.sort_by(|a, b| a.1.total_cmp(&b.1));
             indexed.truncate(k);
         }
 
@@ -2062,13 +2062,13 @@ impl GpuOps for WebGpuBackend {
         let k = k.min(indexed.len());
         if k < indexed.len() {
             indexed.select_nth_unstable_by(k, |a, b| {
-                a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal)
+                a.1.total_cmp(&b.1)
             });
             indexed.truncate(k);
         }
 
         // Sort the top k by distance
-        indexed.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        indexed.sort_by(|a, b| a.1.total_cmp(&b.1));
 
         let indices: Vec<usize> = indexed.iter().map(|(i, _)| *i).collect();
         let dists: Vec<f32> = indexed.iter().map(|(_, d)| *d).collect();

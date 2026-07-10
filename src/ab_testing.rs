@@ -586,11 +586,11 @@ impl ABTestManager {
         // Return the variant with best improvement
         let best = if config.primary_metric.higher_is_better {
             significant.iter().max_by(|a, b|
-                a.relative_change.partial_cmp(&b.relative_change).unwrap_or(std::cmp::Ordering::Equal)
+                a.relative_change.total_cmp(&b.relative_change)
             )
         } else {
             significant.iter().min_by(|a, b|
-                a.relative_change.partial_cmp(&b.relative_change).unwrap_or(std::cmp::Ordering::Equal)
+                a.relative_change.total_cmp(&b.relative_change)
             )
         };
 

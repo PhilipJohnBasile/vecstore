@@ -225,7 +225,7 @@ impl MultiQueryRetrieval {
 
         // Sort by RRF score
         let mut scored_docs: Vec<(String, f32)> = scores.into_iter().collect();
-        scored_docs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored_docs.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         // Return documents with updated scores
         scored_docs
@@ -266,7 +266,7 @@ impl MultiQueryRetrieval {
             })
             .collect();
 
-        averaged.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        averaged.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         averaged
             .into_iter()
