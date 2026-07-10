@@ -863,22 +863,18 @@ impl VecStore {
             ));
         }
 
-        // Determine fetch size for HNSW search
-        let fetch_size = if q.filter.is_some() {
-            // When filtering, we need to over-fetch to account for filtered-out results
-            // Fetch all records (up to k*10) to ensure we have enough candidates
-            let total_records = self.records.len();
-            if total_records <= q.k {
-                // If we have fewer records than k, fetch all
-                total_records
-            } else {
-                // Otherwise, over-fetch by 10x (capped at total records) - using saturating_mul to prevent overflow (Critical Issue #10 fix)
-                std::cmp::min(q.k.saturating_mul(10), total_records)
-            }
-        } else {
-            // No filter, just fetch k (or all records if fewer than k)
-            std::cmp::min(q.k, self.records.len())
-        };
+        // Determine fetch size for HNSW search. Always over-fetch (up to k*10), capped by the
+        // backend's RAW size (live + ghost nodes), not the live record count: `self.records
+        // .get(&id)` below is itself an implicit filter that drops any "ghost node" `remove()`
+        // left behind (the backend can't truly delete from the underlying HNSW graph -- see
+        // HnswBackend::remove()'s docs). Capping the raw fetch at the live record count starves
+        // that filter when a ghost outranks a real match: e.g. one live vector plus one closer
+        // ghost, fetch_size=1 (== live count), means the raw search's only candidate is the
+        // ghost and the live vector is never even fetched, let alone returned. Confirmed via a
+        // 2-vector repro: query() returned 0 results for a store with 1 live vector, right after
+        // removing the other, closer one. get_next_idx() is the backend's true raw-slot count
+        // (every insert ever made, ghosts included), so it's the correct ceiling here.
+        let fetch_size = std::cmp::min(q.k.saturating_mul(10), self.backend.get_next_idx());
         #[cfg(not(target_arch = "wasm32"))]
         let candidates = self.backend.search(&q.vector, fetch_size);
         #[cfg(target_arch = "wasm32")]
