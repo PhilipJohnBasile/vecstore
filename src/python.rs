@@ -11,6 +11,7 @@ use crate::text_splitter::{RecursiveCharacterTextSplitter, TextSplitter};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
+use pyo3::IntoPyObjectExt;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -21,7 +22,7 @@ pub struct PyVecStore {
 }
 
 /// Python wrapper for Query
-#[pyclass(name = "Query")]
+#[pyclass(name = "Query", from_py_object)]
 #[derive(Clone)]
 pub struct PyQuery {
     #[pyo3(get, set)]
@@ -42,7 +43,7 @@ impl PyQuery {
 }
 
 /// Python wrapper for HybridQuery
-#[pyclass(name = "HybridQuery")]
+#[pyclass(name = "HybridQuery", from_py_object)]
 #[derive(Clone)]
 pub struct PyHybridQuery {
     #[pyo3(get, set)]
@@ -91,7 +92,7 @@ pub struct PySearchResult {
 #[pymethods]
 impl PySearchResult {
     #[getter]
-    fn metadata(&self, py: Python) -> PyResult<PyObject> {
+    fn metadata(&self, py: Python) -> PyResult<Py<PyAny>> {
         Ok(self.metadata_dict.clone_ref(py).into())
     }
 
@@ -102,7 +103,7 @@ impl PySearchResult {
 
 // Helper function to convert Rust Metadata to Python dict
 fn metadata_to_pydict(py: Python, metadata: &Metadata) -> PyResult<Py<PyDict>> {
-    let dict = PyDict::new_bound(py);
+    let dict = PyDict::new(py);
     for (key, value) in &metadata.fields {
         match value {
             serde_json::Value::String(s) => {
@@ -354,7 +355,7 @@ impl PyVecStore {
             .list_snapshots()
             .map_err(|e| PyValueError::new_err(format!("Failed to list snapshots: {}", e)))?;
 
-        let py_list = PyList::new_bound(py, &snapshots);
+        let py_list = PyList::new(py, &snapshots)?;
         Ok(py_list.unbind())
     }
 
@@ -452,7 +453,7 @@ impl PyVecDatabase {
             .list_collections()
             .map_err(|e| PyValueError::new_err(format!("Failed to list collections: {}", e)))?;
 
-        let py_list = PyList::new_bound(py, &collections);
+        let py_list = PyList::new(py, &collections)?;
         Ok(py_list.unbind())
     }
 
@@ -586,13 +587,13 @@ impl PyCollection {
     ///
     /// Returns:
     ///     Dictionary with statistics (vector_count, active_count, deleted_count, etc.)
-    fn stats(&self, py: Python) -> PyResult<PyObject> {
+    fn stats(&self, py: Python) -> PyResult<Py<PyAny>> {
         let stats = self
             .inner
             .stats()
             .map_err(|e| PyValueError::new_err(format!("Stats failed: {}", e)))?;
 
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         dict.set_item("vector_count", stats.vector_count)?;
         dict.set_item("active_count", stats.active_count)?;
         dict.set_item("deleted_count", stats.deleted_count)?;
@@ -658,7 +659,7 @@ impl PyRecursiveCharacterTextSplitter {
             .split_text(&text)
             .map_err(|e| PyValueError::new_err(format!("Split failed: {}", e)))?;
 
-        let py_list = PyList::new_bound(py, &chunks);
+        let py_list = PyList::new(py, &chunks)?;
         Ok(py_list.unbind())
     }
 
@@ -677,7 +678,7 @@ impl PyRecursiveCharacterTextSplitter {
 ///     >>> doc = Document("Hello world", {"source": "test.txt"})
 ///     >>> print(doc.page_content)
 ///     'Hello world'
-#[pyclass(name = "Document")]
+#[pyclass(name = "Document", from_py_object)]
 #[derive(Clone)]
 pub struct PyDocument {
     #[pyo3(get, set)]
@@ -703,8 +704,8 @@ impl PyDocument {
     }
 
     #[getter]
-    fn metadata(&self, py: Python) -> PyResult<PyObject> {
-        let dict = PyDict::new_bound(py);
+    fn metadata(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
         for (key, value) in &self.metadata_dict {
             let py_value = json_to_pyobject(py, value)?;
             dict.set_item(key, py_value)?;
@@ -789,7 +790,7 @@ impl PyLangChainVectorStore {
         py: Python,
         texts: Vec<String>,
         embeddings: Vec<Vec<f32>>,
-        metadatas: Option<Vec<PyObject>>,
+        metadatas: Option<Vec<Py<PyAny>>>,
         ids: Option<Vec<String>>,
     ) -> PyResult<Py<PyList>> {
         if texts.len() != embeddings.len() {
@@ -813,7 +814,7 @@ impl PyLangChainVectorStore {
             // Add user metadata if provided
             if let Some(ref meta_list) = metadatas {
                 if let Some(meta_obj) = meta_list.get(i) {
-                    if let Ok(meta_dict) = meta_obj.downcast_bound::<PyDict>(py) {
+                    if let Ok(meta_dict) = meta_obj.cast_bound::<PyDict>(py) {
                         let user_meta = pydict_to_hashmap(&meta_dict)?;
                         fields.extend(user_meta);
                     }
@@ -832,7 +833,7 @@ impl PyLangChainVectorStore {
             result_ids.push(id);
         }
 
-        let py_list = PyList::new_bound(py, &result_ids);
+        let py_list = PyList::new(py, &result_ids)?;
         Ok(py_list.unbind())
     }
 
@@ -884,7 +885,7 @@ impl PyLangChainVectorStore {
             })
             .collect();
 
-        let py_list = PyList::new_bound(py, scored_docs.into_iter().map(|sd| sd.into_py(py)));
+        let py_list = PyList::new(py, scored_docs)?;
         Ok(py_list.unbind())
     }
 
@@ -925,7 +926,7 @@ impl PyLangChainVectorStore {
             })
             .collect();
 
-        let py_list = PyList::new_bound(py, docs.into_iter().map(|d| d.into_py(py)));
+        let py_list = PyList::new(py, docs)?;
         Ok(py_list.unbind())
     }
 
@@ -962,7 +963,7 @@ impl PyLangChainVectorStore {
             .map_err(|e| PyValueError::new_err(format!("Query failed: {}", e)))?;
 
         if candidates.is_empty() {
-            return Ok(PyList::empty_bound(py).unbind());
+            return Ok(PyList::empty(py).unbind());
         }
 
         // Simple MMR implementation
@@ -1020,7 +1021,7 @@ impl PyLangChainVectorStore {
             })
             .collect();
 
-        let py_list = PyList::new_bound(py, docs.into_iter().map(|d| d.into_py(py)));
+        let py_list = PyList::new(py, docs)?;
         Ok(py_list.unbind())
     }
 
@@ -1075,13 +1076,13 @@ fn pyobject_to_json(obj: Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
         Ok(serde_json::json!(f))
     } else if let Ok(s) = obj.extract::<String>() {
         Ok(serde_json::json!(s))
-    } else if let Ok(list) = obj.downcast::<PyList>() {
+    } else if let Ok(list) = obj.cast::<PyList>() {
         let vec: Vec<serde_json::Value> = list
             .iter()
             .map(|item| pyobject_to_json(item))
             .collect::<PyResult<_>>()?;
         Ok(serde_json::json!(vec))
-    } else if let Ok(dict) = obj.downcast::<PyDict>() {
+    } else if let Ok(dict) = obj.cast::<PyDict>() {
         let map = pydict_to_hashmap(dict)?;
         Ok(serde_json::json!(map))
     } else {
@@ -1090,35 +1091,35 @@ fn pyobject_to_json(obj: Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
 }
 
 // Helper function to convert serde_json::Value to PyObject
-fn json_to_pyobject(py: Python, value: &serde_json::Value) -> PyResult<PyObject> {
+fn json_to_pyobject(py: Python, value: &serde_json::Value) -> PyResult<Py<PyAny>> {
     match value {
         serde_json::Value::Null => Ok(py.None()),
-        serde_json::Value::Bool(b) => Ok(b.into_py(py)),
+        serde_json::Value::Bool(b) => b.into_py_any(py),
         serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
-                Ok(i.into_py(py))
+                i.into_py_any(py)
             } else if let Some(f) = n.as_f64() {
-                Ok(f.into_py(py))
+                f.into_py_any(py)
             } else {
                 Ok(py.None())
             }
         }
-        serde_json::Value::String(s) => Ok(s.into_py(py)),
+        serde_json::Value::String(s) => s.into_py_any(py),
         serde_json::Value::Array(arr) => {
-            let list = PyList::new_bound(
+            let list = PyList::new(
                 py,
                 arr.iter()
                     .map(|v| json_to_pyobject(py, v))
                     .collect::<PyResult<Vec<_>>>()?,
-            );
-            Ok(list.into())
+            )?;
+            Ok(list.unbind().into_any())
         }
         serde_json::Value::Object(obj) => {
-            let dict = PyDict::new_bound(py);
+            let dict = PyDict::new(py);
             for (k, v) in obj {
                 dict.set_item(k, json_to_pyobject(py, v)?)?;
             }
-            Ok(dict.into())
+            Ok(dict.unbind().into_any())
         }
     }
 }

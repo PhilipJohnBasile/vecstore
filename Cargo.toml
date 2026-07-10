@@ -44,7 +44,7 @@ chrono = { version = "0.4", features = ["serde"] }
 directories = "6"
 tokio = { version = "1", features = ["rt", "sync", "time", "macros", "fs"], optional = true }
 futures = { version = "0.3", optional = true }
-pyo3 = { version = "0.27", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.29", features = ["extension-module"], optional = true }
 # ort 2.0.0-rc.10 is production-ready per maintainers, pending API stabilization (verified Dec 2025)
 ort = { version = "2.0.0-rc.10", optional = true }
 tokenizers = { version = "0.22", optional = true, default-features = false, features = ["onig"] }
