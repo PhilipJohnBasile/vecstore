@@ -175,7 +175,7 @@ impl ContentBasedRecommender {
             .collect();
 
         // Sort by score descending
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         scores.truncate(top_k);
 
         // Create recommendations
@@ -252,7 +252,7 @@ impl ContentBasedRecommender {
             })
             .collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         scores.truncate(top_k);
 
         let recommendations: Vec<Recommendation> = scores
@@ -362,7 +362,7 @@ impl CollaborativeRecommender {
             })
             .collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         scores.truncate(top_k);
 
         let recommendations: Vec<Recommendation> = scores
@@ -400,7 +400,7 @@ impl CollaborativeRecommender {
             })
             .collect();
 
-        similarities.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        similarities.sort_by(|a, b| b.1.total_cmp(&a.1));
         similarities.truncate(top_k);
 
         Ok(similarities)
@@ -532,7 +532,7 @@ impl HybridRecommender {
             .map(|(id, (score, reason))| (id, score, reason))
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
         let recommendations: Vec<Recommendation> = results

@@ -259,7 +259,7 @@ impl Partition {
             })
             .collect();
 
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
         let partition_id = self.meta.read().map(|m| m.id).unwrap_or(0);
@@ -521,7 +521,7 @@ impl PartitionedIndex {
             all_results.extend(partition.search(query, top_k));
         }
 
-        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all_results.sort_by(|a, b| b.score.total_cmp(&a.score));
         all_results.truncate(top_k);
 
         Ok(all_results)
@@ -544,7 +544,7 @@ impl PartitionedIndex {
             }
         }
 
-        all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        all_results.sort_by(|a, b| b.score.total_cmp(&a.score));
         all_results.truncate(top_k);
 
         Ok(all_results)

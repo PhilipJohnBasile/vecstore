@@ -325,7 +325,7 @@ impl LoadBalancer {
                     .min_by(|a, b| {
                         let la = lats.get(&a.id).unwrap_or(&f64::MAX);
                         let lb = lats.get(&b.id).unwrap_or(&f64::MAX);
-                        la.partial_cmp(lb).unwrap_or(std::cmp::Ordering::Equal)
+                        la.total_cmp(lb)
                     })
                     .map(|r| r.id.clone())
             }

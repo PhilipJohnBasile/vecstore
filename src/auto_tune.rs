@@ -285,7 +285,7 @@ impl BayesianOptimizer {
         let best = self
             .observations
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
             .map(|(p, _)| p.clone())
             .unwrap_or_else(|| self.random_sample());
 
@@ -315,7 +315,7 @@ impl BayesianOptimizer {
     pub fn best(&self) -> Option<(Vec<f64>, f64)> {
         self.observations
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+            .max_by(|a, b| a.1.total_cmp(&b.1))
             .cloned()
     }
 }
@@ -451,7 +451,7 @@ impl AutoTuner {
         let recall = total_recall / n;
 
         // Calculate latency statistics
-        latencies.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        latencies.sort_by(|a, b| a.total_cmp(b));
         let latency_ms = latencies.iter().sum::<f64>() / latencies.len() as f64;
         let latency_p99_ms = latencies.get(latencies.len() * 99 / 100).copied().unwrap_or(0.0);
         let qps = 1000.0 / latency_ms;

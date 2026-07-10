@@ -728,7 +728,7 @@ impl ProductQuantizer {
             .collect();
 
         // Sort and take top-k
-        distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        distances.sort_by(|a, b| a.1.total_cmp(&b.1));
         distances.truncate(k);
 
         Ok(distances)
@@ -1016,7 +1016,7 @@ impl IVFPQ {
             })
             .collect();
 
-        coarse_distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        coarse_distances.sort_by(|a, b| a.1.total_cmp(&b.1));
         coarse_distances.truncate(self.config.nprobe);
 
         // Search in selected lists
@@ -1041,7 +1041,7 @@ impl IVFPQ {
         }
 
         // Sort and return top-k
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| a.1.total_cmp(&b.1));
         candidates.truncate(k);
 
         Ok(candidates)

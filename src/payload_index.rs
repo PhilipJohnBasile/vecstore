@@ -388,7 +388,7 @@ impl GeoIndex {
             }
         }
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| a.1.total_cmp(&b.1));
         results
     }
 

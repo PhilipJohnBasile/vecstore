@@ -584,7 +584,7 @@ impl ScalarQuantizer2 {
         for d in 0..dimension {
             // Collect values for this dimension
             let mut values: Vec<f32> = vectors.iter().map(|v| v[d]).collect();
-            values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            values.sort_by(|a, b| a.total_cmp(b));
 
             // Compute quartile thresholds
             let n = values.len();
@@ -733,7 +733,7 @@ impl TernaryQuantizer {
         for d in 0..dimension {
             // Collect absolute values
             let mut abs_values: Vec<f32> = vectors.iter().map(|v| v[d].abs()).collect();
-            abs_values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+            abs_values.sort_by(|a, b| a.total_cmp(b));
 
             // Set zero threshold at ~33rd percentile of absolute values
             let threshold_idx = abs_values.len() / 3;
@@ -886,7 +886,7 @@ impl<Q: Quantizer> AsymmetricQuantizer<Q> {
             })
             .collect();
 
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| a.1.total_cmp(&b.1));
         candidates.truncate(oversample_k);
 
         // Phase 2: Rescore with full vectors if available
@@ -901,7 +901,7 @@ impl<Q: Quantizer> AsymmetricQuantizer<Q> {
                         .sqrt();
                 }
             }
-            candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+            candidates.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
 
         candidates.truncate(k);

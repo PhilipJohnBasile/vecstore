@@ -66,7 +66,7 @@ impl PartialOrd for Candidate {
 impl Ord for Candidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // Reverse order for max-heap (we want smallest distances first)
-        other.distance.partial_cmp(&self.distance).unwrap_or(Ordering::Equal)
+        other.distance.total_cmp(&self.distance)
     }
 }
 
@@ -94,7 +94,7 @@ impl PartialOrd for MinCandidate {
 impl Ord for MinCandidate {
     fn cmp(&self, other: &Self) -> Ordering {
         // Normal order for min-heap (largest distances at top for pruning)
-        self.distance.partial_cmp(&other.distance).unwrap_or(Ordering::Equal)
+        self.distance.total_cmp(&other.distance)
     }
 }
 

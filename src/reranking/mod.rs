@@ -196,8 +196,7 @@ impl Reranker for MMRReranker {
                     let score_a = self.mmr_score(a, &selected_refs);
                     let score_b = self.mmr_score(b, &selected_refs);
                     score_a
-                        .partial_cmp(&score_b)
-                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .total_cmp(&score_b)
                 })
                 .map(|(idx, _)| idx)
                 .unwrap();
@@ -268,7 +267,7 @@ where
             .collect();
 
         // Sort by score (descending)
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Take top_k
         let reranked = scored
@@ -356,7 +355,7 @@ where
             .collect();
 
         // Sort by score (descending)
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Take top_k
         let reranked = scored
@@ -483,7 +482,7 @@ impl RRFReranker {
 
         // Sort by RRF score (descending)
         let mut combined: Vec<(f32, Neighbor)> = doc_scores.into_values().collect();
-        combined.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        combined.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Take top_k and update scores to RRF scores
         let reranked = combined
@@ -607,7 +606,7 @@ impl Reranker for EnsembleReranker {
             .map(|(id, score)| (score, id))
             .collect();
 
-        final_results.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        final_results.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Build output with updated scores
         let reranked = final_results
@@ -702,7 +701,7 @@ impl BordaCountReranker {
 
         // Sort by Borda score (descending)
         let mut combined: Vec<(f32, Neighbor)> = doc_scores.into_values().collect();
-        combined.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        combined.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Take top_k
         let reranked = combined
@@ -868,7 +867,7 @@ impl Reranker for ContextualReranker {
             .collect();
 
         // Sort by combined score (descending)
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.0.total_cmp(&a.0));
 
         // Take top_k and update scores
         let reranked = scored

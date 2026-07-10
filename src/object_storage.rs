@@ -687,7 +687,7 @@ impl TieredStore {
         }
 
         // Sort and return top-k
-        all_results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        all_results.sort_by(|a, b| a.1.total_cmp(&b.1));
         all_results.truncate(k);
 
         Ok(all_results)

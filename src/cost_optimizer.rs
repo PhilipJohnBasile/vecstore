@@ -609,8 +609,7 @@ impl CostOptimizer {
 
         // Sort by estimated savings
         recommendations.sort_by(|a, b| {
-            b.estimated_savings.partial_cmp(&a.estimated_savings)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.estimated_savings.total_cmp(&a.estimated_savings)
         });
 
         self.stats.recommendations_generated.fetch_add(recommendations.len() as u64, Ordering::Relaxed);

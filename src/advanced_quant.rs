@@ -857,7 +857,7 @@ impl QuantizedIndex {
             })
             .collect();
 
-        candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
         candidates.truncate(candidates_k);
 
         // Second pass: rescore with original vectors
@@ -874,7 +874,7 @@ impl QuantizedIndex {
                 })
                 .collect();
 
-            candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            candidates.sort_by(|a, b| b.1.total_cmp(&a.1));
         }
 
         candidates.truncate(top_k);

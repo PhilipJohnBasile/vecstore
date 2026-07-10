@@ -372,7 +372,7 @@ impl TemporalSearch {
 
         // Re-sort by adjusted score
         results.sort_by(|a, b| {
-            b.adjusted_score.partial_cmp(&a.adjusted_score).unwrap_or(std::cmp::Ordering::Equal)
+            b.adjusted_score.total_cmp(&a.adjusted_score)
         });
     }
 
@@ -491,7 +491,7 @@ impl TemporalSearch {
             .collect();
 
         // Sort by drift magnitude
-        dimension_drift.sort_by(|a, b| b.drift.partial_cmp(&a.drift).unwrap_or(std::cmp::Ordering::Equal));
+        dimension_drift.sort_by(|a, b| b.drift.total_cmp(&a.drift));
         dimension_drift.truncate(10); // Top 10 dimensions
 
         // Calculate variance change

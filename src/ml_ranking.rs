@@ -645,7 +645,7 @@ impl MLRanker {
         self.normalize_scores(&mut results);
 
         // Sort by final score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         // Truncate to final_k
         results.truncate(self.config.final_k);

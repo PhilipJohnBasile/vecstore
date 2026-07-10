@@ -34,7 +34,6 @@
 //! ```
 
 use std::collections::{HashMap, HashSet};
-use std::cmp::Ordering;
 use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
@@ -370,7 +369,7 @@ impl DiscoveryIndex {
             .collect();
 
         // Sort by score
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         // Apply diversity if enabled
         if query.diversity > 0.0 && self.config.enable_mmr {
@@ -463,7 +462,7 @@ impl DiscoveryIndex {
             .filter(|r| (1.0 - r.score) <= radius)
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
         results.truncate(max_results);
 
         Ok(results)
@@ -490,7 +489,7 @@ impl DiscoveryIndex {
                 .map(|(_, other_vec)| cosine_similarity(vec, other_vec))
                 .collect();
 
-            similarities.sort_by(|a, b| b.partial_cmp(a).unwrap_or(Ordering::Equal));
+            similarities.sort_by(|a, b| b.total_cmp(a));
 
             // Boundary vectors have high variance in neighbor similarities
             let k = 5.min(similarities.len());
@@ -504,7 +503,7 @@ impl DiscoveryIndex {
             }
         }
 
-        boundary_scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        boundary_scores.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         boundary_scores
             .into_iter()
@@ -630,7 +629,7 @@ impl DiscoveryIndex {
                     })
                     .collect();
 
-                member_sims.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+                member_sims.sort_by(|a, b| b.1.total_cmp(&a.1));
                 let reps: Vec<String> = member_sims.into_iter().take(3).map(|(id, _)| id).collect();
 
                 representatives.insert(c, reps);

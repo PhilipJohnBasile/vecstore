@@ -31,7 +31,6 @@
 //! ```
 
 use std::collections::{HashMap, HashSet};
-use std::cmp::Ordering;
 use std::sync::RwLock;
 
 use serde::{Deserialize, Serialize};
@@ -484,7 +483,7 @@ impl InvertedIndex {
         }
 
         let mut results: Vec<_> = scores.into_iter().collect();
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
         results
     }
@@ -524,7 +523,7 @@ impl SparseIndex {
         }
 
         let mut results: Vec<_> = scores.into_iter().collect();
-        results.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
         results
     }
@@ -555,7 +554,7 @@ impl DenseIndex {
             })
             .collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(Ordering::Equal));
+        scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         scores.truncate(top_k);
         scores
     }
@@ -947,7 +946,7 @@ impl HybridPipeline {
             })
             .collect();
 
-        results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
         Ok(results)
     }
 
@@ -1018,7 +1017,7 @@ impl Reranker {
                     }
                 }
 
-                results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(Ordering::Equal));
+                results.sort_by(|a, b| b.score.total_cmp(&a.score));
             }
             _ => {
                 // Other rerankers would call external APIs

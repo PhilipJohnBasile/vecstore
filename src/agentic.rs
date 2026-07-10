@@ -723,7 +723,7 @@ impl ResultFuser {
             })
             .collect();
 
-        fused.sort_by(|a, b| b.fused_score.partial_cmp(&a.fused_score).unwrap_or(std::cmp::Ordering::Equal));
+        fused.sort_by(|a, b| b.fused_score.total_cmp(&a.fused_score));
         fused.truncate(top_k);
         fused
     }
@@ -758,7 +758,7 @@ impl ResultFuser {
             })
             .collect();
 
-        fused.sort_by(|a, b| b.fused_score.partial_cmp(&a.fused_score).unwrap_or(std::cmp::Ordering::Equal));
+        fused.sort_by(|a, b| b.fused_score.total_cmp(&a.fused_score));
         fused.truncate(top_k);
         fused
     }
@@ -795,7 +795,7 @@ impl ResultFuser {
             })
             .collect();
 
-        fused.sort_by(|a, b| b.fused_score.partial_cmp(&a.fused_score).unwrap_or(std::cmp::Ordering::Equal));
+        fused.sort_by(|a, b| b.fused_score.total_cmp(&a.fused_score));
         fused.truncate(top_k);
         fused
     }
@@ -831,7 +831,7 @@ impl ResultFuser {
             })
             .collect();
 
-        fused.sort_by(|a, b| b.fused_score.partial_cmp(&a.fused_score).unwrap_or(std::cmp::Ordering::Equal));
+        fused.sort_by(|a, b| b.fused_score.total_cmp(&a.fused_score));
         fused.truncate(top_k);
         fused
     }

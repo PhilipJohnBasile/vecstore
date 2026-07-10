@@ -328,8 +328,7 @@ pub mod early_termination {
         fn cmp(&self, other: &Self) -> Ordering {
             // Max-heap based on distance (peek gives largest distance)
             self.distance
-                .partial_cmp(&other.distance)
-                .unwrap_or(Ordering::Equal)
+                .total_cmp(&other.distance)
         }
     }
 
@@ -404,7 +403,7 @@ pub mod early_termination {
                 .collect();
 
             // Sort by distance (ascending)
-            results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(Ordering::Equal));
+            results.sort_by(|a, b| a.1.total_cmp(&b.1));
             results
         }
     }

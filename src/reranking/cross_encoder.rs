@@ -383,8 +383,7 @@ impl Reranker for CrossEncoderReranker {
         // Sort by score (descending)
         results.sort_by(|a, b| {
             b.score
-                .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .total_cmp(&a.score)
         });
 
         // Return top_k
