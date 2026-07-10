@@ -423,7 +423,7 @@ impl EmbeddingDebugger {
 
         // Median
         let mut sorted = embedding.to_vec();
-        sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        sorted.sort_by(|a, b| a.total_cmp(b));
         let median = if embedding.len().is_multiple_of(2) {
             (sorted[embedding.len() / 2 - 1] + sorted[embedding.len() / 2]) / 2.0
         } else {
@@ -535,7 +535,7 @@ impl EmbeddingDebugger {
             .enumerate()
             .map(|(i, &v)| (i, v.abs()))
             .collect();
-        indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        indexed.sort_by(|a, b| b.1.total_cmp(&a.1));
         let top_dimensions: Vec<(usize, f32)> = indexed.iter().take(10).cloned().collect();
 
         // High variance dims (deviation from mean)
@@ -544,7 +544,7 @@ impl EmbeddingDebugger {
             .enumerate()
             .map(|(i, &v)| (i, (v - mean).abs()))
             .collect();
-        variance_indexed.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        variance_indexed.sort_by(|a, b| b.1.total_cmp(&a.1));
         let high_variance_dims: Vec<(usize, f32)> = variance_indexed.iter().take(10).cloned().collect();
 
         DimensionStats {
@@ -638,12 +638,7 @@ impl EmbeddingDebugger {
         }
 
         // Sort by absolute Z-score
-        anomalies.sort_by(|a, b| {
-            b.z_score
-                .abs()
-                .partial_cmp(&a.z_score.abs())
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        anomalies.sort_by(|a, b| b.z_score.abs().total_cmp(&a.z_score.abs()));
 
         Ok(anomalies)
     }
@@ -757,7 +752,7 @@ impl EmbeddingDebugger {
             }
         }
 
-        dimension_drifts.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        dimension_drifts.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         // Overall drift score
         let overall_drift_score = norm_drift
@@ -834,7 +829,7 @@ impl EmbeddingDebugger {
             .enumerate()
             .map(|(i, (a, b))| (i, (a - b).abs()))
             .collect();
-        dimension_diffs.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        dimension_diffs.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         Ok(ComparisonReport {
             cosine_similarity,
