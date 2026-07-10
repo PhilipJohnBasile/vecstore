@@ -297,7 +297,23 @@ impl IncrementalIndex {
             self.write_wal(op)?;
         }
 
-        if self.config.lazy_deletion {
+        // Remove from delta if present. Delta is mutable, so a direct removal is enough --
+        // only fall back to a tombstone when the vector isn't in delta (it must be in an
+        // immutable base index instead, which can't be edited in place). Tombstoning a
+        // delta-resident vector too would double-count it out of total_vectors(): once via
+        // the delta_size decrement here, again via the tombstone subtraction there.
+        let mut vectors = self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
+        let removed_from_delta = vectors.remove(&id).is_some();
+        if removed_from_delta {
+            self.delta.size.fetch_sub(1, Ordering::Relaxed);
+        }
+        // Release before maybe_trigger_cleanup(): it can call merge(), which also takes
+        // delta.vectors.write() -- std::sync::RwLock isn't reentrant, so holding this guard
+        // across that call self-deadlocks the thread (found via a hung test: delete() on a
+        // config whose tombstone ratio crosses max_tombstone_ratio never returns).
+        drop(vectors);
+
+        if self.config.lazy_deletion && !removed_from_delta {
             // Add tombstone
             let tombstone = Tombstone {
                 id: id.clone(),
@@ -305,12 +321,6 @@ impl IncrementalIndex {
                 version: self.wal_sequence.load(Ordering::Relaxed),
             };
             self.tombstones.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?.insert(id.clone(), tombstone);
-        }
-
-        // Remove from delta if present
-        let mut vectors = self.delta.vectors.write().map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
-        if vectors.remove(&id).is_some() {
-            self.delta.size.fetch_sub(1, Ordering::Relaxed);
         }
 
         self.stats.deletes.fetch_add(1, Ordering::Relaxed);
@@ -863,17 +873,21 @@ mod tests {
     fn test_tombstone_cleanup() {
         let config = IncrementalConfig {
             lazy_deletion: true,
-            max_tombstone_ratio: 0.1,
+            max_tombstone_ratio: 0.9, // High threshold to prevent auto-merge (see test_merge)
+            merge_threshold: 1000,    // prevent auto-merge from the inserts below too
             ..Default::default()
         };
         let index = IncrementalIndex::new(3, config);
 
-        // Insert vectors
+        // Insert vectors, then merge into a base index. Tombstones only apply to base-layer
+        // deletes -- a delta-resident vector is removed directly since delta is mutable (see
+        // delete()'s comment), so deleting straight out of delta never produces a tombstone.
         for i in 0..10 {
             index.insert(format!("v{}", i), vec![i as f32, 0.0, 0.0], None).unwrap();
         }
+        index.merge().unwrap();
 
-        // Delete some
+        // Delete some (now base-resident) vectors
         for i in 0..3 {
             index.delete(format!("v{}", i)).unwrap();
         }

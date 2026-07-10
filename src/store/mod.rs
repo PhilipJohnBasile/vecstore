@@ -2846,44 +2846,50 @@ mod builder_tests {
 
     #[test]
     fn test_builder_manhattan() {
-        // Manhattan is not yet supported by HNSW backend - test that it returns error
+        // Manhattan is supported by the HNSW backend (DistL1) - build and do a real query.
         let temp_dir = TempDir::new().unwrap();
-        let result = VecStore::builder(temp_dir.path().join("test.db"))
+        let mut store = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Manhattan)
-            .build();
+            .build()
+            .unwrap();
 
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e.to_string().contains("not yet supported"));
-        }
+        assert_eq!(store.distance_metric(), Distance::Manhattan);
+        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
+        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
+        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 
     #[test]
     fn test_builder_hamming() {
-        // Hamming is not yet supported by HNSW backend - test that it returns error
+        // Hamming is supported by the HNSW backend (DistHammingF32) - build and do a real query.
         let temp_dir = TempDir::new().unwrap();
-        let result = VecStore::builder(temp_dir.path().join("test.db"))
+        let mut store = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Hamming)
-            .build();
+            .build()
+            .unwrap();
 
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e.to_string().contains("not yet supported"));
-        }
+        assert_eq!(store.distance_metric(), Distance::Hamming);
+        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
+        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
+        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 
     #[test]
     fn test_builder_jaccard() {
-        // Jaccard is not yet supported by HNSW backend - test that it returns error
+        // Jaccard is supported by the HNSW backend (DistJaccardF32) - build and do a real query.
         let temp_dir = TempDir::new().unwrap();
-        let result = VecStore::builder(temp_dir.path().join("test.db"))
+        let mut store = VecStore::builder(temp_dir.path().join("test.db"))
             .distance(Distance::Jaccard)
-            .build();
+            .build()
+            .unwrap();
 
-        assert!(result.is_err());
-        if let Err(e) = result {
-            assert!(e.to_string().contains("not yet supported"));
-        }
+        assert_eq!(store.distance_metric(), Distance::Jaccard);
+        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
+        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
+        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 
     #[test]
