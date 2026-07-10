@@ -37,17 +37,23 @@ pub struct NamespaceManager {
 }
 
 impl NamespaceManager {
-    /// Create a new namespace manager
+    /// Create a new namespace manager, restoring any namespaces a previous process already
+    /// persisted under `root_path` (each namespace subdirectory with a `namespace.json`).
+    /// Without this, reopening an existing on-disk database would start with an empty in-memory
+    /// namespace map — `get_namespace`/`get_collection` would report "not found" for data that is
+    /// sitting right there on disk, even though the underlying `VecStore` itself loads correctly.
     pub fn new<P: AsRef<Path>>(root_path: P) -> Result<Self> {
         let root_path = root_path.as_ref().to_path_buf();
         std::fs::create_dir_all(&root_path)?;
 
-        Ok(Self {
+        let manager = Self {
             root_path,
             namespaces: Arc::new(RwLock::new(HashMap::new())),
             stores: Arc::new(RwLock::new(HashMap::new())),
             default_quotas: NamespaceQuotas::default(),
-        })
+        };
+        manager.load_namespaces()?;
+        Ok(manager)
     }
 
     /// Create a new namespace manager with custom default quotas
