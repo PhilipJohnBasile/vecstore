@@ -18,6 +18,10 @@ __pycache__/
 dist/
 build/
 
+# maturin develop writes the compiled extension straight into python/vecstore/
+*.so
+*.pyd
+
 # Python demo databases
 *_demo_db/
 *_db/

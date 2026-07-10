@@ -112,7 +112,9 @@ class TestQuery:
         results = store.query(vector, k=5)
         assert len(results) == 1
         assert results[0].id == "doc1"
-        assert results[0].score > 0.99  # Should be very similar to itself
+        # score is a cosine DISTANCE (lower = closer), not a similarity -- 0.0 is
+        # the correct value for a vector queried against itself.
+        assert results[0].score < 0.01
 
     def test_query_multiple_results(self, store):
         """Test querying with multiple vectors"""
