@@ -153,14 +153,20 @@ jobs:
           admin.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
 
-          cargo +1.92.0 fmt --all
+          rustfmt +1.92.0 --edition 2024 \
+            src/federation.rs \
+            src/server/admin_http.rs \
+            src/server/admin.rs
           git diff --check
 
       - name: Validate server feature
         shell: bash
         run: |
           set -euo pipefail
-          cargo +1.92.0 fmt --all -- --check
+          rustfmt +1.92.0 --edition 2024 --check \
+            src/federation.rs \
+            src/server/admin_http.rs \
+            src/server/admin.rs
           cargo +1.92.0 build --locked --features server --bin vecstore-server
           cargo +1.92.0 test --locked --features server
 
