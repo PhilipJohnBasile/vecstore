@@ -153,16 +153,16 @@ jobs:
           admin.write_text(text.replace(old, new, 1), encoding="utf-8")
           PY
 
-          cargo fmt --all
+          cargo +1.92.0 fmt --all
           git diff --check
 
       - name: Validate server feature
         shell: bash
         run: |
           set -euo pipefail
-          cargo fmt --all -- --check
-          cargo build --locked --features server --bin vecstore-server
-          cargo test --locked --features server
+          cargo +1.92.0 fmt --all -- --check
+          cargo +1.92.0 build --locked --features server --bin vecstore-server
+          cargo +1.92.0 test --locked --features server
 
       - name: Publish one clean signed-off fix commit
         shell: bash
