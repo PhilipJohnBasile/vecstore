@@ -1,0 +1,184 @@
+name: Temporary validate VecStore server build fix
+
+on:
+  push:
+    branches:
+      - fix/server-build-0.1.0
+
+permissions:
+  contents: write
+
+timeout-minutes: 90
+
+jobs:
+  repair-validate-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/server-build-0.1.0
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Apply narrow server-build repairs
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Philip John Basile"
+          git config user.email "PBasile@Basilecom.com"
+          git fetch origin main
+
+          python - <<'PY'
+          from pathlib import Path
+
+          federation = Path("src/federation.rs")
+          text = federation.read_text(encoding="utf-8")
+          old = "fn query_member(&self, state: &MemberState, _query: &FederatedQuery) -> Result<Vec<MemberResult>> {"
+          new = "fn query_member(&self, state: &MemberState, query: &FederatedQuery) -> Result<Vec<MemberResult>> {"
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one query_member signature, found {text.count(old)}")
+          federation.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+          admin_http = Path("src/server/admin_http.rs")
+          text = admin_http.read_text(encoding="utf-8")
+
+          old_aggregate = '''async fn get_aggregate_stats(
+              State(server): State<AdminHttpServer>,
+          ) -> Result<Json<AggregateStatsDto>, AppError> {
+              let manager = server.manager.read().await;
+
+              let stats = manager.get_aggregate_stats();
+
+              Ok(Json(AggregateStatsDto {
+                  total_namespaces: stats.total_namespaces,
+                  active_namespaces: stats.active_namespaces,
+                  total_vectors: stats.total_vectors,
+                  total_requests: stats.total_requests,
+              }))
+          }
+          '''
+          new_aggregate = '''async fn get_aggregate_stats(
+              State(server): State<AdminHttpServer>,
+          ) -> Result<Json<AggregateStatsDto>, AppError> {
+              let manager = server.manager.read().await;
+
+              let stats = manager
+                  .get_aggregate_stats()
+                  .map_err(|e| AppError::Internal(e.to_string()))?;
+
+              Ok(Json(AggregateStatsDto {
+                  total_namespaces: stats.total_namespaces,
+                  active_namespaces: stats.active_namespaces,
+                  total_vectors: stats.total_vectors,
+                  total_requests: stats.total_requests,
+              }))
+          }
+          '''
+          if text.count(old_aggregate) != 1:
+              raise SystemExit("aggregate HTTP handler shape changed")
+          text = text.replace(old_aggregate, new_aggregate, 1)
+
+          old_health = '''async fn health_check(State(server): State<AdminHttpServer>) -> Json<serde_json::Value> {
+              let manager = server.manager.read().await;
+              let stats = manager.get_aggregate_stats();
+
+              Json(serde_json::json!({
+                  "status": "healthy",
+                  "mode": "multi-tenant",
+                  "total_namespaces": stats.total_namespaces,
+                  "active_namespaces": stats.active_namespaces,
+              }))
+          }
+          '''
+          new_health = '''async fn health_check(
+              State(server): State<AdminHttpServer>,
+          ) -> Result<Json<serde_json::Value>, AppError> {
+              let manager = server.manager.read().await;
+              let stats = manager
+                  .get_aggregate_stats()
+                  .map_err(|e| AppError::Internal(e.to_string()))?;
+
+              Ok(Json(serde_json::json!({
+                  "status": "healthy",
+                  "mode": "multi-tenant",
+                  "total_namespaces": stats.total_namespaces,
+                  "active_namespaces": stats.active_namespaces,
+              })))
+          }
+          '''
+          if text.count(old_health) != 1:
+              raise SystemExit("health handler shape changed")
+          text = text.replace(old_health, new_health, 1)
+
+          old_ready = '''async fn ready_check(State(server): State<AdminHttpServer>) -> Json<serde_json::Value> {
+              let manager = server.manager.read().await;
+              let stats = manager.get_aggregate_stats();
+
+              Json(serde_json::json!({
+                  "ready": true,
+                  "total_namespaces": stats.total_namespaces,
+              }))
+          }
+          '''
+          new_ready = '''async fn ready_check(
+              State(server): State<AdminHttpServer>,
+          ) -> Result<Json<serde_json::Value>, AppError> {
+              let manager = server.manager.read().await;
+              let stats = manager
+                  .get_aggregate_stats()
+                  .map_err(|e| AppError::Internal(e.to_string()))?;
+
+              Ok(Json(serde_json::json!({
+                  "ready": true,
+                  "total_namespaces": stats.total_namespaces,
+              })))
+          }
+          '''
+          if text.count(old_ready) != 1:
+              raise SystemExit("ready handler shape changed")
+          admin_http.write_text(text.replace(old_ready, new_ready, 1), encoding="utf-8")
+
+          admin = Path("src/server/admin.rs")
+          text = admin.read_text(encoding="utf-8")
+          old = "        let stats = manager.get_aggregate_stats();"
+          new = '''        let stats = manager
+                      .get_aggregate_stats()
+                      .map_err(|e| Status::internal(e.to_string()))?;'''
+          if text.count(old) != 1:
+              raise SystemExit(f"expected one gRPC aggregate lookup, found {text.count(old)}")
+          admin.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+
+          cargo fmt --all
+          git diff --check
+
+      - name: Validate server feature
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo build --locked --features server --bin vecstore-server
+          cargo test --locked --features server
+
+      - name: Publish one clean signed-off fix commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/temporary-server-build-fix.yml
+          git reset --soft origin/main
+          git add -A
+          git commit -s -m "fix: restore server feature build"
+          test "$(git rev-list --count origin/main..HEAD)" = "1"
+          test -z "$(git diff --name-only origin/main...HEAD -- .github/workflows/temporary-server-build-fix.yml)"
+          git diff --check origin/main...HEAD
+          git push \
+            "https://x-access-token:${GH_TOKEN}@github.com/PhilipJohnBasile/vecstore.git" \
+            HEAD:fix/server-build-0.1.0 \
+            --force
