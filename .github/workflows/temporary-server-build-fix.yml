@@ -18,7 +18,7 @@ jobs:
           ref: fix/server-build-0.1.0
           fetch-depth: 0
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.92
         with:
           components: rustfmt
 
