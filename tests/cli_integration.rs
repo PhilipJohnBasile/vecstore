@@ -21,6 +21,19 @@ fn binary_exists() -> bool {
     std::path::Path::new(&vecstore_bin()).exists()
 }
 
+fn assert_record_count(stdout: &str, expected: usize) {
+    let actual = stdout
+        .lines()
+        .find_map(|line| line.strip_prefix("Records:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+
+    assert_eq!(
+        actual,
+        Some(expected),
+        "unexpected stats output:\n{stdout}"
+    );
+}
+
 // Macro to skip tests if binary not built
 macro_rules! skip_if_no_binary {
     () => {
@@ -74,7 +87,7 @@ fn test_cli_stats_empty() {
 
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Records: 0"));
+    assert_record_count(&stdout, 0);
 }
 
 #[test]
@@ -124,7 +137,7 @@ fn test_cli_ingest_single() {
         .expect("Failed to execute vecstore");
 
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(stdout.contains("Records: 1"));
+    assert_record_count(&stdout, 1);
 }
 
 #[test]
