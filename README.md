@@ -2,8 +2,8 @@
 
 **The SQLite of vector search.** Embed semantic search directly in your app—no server required.
 
-> ⚠️ **ALPHA SOFTWARE**: VecStore is in early development (version 0.2.0-alpha).  
-> APIs and file formats may change. Not recommended for production use with data you can't regenerate.  
+> ⚠️ **ALPHA SOFTWARE**: VecStore is in early development (version 0.1.x).
+> APIs and file formats may change. Not recommended for production use with data you can't regenerate.
 > See [MATURITY.md](MATURITY.md) for detailed feature stability status.
 
 [![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
@@ -141,9 +141,9 @@ const results = store.query(queryVector, 10);
 - [Architecture](docs/ARCHITECTURE.md) - System design overview
 - [Security Policy](SECURITY.md) - Vulnerability reporting
 - [Getting Started](QUICKSTART.md) - 5-minute quick start guide
-- [Feature Maturity](MATURITY.md) - Stable, beta, and experimental capabilities
-- [Product Improvement Report](PRODUCT_IMPROVEMENT_REPORT.md) - Product analysis and roadmap
-- [Action Plan](ACTION_PLAN.md) - Proposed stabilization sprint
+- [Feature Maturity](MATURITY.md) - December 2025 stability assessment
+- [Product Improvement Report](PRODUCT_IMPROVEMENT_REPORT.md) - December 2025 product analysis
+- [Action Plan](ACTION_PLAN.md) - Proposed stabilization sprint from that assessment
 - [Developer Guide](DEVELOPER_GUIDE.md) - System architecture and internals
 - [Contributing](CONTRIBUTING.md) - How to contribute
 

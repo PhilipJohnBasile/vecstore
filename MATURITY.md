@@ -1,7 +1,10 @@
 # VecStore Feature Maturity Matrix
 
-**Last Updated:** December 27, 2025  
-**Version:** 0.2.0-alpha
+**Assessment Date:** December 27, 2025
+**Repository Version Analyzed:** 0.1.0
+**Proposed Target Release:** 0.2.0-alpha
+
+> This is a point-in-time assessment. Verify individual claims against the current code and test results before relying on them.
 
 ---
 
@@ -270,6 +273,6 @@ When features are deprecated, we will:
 
 ---
 
-**Last Updated:** December 27, 2025  
-**Maintainer:** VecStore Team  
+**Last Updated:** December 27, 2025
+**Maintainer:** VecStore Team
 **Review Frequency:** Updated with each release
