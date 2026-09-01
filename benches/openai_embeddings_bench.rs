@@ -6,7 +6,7 @@
 //
 // Run with: cargo bench --features "embeddings,openai-embeddings" --bench openai_embeddings_bench
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
 
 // Helper to create embedder

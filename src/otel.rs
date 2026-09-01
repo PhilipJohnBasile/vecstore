@@ -27,7 +27,10 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
 use std::time::{Duration, Instant, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -119,9 +122,15 @@ impl OtelConfig {
         Self {
             service_name: "vecstore".to_string(),
             service_version: env!("CARGO_PKG_VERSION").to_string(),
-            trace_exporter: ExporterType::OtlpGrpc { endpoint: endpoint.to_string() },
-            metrics_exporter: ExporterType::OtlpGrpc { endpoint: endpoint.to_string() },
-            logs_exporter: ExporterType::OtlpGrpc { endpoint: endpoint.to_string() },
+            trace_exporter: ExporterType::OtlpGrpc {
+                endpoint: endpoint.to_string(),
+            },
+            metrics_exporter: ExporterType::OtlpGrpc {
+                endpoint: endpoint.to_string(),
+            },
+            logs_exporter: ExporterType::OtlpGrpc {
+                endpoint: endpoint.to_string(),
+            },
             sampling: SamplingStrategy::Ratio(0.1),
             resource_attributes: HashMap::new(),
             batch_config: BatchConfig::default(),
@@ -134,7 +143,9 @@ impl OtelConfig {
         Self {
             service_name: "vecstore".to_string(),
             service_version: env!("CARGO_PKG_VERSION").to_string(),
-            trace_exporter: ExporterType::Jaeger { endpoint: endpoint.to_string() },
+            trace_exporter: ExporterType::Jaeger {
+                endpoint: endpoint.to_string(),
+            },
             metrics_exporter: ExporterType::Prometheus { port: 9090 },
             logs_exporter: ExporterType::Console,
             sampling: SamplingStrategy::Ratio(0.1),
@@ -149,7 +160,9 @@ impl OtelConfig {
         Self {
             service_name: "vecstore".to_string(),
             service_version: env!("CARGO_PKG_VERSION").to_string(),
-            trace_exporter: ExporterType::Zipkin { endpoint: endpoint.to_string() },
+            trace_exporter: ExporterType::Zipkin {
+                endpoint: endpoint.to_string(),
+            },
             metrics_exporter: ExporterType::Prometheus { port: 9090 },
             logs_exporter: ExporterType::Console,
             sampling: SamplingStrategy::Ratio(0.1),
@@ -182,7 +195,8 @@ impl OtelConfig {
 
     /// Add resource attribute
     pub fn with_attribute(mut self, key: &str, value: &str) -> Self {
-        self.resource_attributes.insert(key.to_string(), value.to_string());
+        self.resource_attributes
+            .insert(key.to_string(), value.to_string());
         self
     }
 
@@ -304,7 +318,9 @@ impl Span {
 
     /// Set error status
     pub fn set_error(&mut self, message: &str) {
-        self.status = SpanStatus::Error { message: message.to_string() };
+        self.status = SpanStatus::Error {
+            message: message.to_string(),
+        };
     }
 
     /// Set OK status
@@ -314,7 +330,9 @@ impl Span {
 
     /// Get duration
     pub fn duration(&self) -> Duration {
-        self.end_time.unwrap_or_else(Instant::now).duration_since(self.start_time)
+        self.end_time
+            .unwrap_or_else(Instant::now)
+            .duration_since(self.start_time)
     }
 }
 
@@ -375,7 +393,9 @@ pub struct VecStoreMetrics {
 impl VecStoreMetrics {
     /// Create new metrics
     pub fn new() -> Self {
-        let boundaries = vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0];
+        let boundaries = vec![
+            1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0,
+        ];
         let buckets: Vec<AtomicU64> = (0..=boundaries.len()).map(|_| AtomicU64::new(0)).collect();
 
         Self {
@@ -396,10 +416,13 @@ impl VecStoreMetrics {
     /// Record query
     pub fn record_query(&self, latency_ms: f64) {
         self.query_count.fetch_add(1, Ordering::Relaxed);
-        self.query_latency_sum.fetch_add((latency_ms * 1000.0) as u64, Ordering::Relaxed);
+        self.query_latency_sum
+            .fetch_add((latency_ms * 1000.0) as u64, Ordering::Relaxed);
 
         // Update histogram
-        let Ok(buckets) = self.histogram_buckets.read() else { return; };
+        let Ok(buckets) = self.histogram_buckets.read() else {
+            return;
+        };
         for (i, &boundary) in self.histogram_boundaries.iter().enumerate() {
             if latency_ms <= boundary {
                 buckets[i].fetch_add(1, Ordering::Relaxed);
@@ -419,7 +442,10 @@ impl VecStoreMetrics {
     /// Record delete
     pub fn record_delete(&self, count: usize) {
         self.delete_count.fetch_add(count as u64, Ordering::Relaxed);
-        self.vector_count.fetch_sub(count.min(self.vector_count.load(Ordering::Relaxed)), Ordering::Relaxed);
+        self.vector_count.fetch_sub(
+            count.min(self.vector_count.load(Ordering::Relaxed)),
+            Ordering::Relaxed,
+        );
     }
 
     /// Record cache hit
@@ -502,10 +528,14 @@ impl VecStoreMetrics {
         ));
 
         // Histogram
-        output.push_str("# HELP vecstore_query_latency_ms Query latency in milliseconds\n\
-                        # TYPE vecstore_query_latency_ms histogram\n");
+        output.push_str(
+            "# HELP vecstore_query_latency_ms Query latency in milliseconds\n\
+                        # TYPE vecstore_query_latency_ms histogram\n",
+        );
 
-        let Ok(buckets) = self.histogram_buckets.read() else { return output; };
+        let Ok(buckets) = self.histogram_buckets.read() else {
+            return output;
+        };
         let mut cumulative = 0u64;
         for (i, boundary) in self.histogram_boundaries.iter().enumerate() {
             cumulative += buckets[i].load(Ordering::Relaxed);
@@ -515,11 +545,18 @@ impl VecStoreMetrics {
             ));
         }
         cumulative += buckets[self.histogram_boundaries.len()].load(Ordering::Relaxed);
-        output.push_str(&format!("vecstore_query_latency_ms_bucket{{le=\"+Inf\"}} {}\n", cumulative));
-        output.push_str(&format!("vecstore_query_latency_ms_sum {}\n",
-            self.query_latency_sum.load(Ordering::Relaxed) as f64 / 1000.0));
-        output.push_str(&format!("vecstore_query_latency_ms_count {}\n",
-            self.query_count.load(Ordering::Relaxed)));
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_bucket{{le=\"+Inf\"}} {}\n",
+            cumulative
+        ));
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_sum {}\n",
+            self.query_latency_sum.load(Ordering::Relaxed) as f64 / 1000.0
+        ));
+        output.push_str(&format!(
+            "vecstore_query_latency_ms_count {}\n",
+            self.query_count.load(Ordering::Relaxed)
+        ));
 
         output
     }
@@ -600,12 +637,16 @@ impl TelemetryProvider {
         let span_id = span.span_id.clone();
 
         {
-            let Ok(mut current) = self.current_trace.write() else { return span_id; };
+            let Ok(mut current) = self.current_trace.write() else {
+                return span_id;
+            };
             *current = Some(trace_id.clone());
         }
 
         {
-            let Ok(mut spans) = self.spans.write() else { return span_id; };
+            let Ok(mut spans) = self.spans.write() else {
+                return span_id;
+            };
             spans.insert(span_id.clone(), span);
         }
 
@@ -614,7 +655,9 @@ impl TelemetryProvider {
 
     /// Start child span
     pub fn start_span(&self, name: &str, parent_id: Option<&str>) -> String {
-        let trace_id = self.current_trace.read()
+        let trace_id = self
+            .current_trace
+            .read()
             .ok()
             .and_then(|guard| guard.clone())
             .unwrap_or_else(generate_trace_id);
@@ -623,7 +666,9 @@ impl TelemetryProvider {
         let span_id = span.span_id.clone();
 
         {
-            let Ok(mut spans) = self.spans.write() else { return span_id; };
+            let Ok(mut spans) = self.spans.write() else {
+                return span_id;
+            };
             spans.insert(span_id.clone(), span);
         }
 
@@ -633,20 +678,26 @@ impl TelemetryProvider {
     /// End span
     pub fn end_span(&self, span_id: &str) {
         let span = {
-            let Ok(mut spans) = self.spans.write() else { return; };
+            let Ok(mut spans) = self.spans.write() else {
+                return;
+            };
             spans.remove(span_id)
         };
 
         if let Some(mut span) = span {
             span.end();
-            let Ok(mut completed) = self.completed_spans.write() else { return; };
+            let Ok(mut completed) = self.completed_spans.write() else {
+                return;
+            };
             completed.push(span);
         }
     }
 
     /// Set span attribute
     pub fn set_span_attribute(&self, span_id: &str, key: &str, value: SpanAttribute) {
-        let Ok(mut spans) = self.spans.write() else { return; };
+        let Ok(mut spans) = self.spans.write() else {
+            return;
+        };
         if let Some(span) = spans.get_mut(span_id) {
             span.set_attribute(key, value);
         }
@@ -654,7 +705,9 @@ impl TelemetryProvider {
 
     /// Set span error
     pub fn set_span_error(&self, span_id: &str, message: &str) {
-        let Ok(mut spans) = self.spans.write() else { return; };
+        let Ok(mut spans) = self.spans.write() else {
+            return;
+        };
         if let Some(span) = spans.get_mut(span_id) {
             span.set_error(message);
         }
@@ -666,15 +719,25 @@ impl TelemetryProvider {
 
         // Create a span for the query
         let span_id = self.start_span(operation, None);
-        self.set_span_attribute(&span_id, "db.system", SpanAttribute::String("vecstore".to_string()));
-        self.set_span_attribute(&span_id, "db.operation", SpanAttribute::String(operation.to_string()));
+        self.set_span_attribute(
+            &span_id,
+            "db.system",
+            SpanAttribute::String("vecstore".to_string()),
+        );
+        self.set_span_attribute(
+            &span_id,
+            "db.operation",
+            SpanAttribute::String(operation.to_string()),
+        );
         self.set_span_attribute(&span_id, "db.latency_ms", SpanAttribute::Float(latency_ms));
         self.end_span(&span_id);
     }
 
     /// Flush completed spans
     pub fn flush(&self) -> Vec<Span> {
-        let Ok(mut completed) = self.completed_spans.write() else { return Vec::new(); };
+        let Ok(mut completed) = self.completed_spans.write() else {
+            return Vec::new();
+        };
         std::mem::take(&mut *completed)
     }
 
@@ -686,22 +749,27 @@ impl TelemetryProvider {
         OtlpExportData {
             service_name: self.config.service_name.clone(),
             service_version: self.config.service_version.clone(),
-            spans: spans.into_iter().map(|s| OtlpSpan {
-                trace_id: s.trace_id,
-                span_id: s.span_id,
-                parent_span_id: s.parent_id,
-                name: s.name,
-                start_time_unix_nano: 0, // Would be real timestamp
-                end_time_unix_nano: 0,
-                attributes: s.attributes.into_iter()
-                    .map(|(k, v)| (k, format!("{:?}", v)))
-                    .collect(),
-                status: match s.status {
-                    SpanStatus::Ok => "OK".to_string(),
-                    SpanStatus::Error { message } => format!("ERROR: {}", message),
-                    SpanStatus::Unset => "UNSET".to_string(),
-                },
-            }).collect(),
+            spans: spans
+                .into_iter()
+                .map(|s| OtlpSpan {
+                    trace_id: s.trace_id,
+                    span_id: s.span_id,
+                    parent_span_id: s.parent_id,
+                    name: s.name,
+                    start_time_unix_nano: 0, // Would be real timestamp
+                    end_time_unix_nano: 0,
+                    attributes: s
+                        .attributes
+                        .into_iter()
+                        .map(|(k, v)| (k, format!("{:?}", v)))
+                        .collect(),
+                    status: match s.status {
+                        SpanStatus::Ok => "OK".to_string(),
+                        SpanStatus::Error { message } => format!("ERROR: {}", message),
+                        SpanStatus::Unset => "UNSET".to_string(),
+                    },
+                })
+                .collect(),
             metrics,
         }
     }
@@ -818,7 +886,10 @@ impl TraceContext {
 
     /// Convert to W3C traceparent header
     pub fn to_traceparent(&self) -> String {
-        format!("00-{}-{}-{:02x}", self.trace_id, self.span_id, self.trace_flags)
+        format!(
+            "00-{}-{}-{:02x}",
+            self.trace_id, self.span_id, self.trace_flags
+        )
     }
 }
 

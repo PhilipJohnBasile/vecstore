@@ -23,8 +23,8 @@
 //! ```
 
 use vecstore::distributed::{
-    ConsistencyLevel, ConsistentHashRing, DistributedConfig, DistributedStore,
-    ReplicationStrategy, ShardingStrategy,
+    ConsistencyLevel, ConsistentHashRing, DistributedConfig, DistributedStore, ReplicationStrategy,
+    ShardingStrategy,
 };
 
 fn main() {

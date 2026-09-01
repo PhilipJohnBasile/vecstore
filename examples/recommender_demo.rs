@@ -8,10 +8,10 @@
 
 use anyhow::Result;
 use std::collections::HashMap;
+use vecstore::Metadata;
 use vecstore::recommender::{
     CollaborativeRecommender, ContentBasedRecommender, HybridRecommender, UserPreference,
 };
-use vecstore::Metadata;
 
 fn create_metadata(title: &str, genre: &str, year: i32) -> Metadata {
     let mut fields = HashMap::new();

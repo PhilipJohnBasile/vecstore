@@ -28,9 +28,9 @@
 //! println!("Recommended beam width: {}", params.beam_width);
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::Duration;
-use serde::{Deserialize, Serialize};
 
 use crate::error::VecStoreError;
 
@@ -210,7 +210,12 @@ impl CostModel {
             &observation.params_used,
             &DataDistribution {
                 count: 0,
-                dimensions: observation.profile.vector.as_ref().map(|v| v.len()).unwrap_or(128),
+                dimensions: observation
+                    .profile
+                    .vector
+                    .as_ref()
+                    .map(|v| v.len())
+                    .unwrap_or(128),
                 centroid: Vec::new(),
                 variance: Vec::new(),
                 intrinsic_dim: 0.0,
@@ -261,7 +266,9 @@ impl RecallPredictor {
             profile.filter_selectivity as f64,
         ];
 
-        let raw: f64 = self.coefficients.iter()
+        let raw: f64 = self
+            .coefficients
+            .iter()
             .zip(features.iter())
             .map(|(c, f)| c * f)
             .sum();
@@ -271,14 +278,22 @@ impl RecallPredictor {
     }
 
     /// Update predictor with observation
-    pub fn update(&mut self, params: &SearchParams, profile: &QueryProfile, actual_recall: f64, learning_rate: f64) {
+    pub fn update(
+        &mut self,
+        params: &SearchParams,
+        profile: &QueryProfile,
+        actual_recall: f64,
+        learning_rate: f64,
+    ) {
         let predicted = self.predict(params, profile);
         let error = actual_recall - predicted;
 
-        let features = [1.0,
+        let features = [
+            1.0,
             params.ef_search as f64,
             params.beam_width as f64,
-            profile.filter_selectivity as f64];
+            profile.filter_selectivity as f64,
+        ];
 
         // Gradient descent update
         for (i, f) in features.iter().enumerate() {
@@ -353,27 +368,43 @@ impl WorkloadAnalyzer {
         for obs in &self.history {
             let key = format!(
                 "k={}_filter={}",
-                if obs.profile.k <= 10 { "small" } else if obs.profile.k <= 100 { "medium" } else { "large" },
+                if obs.profile.k <= 10 {
+                    "small"
+                } else if obs.profile.k <= 100 {
+                    "medium"
+                } else {
+                    "large"
+                },
                 obs.profile.has_filter
             );
             patterns.entry(key).or_default().push(obs);
         }
 
-        let total_time = self.history.last()
-            .and_then(|last| self.history.first().map(|first| {
-                last.timestamp.duration_since(first.timestamp).unwrap_or_default().as_secs_f64()
-            }))
+        let total_time = self
+            .history
+            .last()
+            .and_then(|last| {
+                self.history.first().map(|first| {
+                    last.timestamp
+                        .duration_since(first.timestamp)
+                        .unwrap_or_default()
+                        .as_secs_f64()
+                })
+            })
             .unwrap_or(1.0);
 
-        self.patterns = patterns.into_iter()
+        self.patterns = patterns
+            .into_iter()
             .map(|(name, obs)| {
                 let count = obs.len();
                 let frequency = count as f64 / total_time.max(1.0);
                 let avg_k = obs.iter().map(|o| o.profile.k as f64).sum::<f64>() / count as f64;
-                let filter_pct = obs.iter().filter(|o| o.profile.has_filter).count() as f64 / count as f64;
+                let filter_pct =
+                    obs.iter().filter(|o| o.profile.has_filter).count() as f64 / count as f64;
 
                 // Find best params (lowest latency meeting recall target)
-                let best = obs.iter()
+                let best = obs
+                    .iter()
                     .filter(|o| o.recall.unwrap_or(1.0) >= 0.9)
                     .min_by(|a, b| a.latency_ms.partial_cmp(&b.latency_ms).unwrap());
 
@@ -399,10 +430,25 @@ impl WorkloadAnalyzer {
         let total = self.history.len();
         let avg_latency = self.history.iter().map(|o| o.latency_ms).sum::<f64>() / total as f64;
         let avg_k = self.history.iter().map(|o| o.profile.k as f64).sum::<f64>() / total as f64;
-        let filter_ratio = self.history.iter().filter(|o| o.profile.has_filter).count() as f64 / total as f64;
+        let filter_ratio =
+            self.history.iter().filter(|o| o.profile.has_filter).count() as f64 / total as f64;
 
-        let p50_latency = percentile(&self.history.iter().map(|o| o.latency_ms).collect::<Vec<_>>(), 0.5);
-        let p99_latency = percentile(&self.history.iter().map(|o| o.latency_ms).collect::<Vec<_>>(), 0.99);
+        let p50_latency = percentile(
+            &self
+                .history
+                .iter()
+                .map(|o| o.latency_ms)
+                .collect::<Vec<_>>(),
+            0.5,
+        );
+        let p99_latency = percentile(
+            &self
+                .history
+                .iter()
+                .map(|o| o.latency_ms)
+                .collect::<Vec<_>>(),
+            0.99,
+        );
 
         WorkloadSummary {
             total_queries: total,
@@ -510,7 +556,8 @@ impl LearnedIndex {
 
         // Update models
         if self.config.continuous_learning {
-            self.cost_model.update(&observation, self.config.learning_rate);
+            self.cost_model
+                .update(&observation, self.config.learning_rate);
 
             if let Some(actual_recall) = recall {
                 self.recall_predictor.update(
@@ -675,7 +722,8 @@ impl LearnedIndex {
             let mut min_dist = f32::MAX;
             for (j, v2) in vectors.iter().enumerate() {
                 if i != j {
-                    let dist: f32 = v1.iter()
+                    let dist: f32 = v1
+                        .iter()
                         .zip(v2.iter())
                         .map(|(a, b)| (a - b).powi(2))
                         .sum::<f32>()
@@ -721,9 +769,13 @@ impl LearnedIndex {
         }
 
         // Adjust beam width similarly
-        let avg_recall = self.workload.history.iter()
+        let avg_recall = self
+            .workload
+            .history
+            .iter()
             .filter_map(|o| o.recall)
-            .sum::<f64>() / self.workload.history.len().max(1) as f64;
+            .sum::<f64>()
+            / self.workload.history.len().max(1) as f64;
 
         if avg_recall < self.config.target_recall {
             self.current_params.beam_width = (self.current_params.beam_width as f64 * 1.2) as usize;
@@ -760,7 +812,8 @@ impl LearnedIndex {
         if profile.has_filter && profile.filter_selectivity < 0.5 {
             // Low selectivity = need more candidates
             let mut params = base.clone();
-            params.ef_search = (base.ef_search as f32 / profile.filter_selectivity.max(0.1)) as usize;
+            params.ef_search =
+                (base.ef_search as f32 / profile.filter_selectivity.max(0.1)) as usize;
             params.ef_search = params.ef_search.min(500);
             candidates.push(params);
         }
@@ -814,11 +867,18 @@ pub struct BenchmarkResult {
 impl ParamBenchmark {
     /// Create a new benchmark
     pub fn new() -> Self {
-        Self { results: Vec::new() }
+        Self {
+            results: Vec::new(),
+        }
     }
 
     /// Run benchmark with given parameters
-    pub fn run<F>(&mut self, params: SearchParams, query_fn: F, iterations: usize) -> BenchmarkResult
+    pub fn run<F>(
+        &mut self,
+        params: SearchParams,
+        query_fn: F,
+        iterations: usize,
+    ) -> BenchmarkResult
     where
         F: Fn(&SearchParams) -> (Duration, Option<f64>),
     {
@@ -859,10 +919,17 @@ impl ParamBenchmark {
     }
 
     /// Find best parameters meeting constraints
-    pub fn best_params(&self, min_recall: Option<f64>, max_latency: Option<f64>) -> Option<&BenchmarkResult> {
-        self.results.iter()
+    pub fn best_params(
+        &self,
+        min_recall: Option<f64>,
+        max_latency: Option<f64>,
+    ) -> Option<&BenchmarkResult> {
+        self.results
+            .iter()
             .filter(|r| {
-                let recall_ok = min_recall.map(|mr| r.recall.unwrap_or(1.0) >= mr).unwrap_or(true);
+                let recall_ok = min_recall
+                    .map(|mr| r.recall.unwrap_or(1.0) >= mr)
+                    .unwrap_or(true);
                 let latency_ok = max_latency.map(|ml| r.avg_latency_ms <= ml).unwrap_or(true);
                 recall_ok && latency_ok
             })
@@ -906,7 +973,9 @@ mod tests {
         let mut index = LearnedIndex::new(config);
 
         for i in 0..100 {
-            index.add(format!("v{}", i), vec![i as f32, 0.0, 0.0]).unwrap();
+            index
+                .add(format!("v{}", i), vec![i as f32, 0.0, 0.0])
+                .unwrap();
         }
 
         index.update_distribution();
@@ -930,13 +999,7 @@ mod tests {
             category: None,
         };
 
-        index.observe_query(
-            profile,
-            5.0,
-            Some(0.95),
-            10,
-            SearchParams::default(),
-        );
+        index.observe_query(profile, 5.0, Some(0.95), 10, SearchParams::default());
 
         let summary = index.workload_summary();
         assert_eq!(summary.total_queries, 1);

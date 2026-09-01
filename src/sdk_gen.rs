@@ -177,7 +177,10 @@ impl SdkGenerator {
                 },
                 FieldDef {
                     name: "payload".to_string(),
-                    field_type: FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::Any)),
+                    field_type: FieldType::Map(
+                        Box::new(FieldType::String),
+                        Box::new(FieldType::Any),
+                    ),
                     optional: true,
                     description: Some("Metadata payload".to_string()),
                     default: None,
@@ -206,7 +209,10 @@ impl SdkGenerator {
                 },
                 FieldDef {
                     name: "payload".to_string(),
-                    field_type: FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::Any)),
+                    field_type: FieldType::Map(
+                        Box::new(FieldType::String),
+                        Box::new(FieldType::Any),
+                    ),
                     optional: true,
                     description: None,
                     default: None,
@@ -278,7 +284,10 @@ impl SdkGenerator {
                 },
                 FieldDef {
                     name: "filter".to_string(),
-                    field_type: FieldType::Map(Box::new(FieldType::String), Box::new(FieldType::Any)),
+                    field_type: FieldType::Map(
+                        Box::new(FieldType::String),
+                        Box::new(FieldType::Any),
+                    ),
                     optional: true,
                     description: Some("Metadata filter".to_string()),
                     default: None,
@@ -441,7 +450,9 @@ impl SdkGenerator {
         output.push_str("    this.apiKey = apiKey;\n");
         output.push_str("  }\n\n");
 
-        output.push_str("  private async request<T>(method: string, path: string, body?: any): Promise<T> {\n");
+        output.push_str(
+            "  private async request<T>(method: string, path: string, body?: any): Promise<T> {\n",
+        );
         output.push_str("    const headers: Record<string, string> = {\n");
         output.push_str("      'Content-Type': 'application/json',\n");
         output.push_str("    };\n");
@@ -452,7 +463,9 @@ impl SdkGenerator {
         output.push_str("      body: body ? JSON.stringify(body) : undefined,\n");
         output.push_str("    });\n\n");
         output.push_str("    if (!response.ok) {\n");
-        output.push_str("      throw new Error(`HTTP ${response.status}: ${await response.text()}`);\n");
+        output.push_str(
+            "      throw new Error(`HTTP ${response.status}: ${await response.text()}`);\n",
+        );
         output.push_str("    }\n\n");
         output.push_str("    return response.json();\n");
         output.push_str("  }\n\n");
@@ -463,8 +476,10 @@ impl SdkGenerator {
             let return_type = method.response_type.as_deref().unwrap_or("void");
 
             output.push_str(&format!("  /** {} */\n", method.description));
-            output.push_str(&format!("  async {}({}): Promise<{}> {{\n",
-                method.name, params, return_type));
+            output.push_str(&format!(
+                "  async {}({}): Promise<{}> {{\n",
+                method.name, params, return_type
+            ));
 
             let path = self.interpolate_path_ts(&method.path, &method.params);
             if method.request_type.is_some() {
@@ -509,7 +524,11 @@ impl SdkGenerator {
 
             for fld in &type_def.fields {
                 let py_type = self.field_type_to_py(&fld.field_type);
-                let optional = if fld.optional { format!("Optional[{}]", py_type) } else { py_type };
+                let optional = if fld.optional {
+                    format!("Optional[{}]", py_type)
+                } else {
+                    py_type
+                };
                 let default = if fld.optional { " = None" } else { "" };
                 output.push_str(&format!("    {}: {}{}\n", fld.name, optional, default));
             }
@@ -525,7 +544,9 @@ impl SdkGenerator {
         output.push_str("        self.base_url = base_url\n");
         output.push_str("        self.api_key = api_key\n\n");
 
-        output.push_str("    def _request(self, method: str, path: str, body: Optional[Dict] = None) -> Any:\n");
+        output.push_str(
+            "    def _request(self, method: str, path: str, body: Optional[Dict] = None) -> Any:\n",
+        );
         output.push_str("        headers = {'Content-Type': 'application/json'}\n");
         output.push_str("        if self.api_key:\n");
         output.push_str("            headers['X-API-Key'] = self.api_key\n\n");
@@ -543,9 +564,14 @@ impl SdkGenerator {
             let params = self.method_params_py(method);
             let return_type = method.response_type.as_deref().unwrap_or("None");
 
-            output.push_str(&format!("    def {}(self{}) -> {}:\n",
+            output.push_str(&format!(
+                "    def {}(self{}) -> {}:\n",
                 to_snake_case(&method.name),
-                if params.is_empty() { String::new() } else { format!(", {}", params) },
+                if params.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {}", params)
+                },
                 self.response_type_to_py(return_type)
             ));
 
@@ -594,11 +620,13 @@ impl SdkGenerator {
 
             for fld in &type_def.fields {
                 let go_type = self.field_type_to_go(&fld.field_type, fld.optional);
-                let json_tag = format!("`json:\"{}{}\"`",
+                let json_tag = format!(
+                    "`json:\"{}{}\"`",
                     fld.name,
                     if fld.optional { ",omitempty" } else { "" }
                 );
-                output.push_str(&format!("\t{} {} {}\n",
+                output.push_str(&format!(
+                    "\t{} {} {}\n",
                     to_pascal_case(&fld.name),
                     go_type,
                     json_tag
@@ -666,9 +694,14 @@ impl SdkGenerator {
             let params = self.method_params_go(method);
             let return_type = self.response_type_to_go(method.response_type.as_deref());
 
-            output.push_str(&format!("func (c *Client) {}(ctx context.Context{}) {} {{\n",
+            output.push_str(&format!(
+                "func (c *Client) {}(ctx context.Context{}) {} {{\n",
                 func_name,
-                if params.is_empty() { String::new() } else { format!(", {}", params) },
+                if params.is_empty() {
+                    String::new()
+                } else {
+                    format!(", {}", params)
+                },
                 return_type
             ));
 
@@ -680,19 +713,27 @@ impl SdkGenerator {
                 output.push('\n');
 
                 if method.request_type.is_some() {
-                    output.push_str(&format!("\terr := c.request(ctx, \"{}\", {}, body, &result)\n",
-                        method.http_method, path));
+                    output.push_str(&format!(
+                        "\terr := c.request(ctx, \"{}\", {}, body, &result)\n",
+                        method.http_method, path
+                    ));
                 } else {
-                    output.push_str(&format!("\terr := c.request(ctx, \"{}\", {}, nil, &result)\n",
-                        method.http_method, path));
+                    output.push_str(&format!(
+                        "\terr := c.request(ctx, \"{}\", {}, nil, &result)\n",
+                        method.http_method, path
+                    ));
                 }
                 output.push_str("\treturn result, err\n");
             } else if method.request_type.is_some() {
-                output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, body, nil)\n",
-                    method.http_method, path));
+                output.push_str(&format!(
+                    "\treturn c.request(ctx, \"{}\", {}, body, nil)\n",
+                    method.http_method, path
+                ));
             } else {
-                output.push_str(&format!("\treturn c.request(ctx, \"{}\", {}, nil, nil)\n",
-                    method.http_method, path));
+                output.push_str(&format!(
+                    "\treturn c.request(ctx, \"{}\", {}, nil, nil)\n",
+                    method.http_method, path
+                ));
             }
 
             output.push_str("}\n\n");
@@ -734,7 +775,8 @@ impl SdkGenerator {
             let java_return = self.response_type_to_java(return_type);
 
             output.push_str(&format!("    /** {} */\n", method.description));
-            output.push_str(&format!("    public {} {}({}) throws Exception {{\n",
+            output.push_str(&format!(
+                "    public {} {}({}) throws Exception {{\n",
                 java_return,
                 method.name,
                 self.method_params_java(method)
@@ -796,7 +838,11 @@ impl SdkGenerator {
                 } else {
                     rust_type
                 };
-                output.push_str(&format!("    pub {}: {},\n", to_snake_case(&fld.name), field_type));
+                output.push_str(&format!(
+                    "    pub {}: {},\n",
+                    to_snake_case(&fld.name),
+                    field_type
+                ));
             }
 
             output.push_str("}\n\n");
@@ -904,7 +950,10 @@ impl SdkGenerator {
         }
 
         if method.request_type.is_some() {
-            params.push(format!("body *{}", method.request_type.as_ref().unwrap().replace("[]", "")));
+            params.push(format!(
+                "body *{}",
+                method.request_type.as_ref().unwrap().replace("[]", "")
+            ));
         }
 
         params.join(", ")
@@ -920,7 +969,10 @@ impl SdkGenerator {
         }
 
         if let Some(ref rt) = method.request_type {
-            params.push(format!("{} body", rt.replace("[]", "List<>").replace("<>", "")));
+            params.push(format!(
+                "{} body",
+                rt.replace("[]", "List<>").replace("<>", "")
+            ));
         }
 
         params.join(", ")
@@ -937,7 +989,8 @@ impl SdkGenerator {
     }
 
     fn interpolate_path_go(&self, path: &str, _params: &[ParamDef]) -> String {
-        let formatted = path.replace("{collection}", "\" + collection + \"")
+        let formatted = path
+            .replace("{collection}", "\" + collection + \"")
             .replace("{id}", "\" + id + \"");
         format!("\"{}\"", formatted).replace(" + \"\"", "")
     }
@@ -961,7 +1014,7 @@ impl SdkGenerator {
                 } else {
                     format!("({}, error)", t)
                 }
-            }
+            },
             None => "error".to_string(),
         }
     }

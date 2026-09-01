@@ -303,7 +303,12 @@ impl VecStoreOperator {
     }
 
     /// Handle cluster creation
-    pub fn handle_create(&self, name: &str, namespace: &str, spec: VecStoreClusterSpec) -> Result<()> {
+    pub fn handle_create(
+        &self,
+        name: &str,
+        namespace: &str,
+        spec: VecStoreClusterSpec,
+    ) -> Result<()> {
         let cluster = ManagedCluster {
             name: name.to_string(),
             namespace: namespace.to_string(),
@@ -325,8 +330,11 @@ impl VecStoreOperator {
         };
 
         let key = format!("{}/{}", namespace, name);
-        self.clusters.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?
+        self.clusters
+            .write()
+            .map_err(|_| {
+                VecStoreError::LockError("Failed to acquire write lock on clusters".into())
+            })?
             .insert(key.clone(), cluster);
 
         // Queue reconciliation
@@ -336,10 +344,16 @@ impl VecStoreOperator {
     }
 
     /// Handle cluster update
-    pub fn handle_update(&self, name: &str, namespace: &str, spec: VecStoreClusterSpec) -> Result<()> {
+    pub fn handle_update(
+        &self,
+        name: &str,
+        namespace: &str,
+        spec: VecStoreClusterSpec,
+    ) -> Result<()> {
         let key = format!("{}/{}", namespace, name);
-        let mut clusters = self.clusters.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?;
+        let mut clusters = self.clusters.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on clusters".into())
+        })?;
 
         if let Some(cluster) = clusters.get_mut(&key) {
             cluster.spec = spec;
@@ -347,7 +361,10 @@ impl VecStoreOperator {
             self.queue_reconcile(name, namespace, ReconcileTrigger::Update);
             Ok(())
         } else {
-            Err(VecStoreError::NotFound(format!("Cluster {} not found", key)))
+            Err(VecStoreError::NotFound(format!(
+                "Cluster {} not found",
+                key
+            )))
         }
     }
 
@@ -357,8 +374,12 @@ impl VecStoreOperator {
         self.queue_reconcile(name, namespace, ReconcileTrigger::Delete);
 
         // Mark for deletion (actual removal after cleanup)
-        if let Some(cluster) = self.clusters.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?
+        if let Some(cluster) = self
+            .clusters
+            .write()
+            .map_err(|_| {
+                VecStoreError::LockError("Failed to acquire write lock on clusters".into())
+            })?
             .get_mut(&key)
         {
             cluster.status.phase = ClusterPhase::Terminating;
@@ -375,7 +396,9 @@ impl VecStoreOperator {
             trigger,
             queued_at: Instant::now(),
         };
-        let Ok(mut queue) = self.reconcile_queue.write() else { return; };
+        let Ok(mut queue) = self.reconcile_queue.write() else {
+            return;
+        };
         queue.push(request);
     }
 
@@ -389,22 +412,25 @@ impl VecStoreOperator {
         // Update metrics
         use std::sync::atomic::Ordering;
         self.metrics.reconcile_total.fetch_add(1, Ordering::Relaxed);
-        self.metrics.reconcile_duration_sum.fetch_add(
-            start.elapsed().as_millis() as u64,
-            Ordering::Relaxed,
-        );
+        self.metrics
+            .reconcile_duration_sum
+            .fetch_add(start.elapsed().as_millis() as u64, Ordering::Relaxed);
 
         if result.is_err() {
-            self.metrics.reconcile_errors.fetch_add(1, Ordering::Relaxed);
+            self.metrics
+                .reconcile_errors
+                .fetch_add(1, Ordering::Relaxed);
         }
 
         result
     }
 
     fn do_reconcile(&self, key: &str) -> Result<ReconcileResult> {
-        let mut clusters = self.clusters.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on clusters".into()))?;
-        let cluster = clusters.get_mut(key)
+        let mut clusters = self.clusters.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on clusters".into())
+        })?;
+        let cluster = clusters
+            .get_mut(key)
             .ok_or_else(|| VecStoreError::NotFound(format!("Cluster {} not found", key)))?;
 
         // Check if deletion is requested
@@ -454,9 +480,12 @@ impl VecStoreOperator {
 
         // Check HA configuration
         if let Some(ref ha) = cluster.spec.ha_config
-            && ha.auto_failover && cluster.status.leader.is_none() && cluster.status.ready_replicas > 0 {
-                actions.push(ReconcileAction::ElectLeader);
-            }
+            && ha.auto_failover
+            && cluster.status.leader.is_none()
+            && cluster.status.ready_replicas > 0
+        {
+            actions.push(ReconcileAction::ElectLeader);
+        }
 
         // Check backup schedule (Rust 1.92 if-let chain)
         if let Some(ref backup) = cluster.spec.backup
@@ -478,48 +507,72 @@ impl VecStoreOperator {
                 cluster.status.ready_replicas += count;
                 cluster.status.phase = ClusterPhase::Running;
 
-                self.add_condition(cluster, ConditionType::ScalingUp, true,
-                    "ScalingUp", &format!("Scaling up by {} replicas", count));
-            }
+                self.add_condition(
+                    cluster,
+                    ConditionType::ScalingUp,
+                    true,
+                    "ScalingUp",
+                    &format!("Scaling up by {} replicas", count),
+                );
+            },
             ReconcileAction::ScaleDown { count } => {
                 cluster.status.phase = ClusterPhase::Scaling;
                 cluster.status.total_replicas -= count;
                 cluster.status.ready_replicas -= count;
                 cluster.status.phase = ClusterPhase::Running;
 
-                self.add_condition(cluster, ConditionType::ScalingDown, true,
-                    "ScalingDown", &format!("Scaling down by {} replicas", count));
-            }
+                self.add_condition(
+                    cluster,
+                    ConditionType::ScalingDown,
+                    true,
+                    "ScalingDown",
+                    &format!("Scaling down by {} replicas", count),
+                );
+            },
             ReconcileAction::UpdateConfig => {
                 cluster.status.phase = ClusterPhase::Updating;
                 // In real operator: rolling update of pods
                 cluster.status.phase = ClusterPhase::Running;
 
-                self.add_condition(cluster, ConditionType::Progressing, true,
-                    "ConfigUpdated", "Configuration updated successfully");
-            }
+                self.add_condition(
+                    cluster,
+                    ConditionType::Progressing,
+                    true,
+                    "ConfigUpdated",
+                    "Configuration updated successfully",
+                );
+            },
             ReconcileAction::ElectLeader => {
                 // Simple leader election (in real operator: use Raft or lease)
                 cluster.status.leader = Some(format!("{}-0", cluster.name));
 
-                self.add_condition(cluster, ConditionType::Ready, true,
-                    "LeaderElected", "Leader election completed");
-            }
+                self.add_condition(
+                    cluster,
+                    ConditionType::Ready,
+                    true,
+                    "LeaderElected",
+                    "Leader election completed",
+                );
+            },
             ReconcileAction::TriggerBackup => {
                 // In real operator: create backup job
                 cluster.status.last_backup = Some(chrono::Utc::now().to_rfc3339());
 
-                self.add_condition(cluster, ConditionType::BackupReady, true,
-                    "BackupCompleted", "Backup completed successfully");
-            }
+                self.add_condition(
+                    cluster,
+                    ConditionType::BackupReady,
+                    true,
+                    "BackupCompleted",
+                    "Backup completed successfully",
+                );
+            },
             ReconcileAction::Repair { reason } => {
                 cluster.status.phase = ClusterPhase::Updating;
                 // In real operator: repair degraded pods
                 cluster.status.phase = ClusterPhase::Running;
 
-                self.add_condition(cluster, ConditionType::Degraded, false,
-                    "Repaired", reason);
-            }
+                self.add_condition(cluster, ConditionType::Degraded, false, "Repaired", reason);
+            },
         }
 
         Ok(())
@@ -543,19 +596,29 @@ impl VecStoreOperator {
 
     fn backup_due(&self, cluster: &ManagedCluster) -> bool {
         if let Some(ref last) = cluster.status.last_backup
-            && let Ok(last_time) = chrono::DateTime::parse_from_rfc3339(last) {
-                let now = chrono::Utc::now();
-                let elapsed = now.signed_duration_since(last_time);
-                // Simple check: backup if more than 24 hours
-                return elapsed.num_hours() >= 24;
-            }
+            && let Ok(last_time) = chrono::DateTime::parse_from_rfc3339(last)
+        {
+            let now = chrono::Utc::now();
+            let elapsed = now.signed_duration_since(last_time);
+            // Simple check: backup if more than 24 hours
+            return elapsed.num_hours() >= 24;
+        }
         true // No backup yet
     }
 
-    fn add_condition(&self, cluster: &mut ManagedCluster, ctype: ConditionType,
-                     status: bool, reason: &str, message: &str) {
+    fn add_condition(
+        &self,
+        cluster: &mut ManagedCluster,
+        ctype: ConditionType,
+        status: bool,
+        reason: &str,
+        message: &str,
+    ) {
         // Remove existing condition of same type
-        cluster.status.conditions.retain(|c| c.condition_type != ctype);
+        cluster
+            .status
+            .conditions
+            .retain(|c| c.condition_type != ctype);
 
         cluster.status.conditions.push(ClusterCondition {
             condition_type: ctype,
@@ -569,14 +632,20 @@ impl VecStoreOperator {
     /// Get cluster status
     pub fn get_status(&self, name: &str, namespace: &str) -> Option<VecStoreClusterStatus> {
         let key = format!("{}/{}", namespace, name);
-        let Ok(clusters) = self.clusters.read() else { return None; };
+        let Ok(clusters) = self.clusters.read() else {
+            return None;
+        };
         clusters.get(&key).map(|c| c.status.clone())
     }
 
     /// List all managed clusters
     pub fn list_clusters(&self) -> Vec<(String, String, VecStoreClusterStatus)> {
-        let Ok(clusters) = self.clusters.read() else { return Vec::new(); };
-        clusters.values().map(|c| (c.namespace.clone(), c.name.clone(), c.status.clone()))
+        let Ok(clusters) = self.clusters.read() else {
+            return Vec::new();
+        };
+        clusters
+            .values()
+            .map(|c| (c.namespace.clone(), c.name.clone(), c.status.clone()))
             .collect()
     }
 
@@ -735,12 +804,14 @@ spec:
     kind: VecStoreCluster
     shortNames:
       - vsc
-"#.to_string()
+"#
+        .to_string()
     }
 
     /// Generate StatefulSet manifest for a cluster
     pub fn generate_statefulset(spec: &VecStoreClusterSpec, name: &str, namespace: &str) -> String {
-        format!(r#"apiVersion: apps/v1
+        format!(
+            r#"apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: {name}
@@ -827,7 +898,8 @@ spec:
 
     /// Generate headless service manifest
     pub fn generate_headless_service(name: &str, namespace: &str) -> String {
-        format!(r#"apiVersion: v1
+        format!(
+            r#"apiVersion: v1
 kind: Service
 metadata:
   name: {name}-headless
@@ -853,7 +925,8 @@ spec:
 
     /// Generate client service manifest
     pub fn generate_client_service(name: &str, namespace: &str) -> String {
-        format!(r#"apiVersion: v1
+        format!(
+            r#"apiVersion: v1
 kind: Service
 metadata:
   name: {name}
@@ -882,7 +955,8 @@ spec:
     /// Generate HPA manifest
     pub fn generate_hpa(spec: &VecStoreClusterSpec, name: &str, namespace: &str) -> Option<String> {
         spec.autoscaling.as_ref().map(|autoscaling| {
-            format!(r#"apiVersion: autoscaling/v2
+            format!(
+                r#"apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
   name: {name}
@@ -918,7 +992,8 @@ spec:
     /// Generate PodDisruptionBudget manifest
     pub fn generate_pdb(spec: &VecStoreClusterSpec, name: &str, namespace: &str) -> Option<String> {
         spec.ha_config.as_ref().map(|ha| {
-            format!(r#"apiVersion: policy/v1
+            format!(
+                r#"apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: {name}
@@ -939,7 +1014,8 @@ spec:
 
     /// Generate ServiceMonitor for Prometheus
     pub fn generate_service_monitor(name: &str, namespace: &str) -> String {
-        format!(r#"apiVersion: monitoring.coreos.com/v1
+        format!(
+            r#"apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: {name}
@@ -1067,12 +1143,14 @@ securityContext:
 nodeSelector: {}
 tolerations: []
 affinity: {}
-"#.to_string()
+"#
+        .to_string()
     }
 
     /// Generate Chart.yaml
     pub fn generate_chart() -> String {
-        format!(r#"apiVersion: v2
+        format!(
+            r#"apiVersion: v2
 name: vecstore
 description: A Helm chart for VecStore vector database
 type: application
@@ -1090,7 +1168,9 @@ sources:
 maintainers:
   - name: VecStore Team
     email: team@vecstore.io
-"#, env!("CARGO_PKG_VERSION"))
+"#,
+            env!("CARGO_PKG_VERSION")
+        )
     }
 }
 
@@ -1141,7 +1221,9 @@ mod tests {
         let operator = VecStoreOperator::new(OperatorConfig::default());
         let spec = test_spec();
 
-        operator.handle_create("test-cluster", "default", spec).unwrap();
+        operator
+            .handle_create("test-cluster", "default", spec)
+            .unwrap();
 
         let status = operator.get_status("test-cluster", "default").unwrap();
         assert_eq!(status.phase, ClusterPhase::Pending);
@@ -1152,7 +1234,9 @@ mod tests {
         let operator = VecStoreOperator::new(OperatorConfig::default());
         let spec = test_spec();
 
-        operator.handle_create("test-cluster", "default", spec).unwrap();
+        operator
+            .handle_create("test-cluster", "default", spec)
+            .unwrap();
 
         let result = operator.reconcile("test-cluster", "default").unwrap();
         assert!(result.requeue);

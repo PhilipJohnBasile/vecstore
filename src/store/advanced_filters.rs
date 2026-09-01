@@ -56,7 +56,7 @@ impl GeoFilter {
                     && point.lat <= ne.lat
                     && point.lon >= sw.lon
                     && point.lon <= ne.lon
-            }
+            },
         }
     }
 
@@ -104,13 +104,15 @@ impl DateRangeFilter {
     /// Check if a timestamp matches this filter
     pub fn matches(&self, timestamp: i64) -> bool {
         if let Some(start) = self.start
-            && timestamp < start {
-                return false;
-            }
+            && timestamp < start
+        {
+            return false;
+        }
         if let Some(end) = self.end
-            && timestamp > end {
-                return false;
-            }
+            && timestamp > end
+        {
+            return false;
+        }
         true
     }
 
@@ -133,13 +135,15 @@ impl NumericRangeFilter {
 
     pub fn matches(&self, value: f64) -> bool {
         if let Some(min) = self.min
-            && value < min {
-                return false;
-            }
+            && value < min
+        {
+            return false;
+        }
         if let Some(max) = self.max
-            && value > max {
-                return false;
-            }
+            && value > max
+        {
+            return false;
+        }
         true
     }
 }
@@ -179,15 +183,17 @@ impl ArrayFilter {
             ArrayFilter::Length { min, max } => {
                 let len = arr.len();
                 if let Some(min_len) = min
-                    && len < *min_len {
-                        return false;
-                    }
+                    && len < *min_len
+                {
+                    return false;
+                }
                 if let Some(max_len) = max
-                    && len > *max_len {
-                        return false;
-                    }
+                    && len > *max_len
+                {
+                    return false;
+                }
                 true
-            }
+            },
         }
     }
 }
@@ -219,7 +225,7 @@ impl AdvancedFilter {
                 } else {
                     false
                 }
-            }
+            },
 
             AdvancedFilter::DateRange { field, filter } => {
                 if let Some(timestamp) = DateRangeFilter::extract_timestamp(metadata, field) {
@@ -227,7 +233,7 @@ impl AdvancedFilter {
                 } else {
                     false
                 }
-            }
+            },
 
             AdvancedFilter::NumericRange { field, filter } => {
                 if let Some(value) = metadata.fields.get(field).and_then(|v| v.as_f64()) {
@@ -235,7 +241,7 @@ impl AdvancedFilter {
                 } else {
                     false
                 }
-            }
+            },
 
             AdvancedFilter::Array { field, filter } => {
                 if let Some(array) = metadata.fields.get(field) {
@@ -243,7 +249,7 @@ impl AdvancedFilter {
                 } else {
                     false
                 }
-            }
+            },
         }
     }
 }

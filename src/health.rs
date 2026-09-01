@@ -363,13 +363,13 @@ impl HealthChecker {
         // Calculate memory utilization
         // Estimate total system memory (could be made configurable)
         let total_memory_estimate = 16 * 1024 * 1024 * 1024usize; // 16 GB default
-        let memory_utilization = (memory_bytes as f64 / total_memory_estimate as f64 * 100.0)
-            .clamp(0.0, 100.0);
+        let memory_utilization =
+            (memory_bytes as f64 / total_memory_estimate as f64 * 100.0).clamp(0.0, 100.0);
 
         // Calculate disk utilization (assuming 1TB max for simplicity)
         let total_disk_estimate = 1024 * 1024 * 1024 * 1024usize; // 1 TB
-        let disk_utilization = (disk_bytes as f64 / total_disk_estimate as f64 * 100.0)
-            .clamp(0.0, 100.0);
+        let disk_utilization =
+            (disk_bytes as f64 / total_disk_estimate as f64 * 100.0).clamp(0.0, 100.0);
 
         ResourceHealth {
             memory_bytes,
@@ -482,17 +482,18 @@ impl HealthChecker {
 
     fn generate_performance_alerts(&self, perf: &PerformanceHealth, alerts: &mut Vec<Alert>) {
         if let Some(latency) = perf.p95_query_latency_ms
-            && latency >= self.config.latency_warning_ms {
-                alerts.push(Alert {
-                    severity: AlertSeverity::Warning,
-                    category: AlertCategory::Performance,
-                    message: format!("High query latency: {:.2}ms (p95)", latency),
-                    value: Some(latency),
-                    recommendation: Some(
-                        "Check index parameters or consider upgrading hardware".to_string(),
-                    ),
-                });
-            }
+            && latency >= self.config.latency_warning_ms
+        {
+            alerts.push(Alert {
+                severity: AlertSeverity::Warning,
+                category: AlertCategory::Performance,
+                message: format!("High query latency: {:.2}ms (p95)", latency),
+                value: Some(latency),
+                recommendation: Some(
+                    "Check index parameters or consider upgrading hardware".to_string(),
+                ),
+            });
+        }
 
         if perf.performance_score < self.config.min_performance_score {
             alerts.push(Alert {
@@ -633,12 +634,7 @@ pub fn print_health_report(report: &HealthReport) {
                 AlertSeverity::Warning => "⚠️",
                 AlertSeverity::Critical => "❌",
             };
-            println!(
-                "  {} [{:?}] {}",
-                icon,
-                alert.category,
-                alert.message
-            );
+            println!("  {} [{:?}] {}", icon, alert.category, alert.message);
             if let Some(rec) = &alert.recommendation {
                 println!("     → {}", rec);
             }
@@ -696,10 +692,12 @@ mod tests {
 
         // 60% deletion ratio should trigger Unhealthy status
         assert_eq!(report.status, HealthStatus::Unhealthy);
-        assert!(report
-            .alerts
-            .iter()
-            .any(|a| a.severity == AlertSeverity::Critical));
+        assert!(
+            report
+                .alerts
+                .iter()
+                .any(|a| a.severity == AlertSeverity::Critical)
+        );
 
         Ok(())
     }

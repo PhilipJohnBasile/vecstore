@@ -110,13 +110,13 @@ impl VectorSearchService {
                     if let Some(rec) = &alert.recommendation {
                         eprintln!("   → {}", rec);
                     }
-                }
+                },
                 vecstore::AlertSeverity::Warning => {
                     println!("⚠️  WARNING: {}", alert.message);
-                }
+                },
                 vecstore::AlertSeverity::Info => {
                     println!("ℹ️  INFO: {}", alert.message);
-                }
+                },
             }
         }
 

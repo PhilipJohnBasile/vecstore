@@ -8,9 +8,9 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use vecstore::{
+    Metadata, Query, VecStore,
     rag_utils::ConversationMemory,
     text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
-    Metadata, Query, VecStore,
 };
 
 fn main() -> Result<()> {

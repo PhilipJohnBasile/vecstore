@@ -195,8 +195,7 @@ impl Reranker for MMRReranker {
                 .max_by(|(_, a), (_, b)| {
                     let score_a = self.mmr_score(a, &selected_refs);
                     let score_b = self.mmr_score(b, &selected_refs);
-                    score_a
-                        .total_cmp(&score_b)
+                    score_a.total_cmp(&score_b)
                 })
                 .map(|(idx, _)| idx)
                 .unwrap();

@@ -37,15 +37,15 @@ use serde::{Deserialize, Serialize};
 use crate::error::Result;
 
 #[cfg(feature = "embeddings")]
-use std::path::Path;
-#[cfg(feature = "embeddings")]
-use std::sync::{Arc, Mutex, RwLock};
-#[cfg(feature = "embeddings")]
 use crate::error::VecStoreError;
 #[cfg(feature = "embeddings")]
 use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{Session, builder::GraphOptimizationLevel};
+#[cfg(feature = "embeddings")]
+use std::path::Path;
+#[cfg(feature = "embeddings")]
+use std::sync::{Arc, Mutex, RwLock};
 
 /// Default batch size for ONNX inference
 const DEFAULT_BATCH_SIZE: usize = 32;
@@ -69,10 +69,16 @@ impl OnnxSessionCache {
     }
 
     /// Get or create a session for a model path
-    fn get_or_create_session(&self, model_path: &str, num_threads: usize) -> Result<Arc<Mutex<Session>>> {
+    fn get_or_create_session(
+        &self,
+        model_path: &str,
+        num_threads: usize,
+    ) -> Result<Arc<Mutex<Session>>> {
         // Check if session already exists
         {
-            let sessions = self.sessions.read()
+            let sessions = self
+                .sessions
+                .read()
                 .map_err(|e| VecStoreError::LockError(e.to_string()))?;
             if let Some(session) = sessions.get(model_path) {
                 return Ok(Arc::clone(session));
@@ -82,13 +88,20 @@ impl OnnxSessionCache {
         // Create new session using ort 2.0 API
         let path = Path::new(model_path);
         if !path.exists() {
-            return Err(VecStoreError::NotFound(format!("Model file not found: {}", model_path)));
+            return Err(VecStoreError::NotFound(format!(
+                "Model file not found: {}",
+                model_path
+            )));
         }
 
         let session = Session::builder()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to create session builder: {}", e)))?
+            .map_err(|e| {
+                VecStoreError::Internal(format!("Failed to create session builder: {}", e))
+            })?
             .with_optimization_level(GraphOptimizationLevel::Level3)
-            .map_err(|e| VecStoreError::Internal(format!("Failed to set optimization level: {}", e)))?
+            .map_err(|e| {
+                VecStoreError::Internal(format!("Failed to set optimization level: {}", e))
+            })?
             .with_intra_threads(num_threads)
             .map_err(|e| VecStoreError::Internal(format!("Failed to set thread count: {}", e)))?
             .commit_from_file(path)
@@ -98,7 +111,9 @@ impl OnnxSessionCache {
 
         // Cache the session
         {
-            let mut sessions = self.sessions.write()
+            let mut sessions = self
+                .sessions
+                .write()
                 .map_err(|e| VecStoreError::LockError(e.to_string()))?;
 
             // Evict oldest if cache is full
@@ -124,13 +139,16 @@ impl OnnxSessionCache {
             .map_err(|e| VecStoreError::Internal(format!("Failed to create dummy input: {}", e)))?;
 
         // Create Tensor object for ort 2.0
-        let input_tensor = ort::value::Tensor::from_array(input_array)
-            .map_err(|e| VecStoreError::Internal(format!("Failed to create input tensor: {}", e)))?;
+        let input_tensor = ort::value::Tensor::from_array(input_array).map_err(|e| {
+            VecStoreError::Internal(format!("Failed to create input tensor: {}", e))
+        })?;
 
         // Run warmup inference using ort 2.0 inputs! macro
-        let mut session_guard = session.lock()
+        let mut session_guard = session
+            .lock()
             .map_err(|e| VecStoreError::LockError(e.to_string()))?;
-        let _ = session_guard.run(ort::inputs![input_tensor])
+        let _ = session_guard
+            .run(ort::inputs![input_tensor])
             .map_err(|e| VecStoreError::Internal(format!("Warmup inference failed: {}", e)))?;
 
         Ok(())
@@ -138,7 +156,9 @@ impl OnnxSessionCache {
 
     /// Clear all cached sessions
     fn clear(&self) -> Result<()> {
-        let mut sessions = self.sessions.write()
+        let mut sessions = self
+            .sessions
+            .write()
             .map_err(|e| VecStoreError::LockError(e.to_string()))?;
         sessions.clear();
         Ok(())
@@ -156,7 +176,9 @@ fn get_session_cache() -> Result<&'static OnnxSessionCache> {
     let cache = OnnxSessionCache::new()?;
     // Ignore the result if another thread initialized first
     let _ = CACHE.set(cache);
-    CACHE.get().ok_or_else(|| VecStoreError::Internal("Failed to initialize session cache".to_string()))
+    CACHE
+        .get()
+        .ok_or_else(|| VecStoreError::Internal("Failed to initialize session cache".to_string()))
 }
 
 /// Ranking configuration
@@ -188,11 +210,21 @@ pub struct RankingConfig {
     pub warmup_models: bool,
 }
 
-fn default_top_k() -> usize { 100 }
-fn default_final_k() -> usize { 10 }
-fn default_true() -> bool { true }
-fn default_batch_size() -> usize { DEFAULT_BATCH_SIZE }
-fn default_num_threads() -> usize { 4 }
+fn default_top_k() -> usize {
+    100
+}
+fn default_final_k() -> usize {
+    10
+}
+fn default_true() -> bool {
+    true
+}
+fn default_batch_size() -> usize {
+    DEFAULT_BATCH_SIZE
+}
+fn default_num_threads() -> usize {
+    4
+}
 
 impl Default for RankingConfig {
     fn default() -> Self {
@@ -263,8 +295,7 @@ pub enum ScoreNormalization {
 }
 
 /// Model type for ONNX inference
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum OnnxModelType {
     /// Generic ranking model (outputs a single relevance score)
     #[default]
@@ -278,7 +309,6 @@ pub enum OnnxModelType {
     /// Neural network ranker
     NeuralNetwork,
 }
-
 
 /// ONNX model configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,8 +338,12 @@ pub struct OnnxModelConfig {
     pub output_index: usize,
 }
 
-fn default_input_name() -> String { "input".to_string() }
-fn default_output_name() -> String { "output".to_string() }
+fn default_input_name() -> String {
+    "input".to_string()
+}
+fn default_output_name() -> String {
+    "output".to_string()
+}
 
 impl OnnxModelConfig {
     /// Create a new ONNX model config
@@ -409,14 +443,9 @@ pub enum RankingModel {
         num_features: usize,
     },
     /// Linear model
-    Linear {
-        weights: Vec<f32>,
-        bias: f32,
-    },
+    Linear { weights: Vec<f32>, bias: f32 },
     /// Custom scoring function
-    Custom {
-        name: String,
-    },
+    Custom { name: String },
 }
 
 impl RankingModel {
@@ -631,9 +660,10 @@ impl MLRanker {
         let candidates_with_features: Vec<(RankingCandidate, RankingFeatures)> = candidates
             .into_iter()
             .map(|c| {
-                let features = c.features.clone().unwrap_or_else(|| {
-                    self.compute_features(query, &c)
-                });
+                let features = c
+                    .features
+                    .clone()
+                    .unwrap_or_else(|| self.compute_features(query, &c));
                 (c, features)
             })
             .collect();
@@ -660,19 +690,21 @@ impl MLRanker {
     ) -> Result<Vec<RankedResult>> {
         if self.models.is_empty() {
             // No models - just use original scores
-            return Ok(candidates.iter().map(|(c, features)| {
-                RankedResult {
+            return Ok(candidates
+                .iter()
+                .map(|(c, features)| RankedResult {
                     id: c.id.clone(),
                     score: c.original_score,
                     original_score: c.original_score,
                     feature_contributions: Some(self.get_feature_contributions(features)),
                     metadata: c.metadata.clone(),
-                }
-            }).collect());
+                })
+                .collect());
         }
 
         // Collect all feature vectors
-        let feature_vectors: Vec<Vec<f32>> = candidates.iter()
+        let feature_vectors: Vec<Vec<f32>> = candidates
+            .iter()
             .map(|(_, features)| features.to_vector())
             .collect();
 
@@ -685,16 +717,17 @@ impl MLRanker {
         }
 
         // Combine scores for each candidate
-        let results: Vec<RankedResult> = candidates.iter()
+        let results: Vec<RankedResult> = candidates
+            .iter()
             .enumerate()
             .map(|(idx, (c, features))| {
-                let model_scores: Vec<f32> = all_model_scores.iter()
-                    .map(|scores| scores[idx])
-                    .collect();
+                let model_scores: Vec<f32> =
+                    all_model_scores.iter().map(|scores| scores[idx]).collect();
 
                 let final_score = if self.config.ensemble_weights.len() == model_scores.len() {
                     // Weighted ensemble
-                    model_scores.iter()
+                    model_scores
+                        .iter()
                         .zip(&self.config.ensemble_weights)
                         .map(|(s, w)| s * w)
                         .sum()
@@ -723,30 +756,40 @@ impl MLRanker {
         feature_vectors: &[Vec<f32>],
     ) -> Result<Vec<f32>> {
         match model {
-            RankingModel::Linear { weights, bias } => {
-                Ok(feature_vectors.iter().map(|fv| {
-                    let score: f32 = fv.iter()
+            RankingModel::Linear { weights, bias } => Ok(feature_vectors
+                .iter()
+                .map(|fv| {
+                    let score: f32 = fv
+                        .iter()
                         .zip(weights.iter())
                         .map(|(f, w)| f * w)
-                        .sum::<f32>() + bias;
+                        .sum::<f32>()
+                        + bias;
                     self.sigmoid(score)
-                }).collect())
-            }
-            RankingModel::ONNX(config) => {
-                self.score_batch_onnx(&config.path, feature_vectors, config.apply_sigmoid, config.apply_softmax, config.output_index)
-            }
+                })
+                .collect()),
+            RankingModel::ONNX(config) => self.score_batch_onnx(
+                &config.path,
+                feature_vectors,
+                config.apply_sigmoid,
+                config.apply_softmax,
+                config.output_index,
+            ),
             RankingModel::XGBoost { path, .. } => {
                 // XGBoost exported to ONNX - apply sigmoid for binary classification
                 self.score_batch_onnx(path, feature_vectors, true, false, 0)
-            }
+            },
             RankingModel::LightGBM { path, .. } => {
                 // LightGBM exported to ONNX - apply sigmoid for binary classification
                 self.score_batch_onnx(path, feature_vectors, true, false, 0)
-            }
+            },
             RankingModel::Custom { .. } => {
                 // Custom models just return original scores (first feature)
-                Ok(feature_vectors.iter().map(|fv| fv.first().copied().unwrap_or(0.0)).collect())
-            }
+                Ok(feature_vectors
+                    .iter()
+                    .map(|fv| fv.first().copied().unwrap_or(0.0))
+                    .collect())
+            },
         }
     }
 
@@ -772,9 +815,16 @@ impl MLRanker {
 
         // Process in batches
         for chunk in feature_vectors.chunks(batch_size) {
-            let mut session_guard = session.lock()
+            let mut session_guard = session
+                .lock()
                 .map_err(|e| VecStoreError::LockError(e.to_string()))?;
-            let batch_scores = self.run_onnx_batch(&mut session_guard, chunk, apply_sigmoid, apply_softmax, output_index)?;
+            let batch_scores = self.run_onnx_batch(
+                &mut session_guard,
+                chunk,
+                apply_sigmoid,
+                apply_softmax,
+                output_index,
+            )?;
             all_scores.extend(batch_scores);
         }
 
@@ -799,26 +849,27 @@ impl MLRanker {
         let feature_dim = batch[0].len();
 
         // Flatten features into a single vector
-        let flat_features: Vec<f32> = batch.iter()
-            .flat_map(|v| v.iter().copied())
-            .collect();
+        let flat_features: Vec<f32> = batch.iter().flat_map(|v| v.iter().copied()).collect();
 
         // Create input array
         let input_array = Array2::from_shape_vec((batch_size, feature_dim), flat_features)
             .map_err(|e| VecStoreError::Internal(format!("Failed to create input array: {}", e)))?;
 
         // Create Tensor object for ort 2.0
-        let input_tensor = ort::value::Tensor::from_array(input_array)
-            .map_err(|e| VecStoreError::Internal(format!("Failed to create input tensor: {}", e)))?;
+        let input_tensor = ort::value::Tensor::from_array(input_array).map_err(|e| {
+            VecStoreError::Internal(format!("Failed to create input tensor: {}", e))
+        })?;
 
         // Run inference using ort 2.0 inputs! macro
-        let outputs = session.run(ort::inputs![input_tensor])
+        let outputs = session
+            .run(ort::inputs![input_tensor])
             .map_err(|e| VecStoreError::Internal(format!("ONNX inference failed: {}", e)))?;
 
         // Extract output tensor using ort 2.0 API
         let output_tensor = &outputs[0];
 
-        let output_view = output_tensor.try_extract_array::<f32>()
+        let output_view = output_tensor
+            .try_extract_array::<f32>()
             .map_err(|e| VecStoreError::Internal(format!("Failed to extract output: {}", e)))?;
         let output_array = output_view.to_owned();
 
@@ -850,12 +901,14 @@ impl MLRanker {
             // Apply softmax across classes, then extract target class
             let num_classes = output_shape[1];
             let actual_index = output_index.min(num_classes - 1);
-            (0..batch_size).map(|i| {
-                let row: Vec<f32> = (0..num_classes).map(|j| output_array[[i, j]]).collect();
-                let max_val = row.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
-                let exp_sum: f32 = row.iter().map(|&x| (x - max_val).exp()).sum();
-                (row[actual_index] - max_val).exp() / exp_sum
-            }).collect()
+            (0..batch_size)
+                .map(|i| {
+                    let row: Vec<f32> = (0..num_classes).map(|j| output_array[[i, j]]).collect();
+                    let max_val = row.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
+                    let exp_sum: f32 = row.iter().map(|&x| (x - max_val).exp()).sum();
+                    (row[actual_index] - max_val).exp() / exp_sum
+                })
+                .collect()
         } else if apply_sigmoid {
             scores.iter().map(|&x| self.sigmoid(x)).collect()
         } else {
@@ -876,7 +929,8 @@ impl MLRanker {
         _output_index: usize,
     ) -> Result<Vec<f32>> {
         // Without embeddings feature, just return the first feature (vector_score)
-        Ok(feature_vectors.iter()
+        Ok(feature_vectors
+            .iter()
             .map(|fv| fv.first().copied().unwrap_or(0.0))
             .collect())
     }
@@ -890,7 +944,8 @@ impl MLRanker {
 
         if !query.is_empty() && !candidate.vector.is_empty() {
             // Dot product
-            let dot: f32 = query.iter()
+            let dot: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| q * d)
                 .sum();
@@ -913,45 +968,54 @@ impl MLRanker {
             qd_features.push(cosine);
 
             // Max element-wise product
-            let max_sim: f32 = query.iter()
+            let max_sim: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| q * d)
                 .fold(f32::NEG_INFINITY, f32::max);
             qd_features.push(max_sim);
 
             // Min element-wise product
-            let min_sim: f32 = query.iter()
+            let min_sim: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| q * d)
                 .fold(f32::INFINITY, f32::min);
             qd_features.push(min_sim);
 
             // Mean element-wise product
-            let mean_sim: f32 = query.iter()
+            let mean_sim: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| q * d)
-                .sum::<f32>() / query.len().max(1) as f32;
+                .sum::<f32>()
+                / query.len().max(1) as f32;
             qd_features.push(mean_sim);
 
             // Std of element-wise products
-            let products: Vec<f32> = query.iter()
+            let products: Vec<f32> = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| q * d)
                 .collect();
-            let variance: f32 = products.iter()
+            let variance: f32 = products
+                .iter()
                 .map(|&p| (p - mean_sim).powi(2))
-                .sum::<f32>() / products.len().max(1) as f32;
+                .sum::<f32>()
+                / products.len().max(1) as f32;
             qd_features.push(variance.sqrt());
 
             // L1 distance (Manhattan)
-            let l1_dist: f32 = query.iter()
+            let l1_dist: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| (q - d).abs())
                 .sum();
             qd_features.push(l1_dist);
 
             // L2 distance (Euclidean)
-            let l2_dist: f32 = query.iter()
+            let l2_dist: f32 = query
+                .iter()
                 .zip(candidate.vector.iter())
                 .map(|(q, d)| (q - d).powi(2))
                 .sum::<f32>()
@@ -959,8 +1023,7 @@ impl MLRanker {
             qd_features.push(l2_dist);
         }
 
-        RankingFeatures::new(vector_score)
-            .with_qd_features(qd_features)
+        RankingFeatures::new(vector_score).with_qd_features(qd_features)
     }
 
     /// Get feature contributions for explainability
@@ -973,13 +1036,21 @@ impl MLRanker {
         }
 
         let qd_feature_names = [
-            "dot_product", "query_norm", "doc_norm", "cosine_similarity",
-            "max_product", "min_product", "mean_product", "std_product",
-            "l1_distance", "l2_distance"
+            "dot_product",
+            "query_norm",
+            "doc_norm",
+            "cosine_similarity",
+            "max_product",
+            "min_product",
+            "mean_product",
+            "std_product",
+            "l1_distance",
+            "l2_distance",
         ];
 
         for (i, &f) in features.qd_features.iter().enumerate() {
-            let name = qd_feature_names.get(i)
+            let name = qd_feature_names
+                .get(i)
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("qd_feature_{}", i));
             contributions.insert(name, f);
@@ -1003,36 +1074,47 @@ impl MLRanker {
         }
 
         match self.config.normalization {
-            ScoreNormalization::None => {}
+            ScoreNormalization::None => {},
             ScoreNormalization::MinMax => {
-                let min = results.iter().map(|r| r.score).fold(f32::INFINITY, f32::min);
-                let max = results.iter().map(|r| r.score).fold(f32::NEG_INFINITY, f32::max);
+                let min = results
+                    .iter()
+                    .map(|r| r.score)
+                    .fold(f32::INFINITY, f32::min);
+                let max = results
+                    .iter()
+                    .map(|r| r.score)
+                    .fold(f32::NEG_INFINITY, f32::max);
                 let range = max - min;
                 if range > 0.0 {
                     for r in results {
                         r.score = (r.score - min) / range;
                     }
                 }
-            }
+            },
             ScoreNormalization::ZScore => {
                 let mean: f32 = results.iter().map(|r| r.score).sum::<f32>() / results.len() as f32;
-                let variance: f32 = results.iter()
+                let variance: f32 = results
+                    .iter()
                     .map(|r| (r.score - mean).powi(2))
-                    .sum::<f32>() / results.len() as f32;
+                    .sum::<f32>()
+                    / results.len() as f32;
                 let std = variance.sqrt();
                 if std > 0.0 {
                     for r in results {
                         r.score = (r.score - mean) / std;
                     }
                 }
-            }
+            },
             ScoreNormalization::Softmax => {
-                let max = results.iter().map(|r| r.score).fold(f32::NEG_INFINITY, f32::max);
+                let max = results
+                    .iter()
+                    .map(|r| r.score)
+                    .fold(f32::NEG_INFINITY, f32::max);
                 let exp_sum: f32 = results.iter().map(|r| (r.score - max).exp()).sum();
                 for r in results {
                     r.score = (r.score - max).exp() / exp_sum;
                 }
-            }
+            },
         }
     }
 
@@ -1074,12 +1156,7 @@ impl RankingPipeline {
     }
 
     /// Add a ranking stage
-    pub fn add_stage(
-        &mut self,
-        name: impl Into<String>,
-        ranker: MLRanker,
-        top_k: usize,
-    ) {
+    pub fn add_stage(&mut self, name: impl Into<String>, ranker: MLRanker, top_k: usize) {
         self.stages.push(RankingStage {
             name: name.into(),
             ranker,
@@ -1099,7 +1176,8 @@ impl RankingPipeline {
             let results = stage.ranker.rerank(query, candidates)?;
 
             // Convert results back to candidates for next stage
-            candidates = results.into_iter()
+            candidates = results
+                .into_iter()
                 .take(stage.top_k)
                 .map(|r| RankingCandidate {
                     id: r.id,
@@ -1115,7 +1193,8 @@ impl RankingPipeline {
         if let Some(last_stage) = self.stages.last_mut() {
             last_stage.ranker.rerank(query, candidates)
         } else {
-            Ok(candidates.into_iter()
+            Ok(candidates
+                .into_iter()
                 .map(|c| RankedResult {
                     id: c.id,
                     score: c.original_score,
@@ -1281,9 +1360,7 @@ mod tests {
 
     #[test]
     fn test_no_models_uses_original_scores() {
-        let config = RankingConfig::new()
-            .with_final_k(10)
-            .with_warmup(false);
+        let config = RankingConfig::new().with_final_k(10).with_warmup(false);
         let mut ranker = MLRanker::new(config).unwrap();
 
         let candidates: Vec<RankingCandidate> = vec![
@@ -1314,9 +1391,7 @@ mod tests {
 
     #[test]
     fn test_batch_size_config() {
-        let config = RankingConfig::new()
-            .with_batch_size(64)
-            .with_num_threads(8);
+        let config = RankingConfig::new().with_batch_size(64).with_num_threads(8);
 
         assert_eq!(config.batch_size, 64);
         assert_eq!(config.num_threads, 8);
@@ -1403,12 +1478,8 @@ mod tests {
 
     #[test]
     fn test_pipeline_execution() {
-        let config1 = RankingConfig::new()
-            .with_final_k(5)
-            .with_warmup(false);
-        let config2 = RankingConfig::new()
-            .with_final_k(3)
-            .with_warmup(false);
+        let config1 = RankingConfig::new().with_final_k(5).with_warmup(false);
+        let config2 = RankingConfig::new().with_final_k(3).with_warmup(false);
 
         let ranker1 = MLRanker::new(config1).unwrap();
         let ranker2 = MLRanker::new(config2).unwrap();

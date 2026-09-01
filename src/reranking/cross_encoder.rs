@@ -6,9 +6,9 @@
 
 use super::Reranker;
 use crate::store::Neighbor;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use ndarray::Array2;
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{Session, builder::GraphOptimizationLevel};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use tokenizers::tokenizer::Tokenizer;
@@ -190,10 +190,10 @@ impl CrossEncoderReranker {
                             .with_context(|| format!("Failed to copy {} to {:?}", file, dest))?;
                     }
                     println!("   ✓ Downloaded {}", file);
-                }
+                },
                 Err(e) => {
                     println!("   ⚠ {} not found (optional): {}", file, e);
-                }
+                },
             }
         }
 
@@ -206,13 +206,12 @@ impl CrossEncoderReranker {
                 Ok(cached_path) => {
                     let dest = target_dir.join("model.onnx");
                     if cached_path != dest {
-                        fs::copy(&cached_path, &dest)
-                            .context("Failed to copy ONNX model")?;
+                        fs::copy(&cached_path, &dest).context("Failed to copy ONNX model")?;
                     }
                     println!("   ✓ Downloaded ONNX model from {}", onnx_file);
                     onnx_found = true;
                     break;
-                }
+                },
                 Err(_) => continue,
             }
         }
@@ -239,10 +238,16 @@ impl CrossEncoderReranker {
         let tokenizer_path = target_dir.join("tokenizer.json");
 
         if !model_path.exists() {
-            return Err(anyhow!("Model file not found after download: {:?}", model_path));
+            return Err(anyhow!(
+                "Model file not found after download: {:?}",
+                model_path
+            ));
         }
         if !tokenizer_path.exists() {
-            return Err(anyhow!("Tokenizer file not found after download: {:?}", tokenizer_path));
+            return Err(anyhow!(
+                "Tokenizer file not found after download: {:?}",
+                tokenizer_path
+            ));
         }
 
         println!("✓ Model downloaded successfully!");
@@ -294,12 +299,11 @@ impl CrossEncoderReranker {
         let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
         // Run inference using ort 2.0 inputs! macro
-        let mut session_guard = self.session.lock()
+        let mut session_guard = self
+            .session
+            .lock()
             .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
-        let outputs = session_guard.run(ort::inputs![
-            input_ids_tensor,
-            attention_mask_tensor
-        ])?;
+        let outputs = session_guard.run(ort::inputs![input_ids_tensor, attention_mask_tensor])?;
 
         // Extract logits (typically shape [1, 1] or [1, 2] for binary classification)
         let logits_view = outputs[0].try_extract_array::<f32>()?;
@@ -372,19 +376,16 @@ impl Reranker for CrossEncoderReranker {
             match self.score_pair(query, doc_text) {
                 Ok(score) => {
                     neighbor.score = score;
-                }
+                },
                 Err(e) => {
                     eprintln!("Warning: Failed to score document {}: {}", neighbor.id, e);
                     // Keep original score
-                }
+                },
             }
         }
 
         // Sort by score (descending)
-        results.sort_by(|a, b| {
-            b.score
-                .total_cmp(&a.score)
-        });
+        results.sort_by(|a, b| b.score.total_cmp(&a.score));
 
         // Return top_k
         Ok(results.into_iter().take(top_k).collect())

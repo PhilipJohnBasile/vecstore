@@ -32,12 +32,12 @@
 //! let history = index.get_history("doc1")?;
 //! ```
 
-use std::collections::{HashMap, BTreeMap};
-use std::sync::RwLock;
+use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc, Duration as ChronoDuration};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::RwLock;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // TIMESTAMP
@@ -174,7 +174,9 @@ impl VersionHistory {
     /// Prune versions older than timestamp
     pub fn prune_before(&mut self, ts: Timestamp) {
         // Keep at least one version before the cutoff for reconstruction
-        let cutoff_idx = self.versions.iter()
+        let cutoff_idx = self
+            .versions
+            .iter()
             .position(|v| v.timestamp < ts)
             .map(|i| i + 1)
             .unwrap_or(self.versions.len());
@@ -253,7 +255,9 @@ impl TimeTravelIndex {
         }
 
         let ts = Timestamp::now();
-        let mut histories = self.histories.write()
+        let mut histories = self
+            .histories
+            .write()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         let history = histories.entry(id.to_string()).or_insert_with(|| {
@@ -280,14 +284,21 @@ impl TimeTravelIndex {
 
         // Update timestamp index
         {
-            let mut ts_idx = self.timestamp_index.write()
+            let mut ts_idx = self
+                .timestamp_index
+                .write()
                 .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
-            ts_idx.entry(ts).or_insert_with(Vec::new).push(id.to_string());
+            ts_idx
+                .entry(ts)
+                .or_insert_with(Vec::new)
+                .push(id.to_string());
         }
 
         // Update stats
         {
-            let mut stats = self.stats.write()
+            let mut stats = self
+                .stats
+                .write()
                 .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
             stats.total_versions += 1;
             if op == VersionOp::Insert {
@@ -297,7 +308,9 @@ impl TimeTravelIndex {
 
         // Enforce max versions
         if history.versions.len() > self.config.max_versions_per_vector {
-            history.versions.truncate(self.config.max_versions_per_vector);
+            history
+                .versions
+                .truncate(self.config.max_versions_per_vector);
         }
 
         Ok(ts)
@@ -306,7 +319,9 @@ impl TimeTravelIndex {
     /// Delete a vector
     pub fn delete(&self, id: &str) -> Result<Option<Timestamp>> {
         let ts = Timestamp::now();
-        let mut histories = self.histories.write()
+        let mut histories = self
+            .histories
+            .write()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         if let Some(history) = histories.get_mut(id) {
@@ -322,14 +337,20 @@ impl TimeTravelIndex {
 
             // Update timestamp index
             {
-                let mut ts_idx = self.timestamp_index.write()
-                    .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
-                ts_idx.entry(ts).or_insert_with(Vec::new).push(id.to_string());
+                let mut ts_idx = self.timestamp_index.write().map_err(|_| {
+                    VecStoreError::LockError("timestamp_index lock poisoned".into())
+                })?;
+                ts_idx
+                    .entry(ts)
+                    .or_insert_with(Vec::new)
+                    .push(id.to_string());
             }
 
             // Update stats
             {
-                let mut stats = self.stats.write()
+                let mut stats = self
+                    .stats
+                    .write()
                     .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
                 stats.total_versions += 1;
                 stats.total_vectors = stats.total_vectors.saturating_sub(1);
@@ -343,7 +364,9 @@ impl TimeTravelIndex {
 
     /// Get current vector
     pub fn get(&self, id: &str) -> Result<Option<(Vec<f32>, Option<serde_json::Value>)>> {
-        let histories = self.histories.read()
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
         Ok(histories.get(id).and_then(|h| {
             h.versions.first().and_then(|v| {
@@ -357,8 +380,14 @@ impl TimeTravelIndex {
     }
 
     /// Get vector at specific timestamp
-    pub fn get_at(&self, id: &str, ts: Timestamp) -> Result<Option<(Vec<f32>, Option<serde_json::Value>)>> {
-        let histories = self.histories.read()
+    pub fn get_at(
+        &self,
+        id: &str,
+        ts: Timestamp,
+    ) -> Result<Option<(Vec<f32>, Option<serde_json::Value>)>> {
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
         Ok(histories.get(id).and_then(|h| {
             h.get_at(ts).and_then(|v| {
@@ -373,12 +402,13 @@ impl TimeTravelIndex {
 
     /// Get all vectors that existed at timestamp
     pub fn get_all_at(&self, ts: Timestamp) -> Result<Vec<(String, Vec<f32>)>> {
-        let histories = self.histories.read()
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
-        Ok(histories.iter()
-            .filter_map(|(id, h)| {
-                h.vector_at(ts).map(|v| (id.clone(), v.clone()))
-            })
+        Ok(histories
+            .iter()
+            .filter_map(|(id, h)| h.vector_at(ts).map(|v| (id.clone(), v.clone())))
             .collect())
     }
 
@@ -401,10 +431,13 @@ impl TimeTravelIndex {
             });
         }
 
-        let histories = self.histories.read()
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
-        let mut results: Vec<_> = histories.iter()
+        let mut results: Vec<_> = histories
+            .iter()
             .filter_map(|(id, h)| {
                 h.vector_at(ts).map(|v| {
                     let score = cosine_similarity(query, v);
@@ -416,7 +449,8 @@ impl TimeTravelIndex {
         results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
-        Ok(results.into_iter()
+        Ok(results
+            .into_iter()
             .map(|(id, score, version_ts)| TimeTravelResult {
                 id,
                 score,
@@ -428,20 +462,22 @@ impl TimeTravelIndex {
 
     /// Get version history for a vector
     pub fn get_history(&self, id: &str) -> Result<Option<VersionHistory>> {
-        let histories = self.histories.read()
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
         Ok(histories.get(id).cloned())
     }
 
     /// Get changes between two timestamps
-    pub fn get_changes(
-        &self,
-        from: Timestamp,
-        to: Timestamp,
-    ) -> Result<Vec<ChangeRecord>> {
-        let ts_idx = self.timestamp_index.read()
+    pub fn get_changes(&self, from: Timestamp, to: Timestamp) -> Result<Vec<ChangeRecord>> {
+        let ts_idx = self
+            .timestamp_index
+            .read()
             .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
-        let histories = self.histories.read()
+        let histories = self
+            .histories
+            .read()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
 
         let mut changes = Vec::new();
@@ -449,13 +485,14 @@ impl TimeTravelIndex {
         for (ts, ids) in ts_idx.range(from..=to) {
             for id in ids {
                 if let Some(history) = histories.get(id)
-                    && let Some(entry) = history.versions.iter().find(|v| v.timestamp == *ts) {
-                        changes.push(ChangeRecord {
-                            id: id.clone(),
-                            timestamp: *ts,
-                            op: entry.op,
-                        });
-                    }
+                    && let Some(entry) = history.versions.iter().find(|v| v.timestamp == *ts)
+                {
+                    changes.push(ChangeRecord {
+                        id: id.clone(),
+                        timestamp: *ts,
+                        op: entry.op,
+                    });
+                }
             }
         }
 
@@ -465,9 +502,13 @@ impl TimeTravelIndex {
     /// Run garbage collection
     pub fn gc(&self) -> Result<GCResult> {
         let cutoff = Timestamp::hours_ago(self.config.max_version_age_hours as i64);
-        let mut histories = self.histories.write()
+        let mut histories = self
+            .histories
+            .write()
             .map_err(|_| VecStoreError::LockError("histories lock poisoned".into()))?;
-        let mut ts_idx = self.timestamp_index.write()
+        let mut ts_idx = self
+            .timestamp_index
+            .write()
             .map_err(|_| VecStoreError::LockError("timestamp_index lock poisoned".into()))?;
 
         let mut versions_removed = 0;
@@ -496,7 +537,9 @@ impl TimeTravelIndex {
 
     /// Get statistics
     pub fn stats(&self) -> Result<TimeTravelStats> {
-        let stats = self.stats.read()
+        let stats = self
+            .stats
+            .read()
             .map_err(|_| VecStoreError::LockError("stats lock poisoned".into()))?;
         Ok(stats.clone())
     }
@@ -574,7 +617,8 @@ impl SnapshotManager {
             description,
         };
 
-        self.snapshots.write()
+        self.snapshots
+            .write()
             .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?
             .push(snapshot.clone());
         Ok(snapshot)
@@ -582,24 +626,27 @@ impl SnapshotManager {
 
     /// List all snapshots
     pub fn list(&self) -> Result<Vec<Snapshot>> {
-        let snapshots = self.snapshots.read()
+        let snapshots = self
+            .snapshots
+            .read()
             .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
         Ok(snapshots.clone())
     }
 
     /// Get snapshot by ID
     pub fn get(&self, id: &str) -> Result<Option<Snapshot>> {
-        let snapshots = self.snapshots.read()
+        let snapshots = self
+            .snapshots
+            .read()
             .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
-        Ok(snapshots
-            .iter()
-            .find(|s| s.id == id)
-            .cloned())
+        Ok(snapshots.iter().find(|s| s.id == id).cloned())
     }
 
     /// Delete snapshot
     pub fn delete(&self, id: &str) -> Result<bool> {
-        let mut snapshots = self.snapshots.write()
+        let mut snapshots = self
+            .snapshots
+            .write()
             .map_err(|_| VecStoreError::LockError("snapshots lock poisoned".into()))?;
         let before = snapshots.len();
         snapshots.retain(|s| s.id != id);
@@ -657,11 +704,15 @@ mod tests {
         let index = TimeTravelIndex::new(4, config).unwrap();
 
         // Insert
-        let ts1 = index.upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
+        let ts1 = index
+            .upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
 
         // Update
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let _ts2 = index.upsert("doc1", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
+        let _ts2 = index
+            .upsert("doc1", vec![0.0, 1.0, 0.0, 0.0], None)
+            .unwrap();
 
         // Current should return updated
         let current = index.get("doc1").unwrap().unwrap();
@@ -681,8 +732,12 @@ mod tests {
         let config = TimeTravelConfig::default();
         let index = TimeTravelIndex::new(4, config).unwrap();
 
-        index.upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
-        index.upsert("doc2", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
+        index
+            .upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
+        index
+            .upsert("doc2", vec![0.0, 1.0, 0.0, 0.0], None)
+            .unwrap();
 
         let before_delete = Timestamp::now();
         std::thread::sleep(std::time::Duration::from_millis(10));
@@ -695,7 +750,9 @@ mod tests {
         assert_eq!(current[0].id, "doc2");
 
         // Historical search should find both
-        let historical = index.search_at(&[1.0, 0.0, 0.0, 0.0], 10, before_delete).unwrap();
+        let historical = index
+            .search_at(&[1.0, 0.0, 0.0, 0.0], 10, before_delete)
+            .unwrap();
         assert_eq!(historical.len(), 2);
     }
 }

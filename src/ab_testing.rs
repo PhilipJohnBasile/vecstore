@@ -2,8 +2,8 @@
 // Compare index types, embedding models, reranking strategies, and more
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -247,8 +247,12 @@ impl ABTestManager {
             variant_data,
         };
 
-        self.experiments.write()?.insert(experiment_id.clone(), state);
-        self.metrics.experiments_created.fetch_add(1, Ordering::Relaxed);
+        self.experiments
+            .write()?
+            .insert(experiment_id.clone(), state);
+        self.metrics
+            .experiments_created
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(experiment_id)
     }
@@ -256,13 +260,15 @@ impl ABTestManager {
     /// Start an experiment
     pub fn start_experiment(&self, experiment_id: &str) -> Result<()> {
         let mut experiments = self.experiments.write()?;
-        let state = experiments.get_mut(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get_mut(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
         if state.status != ExperimentStatus::Draft && state.status != ExperimentStatus::Paused {
-            return Err(VecStoreError::InvalidInput(
-                format!("Cannot start experiment in status {:?}", state.status)
-            ));
+            return Err(VecStoreError::InvalidInput(format!(
+                "Cannot start experiment in status {:?}",
+                state.status
+            )));
         }
 
         state.status = ExperimentStatus::Running;
@@ -274,11 +280,14 @@ impl ABTestManager {
     /// Pause an experiment
     pub fn pause_experiment(&self, experiment_id: &str) -> Result<()> {
         let mut experiments = self.experiments.write()?;
-        let state = experiments.get_mut(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get_mut(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
         if state.status != ExperimentStatus::Running {
-            return Err(VecStoreError::InvalidInput("Experiment is not running".into()));
+            return Err(VecStoreError::InvalidInput(
+                "Experiment is not running".into(),
+            ));
         }
 
         state.status = ExperimentStatus::Paused;
@@ -288,12 +297,15 @@ impl ABTestManager {
     /// Complete an experiment
     pub fn complete_experiment(&self, experiment_id: &str) -> Result<ExperimentResults> {
         let mut experiments = self.experiments.write()?;
-        let state = experiments.get_mut(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get_mut(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
         state.status = ExperimentStatus::Completed;
         state.ended_at = Some(current_timestamp());
-        self.metrics.experiments_completed.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .experiments_completed
+            .fetch_add(1, Ordering::Relaxed);
 
         self.compute_results(state)
     }
@@ -301,13 +313,15 @@ impl ABTestManager {
     /// Get variant assignment for a request
     pub fn get_assignment(&self, experiment_id: &str, identity: &str) -> Result<VariantAssignment> {
         let experiments = self.experiments.read()?;
-        let state = experiments.get(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
         if state.status != ExperimentStatus::Running {
-            return Err(VecStoreError::InvalidInput(
-                format!("Experiment is not running: {:?}", state.status)
-            ));
+            return Err(VecStoreError::InvalidInput(format!(
+                "Experiment is not running: {:?}",
+                state.status
+            )));
         }
 
         // Check for existing assignment (Rust 1.92 if-let chain)
@@ -315,7 +329,10 @@ impl ABTestManager {
         if let Some((exp_id, var_id)) = assignments.get(identity)
             && exp_id == experiment_id
         {
-            let variant = state.config.variants.iter()
+            let variant = state
+                .config
+                .variants
+                .iter()
                 .find(|v| &v.id == var_id)
                 .cloned()
                 .ok_or_else(|| VecStoreError::NotFound("Variant not found".into()))?;
@@ -344,7 +361,9 @@ impl ABTestManager {
         if let Some(vd) = state.variant_data.get(&variant.id) {
             vd.requests.fetch_add(1, Ordering::Relaxed);
         }
-        self.metrics.total_assignments.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .total_assignments
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(VariantAssignment {
             experiment_id: experiment_id.to_string(),
@@ -368,26 +387,28 @@ impl ABTestManager {
                     }
                 }
                 Ok(config.variants[0].clone())
-            }
+            },
             TrafficAllocation::Consistent => {
                 let hash = hash_identity(identity);
                 let idx = (hash as usize) % config.variants.len();
                 Ok(config.variants[idx].clone())
-            }
+            },
             TrafficAllocation::TimeBased { rotation_minutes } => {
                 let now = current_timestamp();
                 let period = (*rotation_minutes as u64) * 60 * 1000;
                 let idx = ((now / period) as usize) % config.variants.len();
                 Ok(config.variants[idx].clone())
-            }
+            },
             TrafficAllocation::Manual => {
                 // Return control by default for manual
-                config.variants.iter()
+                config
+                    .variants
+                    .iter()
                     .find(|v| v.is_control)
                     .or_else(|| config.variants.first())
                     .cloned()
                     .ok_or_else(|| VecStoreError::InvalidInput("No variants defined".into()))
-            }
+            },
         }
     }
 
@@ -399,10 +420,13 @@ impl ABTestManager {
         result: RequestResult,
     ) -> Result<()> {
         let experiments = self.experiments.read()?;
-        let state = experiments.get(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
-        let variant_data = state.variant_data.get(variant_id)
+        let variant_data = state
+            .variant_data
+            .get(variant_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Variant {} not found", variant_id)))?;
 
         // Update counters
@@ -413,8 +437,13 @@ impl ABTestManager {
         }
 
         // Record latency
-        variant_data.total_latency_us.fetch_add(result.latency_us, Ordering::Relaxed);
-        variant_data.latency_samples.write()?.push(result.latency_us);
+        variant_data
+            .total_latency_us
+            .fetch_add(result.latency_us, Ordering::Relaxed);
+        variant_data
+            .latency_samples
+            .write()?
+            .push(result.latency_us);
 
         // Record metrics
         let mut metrics = variant_data.metric_values.write()?;
@@ -422,7 +451,9 @@ impl ABTestManager {
             metrics.entry(name).or_insert_with(Vec::new).push(value);
         }
 
-        self.metrics.total_results_recorded.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .total_results_recorded
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(())
     }
@@ -430,15 +461,19 @@ impl ABTestManager {
     /// Get current experiment results
     pub fn get_results(&self, experiment_id: &str) -> Result<ExperimentResults> {
         let experiments = self.experiments.read()?;
-        let state = experiments.get(experiment_id)
-            .ok_or_else(|| VecStoreError::NotFound(format!("Experiment {} not found", experiment_id)))?;
+        let state = experiments.get(experiment_id).ok_or_else(|| {
+            VecStoreError::NotFound(format!("Experiment {} not found", experiment_id))
+        })?;
 
         self.compute_results(state)
     }
 
     fn compute_results(&self, state: &ExperimentState) -> Result<ExperimentResults> {
         let mut variant_results = Vec::new();
-        let control_id = state.config.variants.iter()
+        let control_id = state
+            .config
+            .variants
+            .iter()
             .find(|v| v.is_control)
             .map(|v| v.id.clone());
 
@@ -458,18 +493,20 @@ impl ABTestManager {
                 for (name, values) in metrics.iter() {
                     if !values.is_empty() {
                         let mean: f64 = values.iter().sum::<f64>() / values.len() as f64;
-                        let variance: f64 = values.iter()
-                            .map(|v| (v - mean).powi(2))
-                            .sum::<f64>() / values.len() as f64;
+                        let variance: f64 = values.iter().map(|v| (v - mean).powi(2)).sum::<f64>()
+                            / values.len() as f64;
                         let std_dev = variance.sqrt();
 
-                        metric_summaries.insert(name.clone(), MetricSummary {
-                            count: values.len(),
-                            mean,
-                            std_dev,
-                            min: values.iter().cloned().fold(f64::INFINITY, f64::min),
-                            max: values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
-                        });
+                        metric_summaries.insert(
+                            name.clone(),
+                            MetricSummary {
+                                count: values.len(),
+                                mean,
+                                std_dev,
+                                min: values.iter().cloned().fold(f64::INFINITY, f64::min),
+                                max: values.iter().cloned().fold(f64::NEG_INFINITY, f64::max),
+                            },
+                        );
                     }
                 }
 
@@ -478,9 +515,21 @@ impl ABTestManager {
                     variant_name: variant.name.clone(),
                     is_control: variant.is_control,
                     sample_size: requests,
-                    success_rate: if requests > 0 { successes as f64 / requests as f64 } else { 0.0 },
-                    error_rate: if requests > 0 { errors as f64 / requests as f64 } else { 0.0 },
-                    avg_latency_us: if requests > 0 { total_latency / requests } else { 0 },
+                    success_rate: if requests > 0 {
+                        successes as f64 / requests as f64
+                    } else {
+                        0.0
+                    },
+                    error_rate: if requests > 0 {
+                        errors as f64 / requests as f64
+                    } else {
+                        0.0
+                    },
+                    avg_latency_us: if requests > 0 {
+                        total_latency / requests
+                    } else {
+                        0
+                    },
                     p50_latency_us: p50,
                     p95_latency_us: p95,
                     p99_latency_us: p99,
@@ -490,7 +539,8 @@ impl ABTestManager {
         }
 
         // Compute statistical comparisons
-        let comparisons = self.compute_comparisons(&variant_results, control_id.as_deref(), &state.config);
+        let comparisons =
+            self.compute_comparisons(&variant_results, control_id.as_deref(), &state.config);
 
         // Determine winner
         let winner = self.determine_winner(&variant_results, &comparisons, &state.config);
@@ -543,13 +593,17 @@ impl ABTestManager {
 
                         // Simple t-test approximation
                         let (significant, p) = two_sample_ttest(
-                            c.mean, c.std_dev, c.count,
-                            t.mean, t.std_dev, t.count,
+                            c.mean,
+                            c.std_dev,
+                            c.count,
+                            t.mean,
+                            t.std_dev,
+                            t.count,
                             config.significance_threshold,
                         );
 
                         (change, significant, p)
-                    }
+                    },
                     _ => (0.0, false, 1.0),
                 };
 
@@ -575,9 +629,7 @@ impl ABTestManager {
         config: &ExperimentConfig,
     ) -> Option<String> {
         // Find best performing variant that's statistically significant
-        let significant: Vec<_> = comparisons.iter()
-            .filter(|c| c.is_significant)
-            .collect();
+        let significant: Vec<_> = comparisons.iter().filter(|c| c.is_significant).collect();
 
         if significant.is_empty() {
             return None;
@@ -585,13 +637,13 @@ impl ABTestManager {
 
         // Return the variant with best improvement
         let best = if config.primary_metric.higher_is_better {
-            significant.iter().max_by(|a, b|
-                a.relative_change.total_cmp(&b.relative_change)
-            )
+            significant
+                .iter()
+                .max_by(|a, b| a.relative_change.total_cmp(&b.relative_change))
         } else {
-            significant.iter().min_by(|a, b|
-                a.relative_change.total_cmp(&b.relative_change)
-            )
+            significant
+                .iter()
+                .min_by(|a, b| a.relative_change.total_cmp(&b.relative_change))
         };
 
         best.map(|c| c.variant_id.clone())
@@ -599,16 +651,21 @@ impl ABTestManager {
 
     /// List all experiments
     pub fn list_experiments(&self) -> Result<Vec<ExperimentSummary>> {
-        let experiments = self.experiments.read()
+        let experiments = self
+            .experiments
+            .read()
             .map_err(|_| VecStoreError::LockError("experiments lock poisoned".into()))?;
-        Ok(experiments.iter()
+        Ok(experiments
+            .iter()
             .map(|(id, state)| ExperimentSummary {
                 id: id.clone(),
                 name: state.config.name.clone(),
                 status: state.status.clone(),
                 experiment_type: state.config.experiment_type.clone(),
                 variant_count: state.config.variants.len(),
-                total_requests: state.variant_data.values()
+                total_requests: state
+                    .variant_data
+                    .values()
                     .map(|vd| vd.requests.load(Ordering::Relaxed))
                     .sum(),
                 created_at: state.created_at,
@@ -619,14 +676,19 @@ impl ABTestManager {
 
     /// Get manager stats
     pub fn get_stats(&self) -> Result<ABTestStats> {
-        let experiments = self.experiments.read()
+        let experiments = self
+            .experiments
+            .read()
             .map_err(|_| VecStoreError::LockError("experiments lock poisoned".into()))?;
         Ok(ABTestStats {
             experiments_created: self.metrics.experiments_created.load(Ordering::Relaxed),
             experiments_completed: self.metrics.experiments_completed.load(Ordering::Relaxed),
             total_assignments: self.metrics.total_assignments.load(Ordering::Relaxed),
             total_results_recorded: self.metrics.total_results_recorded.load(Ordering::Relaxed),
-            active_experiments: experiments.values().filter(|s| s.status == ExperimentStatus::Running).count(),
+            active_experiments: experiments
+                .values()
+                .filter(|s| s.status == ExperimentStatus::Running)
+                .count(),
         })
     }
 }
@@ -765,15 +827,28 @@ fn compute_percentiles(samples: &[u64]) -> (u64, u64, u64) {
     let p99_idx = (samples.len() as f64 * 0.99) as usize;
 
     (
-        sorted.get(p50_idx.min(sorted.len() - 1)).copied().unwrap_or(0),
-        sorted.get(p95_idx.min(sorted.len() - 1)).copied().unwrap_or(0),
-        sorted.get(p99_idx.min(sorted.len() - 1)).copied().unwrap_or(0),
+        sorted
+            .get(p50_idx.min(sorted.len() - 1))
+            .copied()
+            .unwrap_or(0),
+        sorted
+            .get(p95_idx.min(sorted.len() - 1))
+            .copied()
+            .unwrap_or(0),
+        sorted
+            .get(p99_idx.min(sorted.len() - 1))
+            .copied()
+            .unwrap_or(0),
     )
 }
 
 fn two_sample_ttest(
-    mean1: f64, std1: f64, n1: usize,
-    mean2: f64, std2: f64, n2: usize,
+    mean1: f64,
+    std1: f64,
+    n1: usize,
+    mean2: f64,
+    std2: f64,
+    n2: usize,
     threshold: f64,
 ) -> (bool, f64) {
     if n1 < 2 || n2 < 2 {
@@ -921,11 +996,17 @@ mod tests {
         let mut metrics = HashMap::new();
         metrics.insert("recall_at_10".to_string(), 0.95);
 
-        manager.record_result(&id, &assignment.variant_id, RequestResult {
-            success: true,
-            latency_us: 5000,
-            metrics,
-        }).unwrap();
+        manager
+            .record_result(
+                &id,
+                &assignment.variant_id,
+                RequestResult {
+                    success: true,
+                    latency_us: 5000,
+                    metrics,
+                },
+            )
+            .unwrap();
 
         let results = manager.get_results(&id).unwrap();
         assert!(!results.variant_results.is_empty());

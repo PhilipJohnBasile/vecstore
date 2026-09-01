@@ -32,11 +32,11 @@
 //! }
 //! ```
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // SCHEMA TYPES
@@ -94,10 +94,17 @@ impl GqlCollection {
     pub fn to_sdl(&self) -> String {
         let mut sdl = format!("type {} {{\n", self.name);
         for field in &self.fields {
-            let desc = field.description.as_ref()
+            let desc = field
+                .description
+                .as_ref()
                 .map(|d| format!("  \"{}\"\n", d))
                 .unwrap_or_default();
-            sdl.push_str(&format!("{}  {}: {}\n", desc, field.name, field.field_type.to_sdl()));
+            sdl.push_str(&format!(
+                "{}  {}: {}\n",
+                desc,
+                field.name,
+                field.field_type.to_sdl()
+            ));
         }
         sdl.push_str("  _additional: _Additional\n");
         sdl.push_str("}\n");
@@ -257,7 +264,9 @@ impl GraphQLExecutor {
         vector: Vec<f32>,
         properties: HashMap<String, JsonValue>,
     ) -> Result<()> {
-        let col = self.collections.get(collection)
+        let col = self
+            .collections
+            .get(collection)
             .ok_or_else(|| VecStoreError::NotFound(format!("Collection: {}", collection)))?;
 
         if vector.len() != col.dimension {
@@ -277,7 +286,9 @@ impl GraphQLExecutor {
 
     /// Execute a vector query
     pub fn execute(&self, query: VectorQuery) -> Result<QueryResult> {
-        let _collection = self.collections.get(&query.collection)
+        let _collection = self
+            .collections
+            .get(&query.collection)
             .ok_or_else(|| VecStoreError::NotFound(format!("Collection: {}", query.collection)))?;
 
         let vectors = self.vectors.get(&query.collection).unwrap();
@@ -288,13 +299,14 @@ impl GraphQLExecutor {
         if let Some(near_vector) = &query.near_vector {
             for (id, (vec, props)) in vectors {
                 let similarity = cosine_similarity(&near_vector.vector, vec);
-                let certainty = (similarity + 1.0) / 2.0;  // Convert to 0-1 range
+                let certainty = (similarity + 1.0) / 2.0; // Convert to 0-1 range
 
                 // Check certainty threshold
                 if let Some(min_cert) = near_vector.certainty
-                    && certainty < min_cert {
-                        continue;
-                    }
+                    && certainty < min_cert
+                {
+                    continue;
+                }
 
                 // Check distance threshold
                 if let Some(max_dist) = near_vector.distance {
@@ -329,7 +341,8 @@ impl GraphQLExecutor {
         results = results.into_iter().skip(offset).take(limit).collect();
 
         // Build result items
-        let items: Vec<QueryResultItem> = results.into_iter()
+        let items: Vec<QueryResultItem> = results
+            .into_iter()
             .map(|(id, score, props)| {
                 let mut properties = HashMap::new();
                 for field in &query.fields {
@@ -348,7 +361,10 @@ impl GraphQLExecutor {
                     explanation: None,
                 };
 
-                QueryResultItem { properties, additional }
+                QueryResultItem {
+                    properties,
+                    additional,
+                }
             })
             .collect();
 
@@ -368,57 +384,53 @@ impl GraphQLExecutor {
                 } else {
                     true
                 }
-            }
+            },
             WhereOperator::Or => {
                 if let Some(operands) = &filter.operands {
                     operands.iter().any(|f| self.evaluate_filter(f, props))
                 } else {
                     false
                 }
-            }
+            },
             WhereOperator::Equal => {
                 if let Some(path) = &filter.path
                     && let Some(field) = path.first()
-                        && let Some(value) = props.get(field) {
-                            return self.compare_equal(value, filter);
-                        }
+                    && let Some(value) = props.get(field)
+                {
+                    return self.compare_equal(value, filter);
+                }
                 false
-            }
+            },
             WhereOperator::NotEqual => {
                 if let Some(path) = &filter.path
                     && let Some(field) = path.first()
-                        && let Some(value) = props.get(field) {
-                            return !self.compare_equal(value, filter);
-                        }
+                    && let Some(value) = props.get(field)
+                {
+                    return !self.compare_equal(value, filter);
+                }
                 true
-            }
-            WhereOperator::GreaterThan => {
-                self.compare_numeric(filter, props, |a, b| a > b)
-            }
-            WhereOperator::GreaterThanEqual => {
-                self.compare_numeric(filter, props, |a, b| a >= b)
-            }
-            WhereOperator::LessThan => {
-                self.compare_numeric(filter, props, |a, b| a < b)
-            }
-            WhereOperator::LessThanEqual => {
-                self.compare_numeric(filter, props, |a, b| a <= b)
-            }
+            },
+            WhereOperator::GreaterThan => self.compare_numeric(filter, props, |a, b| a > b),
+            WhereOperator::GreaterThanEqual => self.compare_numeric(filter, props, |a, b| a >= b),
+            WhereOperator::LessThan => self.compare_numeric(filter, props, |a, b| a < b),
+            WhereOperator::LessThanEqual => self.compare_numeric(filter, props, |a, b| a <= b),
             WhereOperator::Like => {
                 if let (Some(path), Some(pattern)) = (&filter.path, &filter.value_string)
                     && let Some(field) = path.first()
-                        && let Some(JsonValue::String(s)) = props.get(field) {
-                            return self.match_like(s, pattern);
-                        }
+                    && let Some(JsonValue::String(s)) = props.get(field)
+                {
+                    return self.match_like(s, pattern);
+                }
                 false
-            }
+            },
             WhereOperator::IsNull => {
                 if let Some(path) = &filter.path
-                    && let Some(field) = path.first() {
-                        return props.get(field).map(|v| v.is_null()).unwrap_or(true);
-                    }
+                    && let Some(field) = path.first()
+                {
+                    return props.get(field).map(|v| v.is_null()).unwrap_or(true);
+                }
                 false
-            }
+            },
             _ => true,
         }
     }
@@ -439,21 +451,27 @@ impl GraphQLExecutor {
         false
     }
 
-    fn compare_numeric<F>(&self, filter: &WhereFilter, props: &HashMap<String, JsonValue>, cmp: F) -> bool
+    fn compare_numeric<F>(
+        &self,
+        filter: &WhereFilter,
+        props: &HashMap<String, JsonValue>,
+        cmp: F,
+    ) -> bool
     where
         F: Fn(f64, f64) -> bool,
     {
         if let Some(path) = &filter.path
             && let Some(field) = path.first()
-                && let Some(value) = props.get(field)
-                    && let Some(v) = value.as_f64() {
-                        if let Some(n) = filter.value_number {
-                            return cmp(v, n);
-                        }
-                        if let Some(i) = filter.value_int {
-                            return cmp(v, i as f64);
-                        }
-                    }
+            && let Some(value) = props.get(field)
+            && let Some(v) = value.as_f64()
+        {
+            if let Some(n) = filter.value_number {
+                return cmp(v, n);
+            }
+            if let Some(i) = filter.value_int {
+                return cmp(v, i as f64);
+            }
+        }
         false
     }
 
@@ -658,7 +676,8 @@ fn extract_collection(query: &str) -> Result<String> {
         let rest = &query[start..];
         if let Some(brace) = rest.find('{') {
             let after_brace = &rest[brace + 1..];
-            let name: String = after_brace.trim()
+            let name: String = after_brace
+                .trim()
                 .chars()
                 .take_while(|c| c.is_alphanumeric() || *c == '_')
                 .collect();
@@ -667,7 +686,9 @@ fn extract_collection(query: &str) -> Result<String> {
             }
         }
     }
-    Err(VecStoreError::InvalidInput("Could not parse collection name".to_string()))
+    Err(VecStoreError::InvalidInput(
+        "Could not parse collection name".to_string(),
+    ))
 }
 
 fn extract_near_vector(query: &str) -> Option<NearVectorInput> {
@@ -675,19 +696,22 @@ fn extract_near_vector(query: &str) -> Option<NearVectorInput> {
         // Very simplified - would need proper parsing
         if let Some(vec_start) = query[start..].find("vector:")
             && let Some(bracket_start) = query[start + vec_start..].find('[')
-                && let Some(bracket_end) = query[start + vec_start + bracket_start..].find(']') {
-                    let vec_str = &query[start + vec_start + bracket_start + 1..start + vec_start + bracket_start + bracket_end];
-                    let vector: Vec<f32> = vec_str.split(',')
-                        .filter_map(|s| s.trim().parse().ok())
-                        .collect();
-                    if !vector.is_empty() {
-                        return Some(NearVectorInput {
-                            vector,
-                            certainty: extract_float(query, "certainty:"),
-                            distance: extract_float(query, "distance:"),
-                        });
-                    }
-                }
+            && let Some(bracket_end) = query[start + vec_start + bracket_start..].find(']')
+        {
+            let vec_str = &query[start + vec_start + bracket_start + 1
+                ..start + vec_start + bracket_start + bracket_end];
+            let vector: Vec<f32> = vec_str
+                .split(',')
+                .filter_map(|s| s.trim().parse().ok())
+                .collect();
+            if !vector.is_empty() {
+                return Some(NearVectorInput {
+                    vector,
+                    certainty: extract_float(query, "certainty:"),
+                    distance: extract_float(query, "distance:"),
+                });
+            }
+        }
     }
     None
 }
@@ -695,7 +719,8 @@ fn extract_near_vector(query: &str) -> Option<NearVectorInput> {
 fn extract_float(query: &str, key: &str) -> Option<f32> {
     if let Some(start) = query.find(key) {
         let rest = &query[start + key.len()..];
-        let value: String = rest.trim()
+        let value: String = rest
+            .trim()
             .chars()
             .take_while(|c| c.is_numeric() || *c == '.' || *c == '-')
             .collect();
@@ -713,10 +738,7 @@ fn extract_where(_query: &str) -> Option<WhereFilter> {
 fn extract_limit(query: &str) -> Option<usize> {
     if let Some(start) = query.find("limit:") {
         let rest = &query[start + 6..];
-        let value: String = rest.trim()
-            .chars()
-            .take_while(|c| c.is_numeric())
-            .collect();
+        let value: String = rest.trim().chars().take_while(|c| c.is_numeric()).collect();
         value.parse().ok()
     } else {
         None
@@ -778,14 +800,30 @@ mod tests {
 
         // Insert vectors
         let mut props1 = HashMap::new();
-        props1.insert("title".to_string(), JsonValue::String("Tech News".to_string()));
-        props1.insert("category".to_string(), JsonValue::String("tech".to_string()));
-        executor.insert("Article", "doc1", vec![1.0, 0.0, 0.0, 0.0], props1).unwrap();
+        props1.insert(
+            "title".to_string(),
+            JsonValue::String("Tech News".to_string()),
+        );
+        props1.insert(
+            "category".to_string(),
+            JsonValue::String("tech".to_string()),
+        );
+        executor
+            .insert("Article", "doc1", vec![1.0, 0.0, 0.0, 0.0], props1)
+            .unwrap();
 
         let mut props2 = HashMap::new();
-        props2.insert("title".to_string(), JsonValue::String("Sports News".to_string()));
-        props2.insert("category".to_string(), JsonValue::String("sports".to_string()));
-        executor.insert("Article", "doc2", vec![0.0, 1.0, 0.0, 0.0], props2).unwrap();
+        props2.insert(
+            "title".to_string(),
+            JsonValue::String("Sports News".to_string()),
+        );
+        props2.insert(
+            "category".to_string(),
+            JsonValue::String("sports".to_string()),
+        );
+        executor
+            .insert("Article", "doc2", vec![0.0, 1.0, 0.0, 0.0], props2)
+            .unwrap();
 
         // Execute query
         let query = VectorQuery {
@@ -815,14 +853,12 @@ mod tests {
         let collection = GqlCollection {
             name: "Document".to_string(),
             description: None,
-            fields: vec![
-                GqlField {
-                    name: "content".to_string(),
-                    field_type: GqlType::String,
-                    description: None,
-                    is_vector: false,
-                },
-            ],
+            fields: vec![GqlField {
+                name: "content".to_string(),
+                field_type: GqlType::String,
+                description: None,
+                is_vector: false,
+            }],
             vector_field: None,
             dimension: 4,
         };

@@ -14,46 +14,22 @@ tab_spaces = 4
 # Newline style (native = platform default)
 newline_style = "Auto"
 
-# Import grouping and sorting
-imports_granularity = "Module"
-group_imports = "StdExternalCrate"
+# Import sorting
 reorder_imports = true
 reorder_modules = true
-
-# Format strings
-format_strings = false
-
-# Comments
-wrap_comments = false
-normalize_comments = false
-normalize_doc_attributes = true
-
-# Control flow
-control_brace_style = "AlwaysSameLine"
 
 # Match arms
 match_arm_leading_pipes = "Never"
 match_block_trailing_comma = true
 
 # Function definitions
-fn_args_layout = "Tall"
-fn_single_line = false
-
-# Struct definitions
-struct_lit_single_line = true
-struct_field_align_threshold = 0
+fn_params_layout = "Tall"
 
 # Use field init shorthand
 use_field_init_shorthand = true
 
 # Use try shorthand (?)
 use_try_shorthand = true
-
-# Trailing semicolons
-trailing_semicolon = true
-
-# Where clause layout
-where_single_line = false
 
 # Chain formatting
 chain_width = 60
@@ -63,9 +39,3 @@ array_width = 60
 
 # Attribute formatting
 attr_fn_like_width = 70
-
-# Skip certain files/directories (generated code, etc.)
-ignore = [
-    "target/",
-    "proto/",
-]

@@ -35,7 +35,7 @@
 //! println!("Optimal params: {:?}", params);
 //! ```
 
-use anyhow::{Result};
+use anyhow::Result;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -193,14 +193,12 @@ impl Default for HybridParams {
 }
 
 /// Combined index parameters
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct IndexParams {
     pub hnsw: HNSWParams,
     pub ivf: IVFParams,
     pub hybrid: HybridParams,
 }
-
 
 // ============================================================================
 // EVALUATION METRICS
@@ -367,7 +365,9 @@ impl AutoTuner {
         F: FnMut(&IndexParams, &[f32], usize) -> Result<(Vec<String>, std::time::Duration)>,
     {
         if queries.len() != ground_truth.len() {
-            return Err(anyhow::anyhow!("Queries and ground truth must have same length"));
+            return Err(anyhow::anyhow!(
+                "Queries and ground truth must have same length"
+            ));
         }
 
         let k = ground_truth.first().map(|g| g.len()).unwrap_or(10);
@@ -382,7 +382,8 @@ impl AutoTuner {
             };
 
             // Evaluate
-            let eval = self.evaluate(&candidate_params, queries, ground_truth, k, &mut search_fn)?;
+            let eval =
+                self.evaluate(&candidate_params, queries, ground_truth, k, &mut search_fn)?;
 
             // Record observation
             self.optimizer.observe(param_vec.clone(), eval.score);
@@ -403,7 +404,15 @@ impl AutoTuner {
             }
 
             // Update best params
-            if eval.score > self.score_params(&self.current_params, queries, ground_truth, k, &mut search_fn)? {
+            if eval.score
+                > self.score_params(
+                    &self.current_params,
+                    queries,
+                    ground_truth,
+                    k,
+                    &mut search_fn,
+                )?
+            {
                 self.current_params = eval.params;
             }
         }
@@ -440,10 +449,7 @@ impl AutoTuner {
             latencies.push(duration.as_secs_f64() * 1000.0);
 
             // Calculate recall
-            let hits = results
-                .iter()
-                .filter(|r| truth.contains(r))
-                .count();
+            let hits = results.iter().filter(|r| truth.contains(r)).count();
             total_recall += hits as f32 / k as f32;
         }
 
@@ -453,7 +459,10 @@ impl AutoTuner {
         // Calculate latency statistics
         latencies.sort_by(|a, b| a.total_cmp(b));
         let latency_ms = latencies.iter().sum::<f64>() / latencies.len() as f64;
-        let latency_p99_ms = latencies.get(latencies.len() * 99 / 100).copied().unwrap_or(0.0);
+        let latency_p99_ms = latencies
+            .get(latencies.len() * 99 / 100)
+            .copied()
+            .unwrap_or(0.0);
         let qps = 1000.0 / latency_ms;
 
         // Compute score (balance recall and latency)

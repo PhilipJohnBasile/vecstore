@@ -195,15 +195,21 @@ impl RateLimiter {
         }
 
         // Check if there's a specific limit for this operation
-        let rate = self.inner.config.operation_limits
+        let rate = self
+            .inner
+            .config
+            .operation_limits
             .get(operation)
             .copied()
             .unwrap_or(self.inner.config.requests_per_second);
 
-        let Ok(mut state) = self.inner.state.write() else { return false; };
+        let Ok(mut state) = self.inner.state.write() else {
+            return false;
+        };
         let now = Instant::now();
 
-        let op_state = state.operation_states
+        let op_state = state
+            .operation_states
             .entry(operation.to_string())
             .or_insert_with(|| OperationState {
                 tokens: self.inner.config.burst_size as f64,
@@ -286,7 +292,9 @@ impl RateLimiter {
         let window = Duration::from_secs(1);
 
         // Remove old requests
-        state.window_requests.retain(|t| now.duration_since(*t) < window);
+        state
+            .window_requests
+            .retain(|t| now.duration_since(*t) < window);
 
         let current_count = state.window_requests.len();
         let max_requests = self.inner.config.requests_per_second as usize;
@@ -399,7 +407,9 @@ impl RateLimiter {
 
     /// Reset the rate limiter state
     pub fn reset(&self) {
-        let Ok(mut state) = self.inner.state.write() else { return; };
+        let Ok(mut state) = self.inner.state.write() else {
+            return;
+        };
         state.tokens = self.inner.config.burst_size as f64;
         state.last_refill = Instant::now();
         state.window_requests.clear();
@@ -473,7 +483,9 @@ impl KeyedRateLimiter {
 
     /// Try to acquire for a specific key
     pub fn try_acquire(&self, key: &str) -> bool {
-        let Ok(limiters) = self.limiters.read() else { return false; };
+        let Ok(limiters) = self.limiters.read() else {
+            return false;
+        };
 
         if let Some(limiter) = limiters.get(key) {
             limiter.try_acquire()
@@ -481,7 +493,9 @@ impl KeyedRateLimiter {
             drop(limiters);
 
             // Create new limiter
-            let Ok(mut limiters) = self.limiters.write() else { return false; };
+            let Ok(mut limiters) = self.limiters.write() else {
+                return false;
+            };
             let limiter = limiters
                 .entry(key.to_string())
                 .or_insert_with(|| RateLimiter::new(self.default_config.clone()));
@@ -491,7 +505,9 @@ impl KeyedRateLimiter {
 
     /// Set a custom rate limit for a specific key
     pub fn set_limit(&self, key: &str, requests_per_second: f64) {
-        let Ok(mut limiters) = self.limiters.write() else { return; };
+        let Ok(mut limiters) = self.limiters.write() else {
+            return;
+        };
         let config = RateLimitConfig {
             requests_per_second,
             ..self.default_config.clone()
@@ -501,7 +517,9 @@ impl KeyedRateLimiter {
 
     /// Get stats for all keys
     pub fn all_stats(&self) -> HashMap<String, RateLimitStats> {
-        let Ok(limiters) = self.limiters.read() else { return HashMap::new(); };
+        let Ok(limiters) = self.limiters.read() else {
+            return HashMap::new();
+        };
         limiters
             .iter()
             .map(|(k, v)| (k.clone(), v.stats()))
@@ -702,8 +720,7 @@ mod tests {
 // ============================================================================
 
 /// Scope for rate limiting (global, per-tenant, per-operation)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum RateLimitScope {
     /// Global rate limit across all requests
     #[default]
@@ -717,7 +734,6 @@ pub enum RateLimitScope {
     /// Custom scope
     Custom,
 }
-
 
 /// Multi-tier rate limiter that applies limits at different scopes
 ///
@@ -764,9 +780,7 @@ impl Default for MultiTierConfig {
 impl MultiTierRateLimiter {
     /// Create a new multi-tier rate limiter
     pub fn new(config: MultiTierConfig) -> Self {
-        let burst = |rps: f64| -> usize {
-            (rps * config.burst_multiplier).max(1.0) as usize
-        };
+        let burst = |rps: f64| -> usize { (rps * config.burst_multiplier).max(1.0) as usize };
 
         Self {
             global: RateLimiter::new(RateLimitConfig {
@@ -799,15 +813,17 @@ impl MultiTierRateLimiter {
 
         // Check per-key limit if key is provided
         if let Some(k) = key
-            && !self.keyed.try_acquire(k) {
-                return false;
-            }
+            && !self.keyed.try_acquire(k)
+        {
+            return false;
+        }
 
         // Check per-operation limit if operation is provided
         if let Some(op) = operation
-            && !self.operations.try_acquire(op) {
-                return false;
-            }
+            && !self.operations.try_acquire(op)
+        {
+            return false;
+        }
 
         true
     }

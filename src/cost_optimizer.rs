@@ -2,8 +2,8 @@
 // Automatic scaling recommendations, resource right-sizing, and cost forecasting
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -179,13 +179,36 @@ pub enum EffortLevel {
 /// Optimization action
 #[derive(Debug, Clone, Serialize)]
 pub enum OptimizationAction {
-    ScaleDown { resource: String, current: f64, target: f64 },
-    ScaleUp { resource: String, current: f64, target: f64 },
-    EnableFeature { feature: String },
-    DisableFeature { feature: String },
-    ChangeConfig { key: String, current: String, target: String },
-    MigrateStorage { from_tier: String, to_tier: String, size_gb: f64 },
-    AdjustReplicas { current: u32, target: u32 },
+    ScaleDown {
+        resource: String,
+        current: f64,
+        target: f64,
+    },
+    ScaleUp {
+        resource: String,
+        current: f64,
+        target: f64,
+    },
+    EnableFeature {
+        feature: String,
+    },
+    DisableFeature {
+        feature: String,
+    },
+    ChangeConfig {
+        key: String,
+        current: String,
+        target: String,
+    },
+    MigrateStorage {
+        from_tier: String,
+        to_tier: String,
+        size_gb: f64,
+    },
+    AdjustReplicas {
+        current: u32,
+        target: u32,
+    },
 }
 
 /// Recommendation status
@@ -280,7 +303,9 @@ impl CostOptimizer {
             latency_ms: usage.latency_ms,
         };
 
-        let Ok(mut history) = self.resource_usage.write() else { return; };
+        let Ok(mut history) = self.resource_usage.write() else {
+            return;
+        };
         if history.samples.len() >= history.max_samples {
             history.samples.pop_front();
         }
@@ -288,8 +313,12 @@ impl CostOptimizer {
 
         // Calculate and record cost
         let cost = self.calculate_cost(&usage);
-        self.stats.total_cost.fetch_add((cost * 100.0) as u64, Ordering::Relaxed);
-        self.stats.total_queries.fetch_add(usage.queries, Ordering::Relaxed);
+        self.stats
+            .total_cost
+            .fetch_add((cost * 100.0) as u64, Ordering::Relaxed);
+        self.stats
+            .total_queries
+            .fetch_add(usage.queries, Ordering::Relaxed);
     }
 
     /// Calculate cost for resource usage
@@ -309,7 +338,9 @@ impl CostOptimizer {
 
     /// Analyze current costs and generate recommendations
     pub fn analyze(&self) -> Result<CostAnalysis> {
-        let history = self.resource_usage.read()
+        let history = self
+            .resource_usage
+            .read()
             .map_err(|_| VecStoreError::LockError("resource_usage lock poisoned".into()))?;
 
         if history.samples.is_empty() {
@@ -344,13 +375,14 @@ impl CostOptimizer {
 
         // Generate recommendations
         let recommendations = self.generate_recommendations(&avg_usage, &history.samples);
-        let potential_savings: f64 = recommendations.iter()
-            .map(|r| r.estimated_savings)
-            .sum();
+        let potential_savings: f64 = recommendations.iter().map(|r| r.estimated_savings).sum();
 
         // Store recommendations
-        *self.recommendations.write()
-            .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))? = recommendations.clone();
+        *self
+            .recommendations
+            .write()
+            .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))? =
+            recommendations.clone();
 
         Ok(CostAnalysis {
             current_costs,
@@ -397,7 +429,8 @@ impl CostOptimizer {
             return 0.0;
         }
 
-        let total_cost: f64 = samples.iter()
+        let total_cost: f64 = samples
+            .iter()
             .map(|s| {
                 let usage = ResourceUsage {
                     cpu_cores: s.cpu_cores,
@@ -430,13 +463,17 @@ impl CostOptimizer {
         let first_half: Vec<_> = samples.iter().take(half).collect();
         let second_half: Vec<_> = samples.iter().skip(half).collect();
 
-        let first_avg: f64 = first_half.iter()
+        let first_avg: f64 = first_half
+            .iter()
             .map(|s| self.calculate_cost(&ResourceUsage::from_sample(s)))
-            .sum::<f64>() / first_half.len() as f64;
+            .sum::<f64>()
+            / first_half.len() as f64;
 
-        let second_avg: f64 = second_half.iter()
+        let second_avg: f64 = second_half
+            .iter()
             .map(|s| self.calculate_cost(&ResourceUsage::from_sample(s)))
-            .sum::<f64>() / second_half.len() as f64;
+            .sum::<f64>()
+            / second_half.len() as f64;
 
         let change_percent = if first_avg > 0.0 {
             ((second_avg - first_avg) / first_avg) * 100.0
@@ -469,7 +506,8 @@ impl CostOptimizer {
         }
 
         let total_queries: u64 = samples.iter().map(|s| s.queries).sum();
-        let total_cost: f64 = samples.iter()
+        let total_cost: f64 = samples
+            .iter()
             .map(|s| self.calculate_cost(&ResourceUsage::from_sample(s)))
             .sum();
 
@@ -500,7 +538,8 @@ impl CostOptimizer {
         if cpu_utilization < 0.3 {
             let target_cores = (avg_usage.cpu_cores * 0.5).max(1.0);
             let savings = (avg_usage.cpu_cores - target_cores)
-                * self.config.pricing.cpu_per_core_hour * 720.0;
+                * self.config.pricing.cpu_per_core_hour
+                * 720.0;
 
             recommendations.push(CostRecommendation {
                 id: format!("cpu-rightsize-{}", now),
@@ -508,7 +547,9 @@ impl CostOptimizer {
                 title: "CPU Over-provisioned".to_string(),
                 description: format!(
                     "CPU utilization is only {:.0}%. Consider reducing cores from {:.1} to {:.1}.",
-                    cpu_utilization * 100.0, avg_usage.cpu_cores, target_cores
+                    cpu_utilization * 100.0,
+                    avg_usage.cpu_cores,
+                    target_cores
                 ),
                 estimated_savings: savings,
                 savings_percent: savings / self.project_monthly_cost(samples) * 100.0,
@@ -529,7 +570,8 @@ impl CostOptimizer {
         if memory_utilization < 0.4 {
             let target_memory = (avg_usage.memory_gb * 0.6).max(1.0);
             let savings = (avg_usage.memory_gb - target_memory)
-                * self.config.pricing.memory_per_gb_hour * 720.0;
+                * self.config.pricing.memory_per_gb_hour
+                * 720.0;
 
             recommendations.push(CostRecommendation {
                 id: format!("mem-rightsize-{}", now),
@@ -537,7 +579,9 @@ impl CostOptimizer {
                 title: "Memory Over-provisioned".to_string(),
                 description: format!(
                     "Memory utilization is only {:.0}%. Consider reducing from {:.1}GB to {:.1}GB.",
-                    memory_utilization * 100.0, avg_usage.memory_gb, target_memory
+                    memory_utilization * 100.0,
+                    avg_usage.memory_gb,
+                    target_memory
                 ),
                 estimated_savings: savings,
                 savings_percent: savings / self.project_monthly_cost(samples) * 100.0,
@@ -556,8 +600,10 @@ impl CostOptimizer {
         // Check storage tiering opportunity
         if avg_usage.storage_gb > 100.0 {
             let cold_data_ratio = 0.3; // Assume 30% could be cold
-            let cold_storage_savings = avg_usage.storage_gb * cold_data_ratio
-                * self.config.pricing.storage_per_gb_month * 0.7; // 70% savings on cold tier
+            let cold_storage_savings = avg_usage.storage_gb
+                * cold_data_ratio
+                * self.config.pricing.storage_per_gb_month
+                * 0.7; // 70% savings on cold tier
 
             recommendations.push(CostRecommendation {
                 id: format!("storage-tier-{}", now),
@@ -585,14 +631,18 @@ impl CostOptimizer {
         let estimated_cache_hit_rate = self.estimate_cache_hit_rate(samples);
         if estimated_cache_hit_rate < 0.7 {
             let potential_query_reduction = 0.2; // 20% of queries could be cached
-            let api_savings = avg_usage.queries as f64 * potential_query_reduction
-                * self.config.pricing.api_per_million / 1_000_000.0 * 720.0;
+            let api_savings = avg_usage.queries as f64
+                * potential_query_reduction
+                * self.config.pricing.api_per_million
+                / 1_000_000.0
+                * 720.0;
 
             recommendations.push(CostRecommendation {
                 id: format!("cache-improve-{}", now),
                 category: OptimizationCategory::CachingStrategy,
                 title: "Improve Cache Hit Rate".to_string(),
-                description: "Increase cache size or adjust caching strategy to improve hit rate.".to_string(),
+                description: "Increase cache size or adjust caching strategy to improve hit rate."
+                    .to_string(),
                 estimated_savings: api_savings,
                 savings_percent: api_savings / self.project_monthly_cost(samples) * 100.0,
                 risk: RiskLevel::Low,
@@ -608,11 +658,11 @@ impl CostOptimizer {
         }
 
         // Sort by estimated savings
-        recommendations.sort_by(|a, b| {
-            b.estimated_savings.total_cmp(&a.estimated_savings)
-        });
+        recommendations.sort_by(|a, b| b.estimated_savings.total_cmp(&a.estimated_savings));
 
-        self.stats.recommendations_generated.fetch_add(recommendations.len() as u64, Ordering::Relaxed);
+        self.stats
+            .recommendations_generated
+            .fetch_add(recommendations.len() as u64, Ordering::Relaxed);
 
         recommendations
     }
@@ -631,7 +681,8 @@ impl CostOptimizer {
             .unwrap_or(4.0);
 
         // Calculate average CPU cores in use across samples
-        let avg_cores_used: f64 = samples.iter().map(|s| s.cpu_cores).sum::<f64>() / samples.len() as f64;
+        let avg_cores_used: f64 =
+            samples.iter().map(|s| s.cpu_cores).sum::<f64>() / samples.len() as f64;
 
         // Convert to utilization percentage (0.0 - 1.0)
         (avg_cores_used / total_cores).clamp(0.0, 1.0)
@@ -649,7 +700,8 @@ impl CostOptimizer {
         let total_memory_gb = 16.0; // Assume 16GB system
 
         // Calculate average memory usage across samples
-        let avg_memory_used: f64 = samples.iter().map(|s| s.memory_gb).sum::<f64>() / samples.len() as f64;
+        let avg_memory_used: f64 =
+            samples.iter().map(|s| s.memory_gb).sum::<f64>() / samples.len() as f64;
 
         // Convert to utilization percentage (0.0 - 1.0)
         (avg_memory_used / total_memory_gb).clamp(0.0, 1.0)
@@ -664,7 +716,8 @@ impl CostOptimizer {
 
         // Estimate cache hit rate based on query patterns
         // Higher query rates with stable latency suggest good caching
-        let avg_latency: f64 = samples.iter().map(|s| s.latency_ms).sum::<f64>() / samples.len() as f64;
+        let avg_latency: f64 =
+            samples.iter().map(|s| s.latency_ms).sum::<f64>() / samples.len() as f64;
         let total_queries: u64 = samples.iter().map(|s| s.queries).sum();
 
         // Lower latency relative to query volume suggests cache hits
@@ -735,18 +788,26 @@ impl CostOptimizer {
 
     /// Apply a recommendation
     pub fn apply_recommendation(&self, recommendation_id: &str) -> Result<bool> {
-        let mut recommendations = self.recommendations.write()
+        let mut recommendations = self
+            .recommendations
+            .write()
             .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))?;
 
-        if let Some(rec) = recommendations.iter_mut().find(|r| r.id == recommendation_id) {
+        if let Some(rec) = recommendations
+            .iter_mut()
+            .find(|r| r.id == recommendation_id)
+        {
             if rec.status != RecommendationStatus::Pending {
                 return Ok(false);
             }
 
             rec.status = RecommendationStatus::Applied;
-            self.stats.recommendations_applied.fetch_add(1, Ordering::Relaxed);
-            *self.stats.savings_achieved.write()
-                .map_err(|_| VecStoreError::LockError("savings_achieved lock poisoned".into()))? += rec.estimated_savings;
+            self.stats
+                .recommendations_applied
+                .fetch_add(1, Ordering::Relaxed);
+            *self.stats.savings_achieved.write().map_err(|_| {
+                VecStoreError::LockError("savings_achieved lock poisoned".into())
+            })? += rec.estimated_savings;
 
             Ok(true)
         } else {
@@ -756,10 +817,15 @@ impl CostOptimizer {
 
     /// Dismiss a recommendation
     pub fn dismiss_recommendation(&self, recommendation_id: &str) -> Result<bool> {
-        let mut recommendations = self.recommendations.write()
+        let mut recommendations = self
+            .recommendations
+            .write()
             .map_err(|_| VecStoreError::LockError("recommendations lock poisoned".into()))?;
 
-        if let Some(rec) = recommendations.iter_mut().find(|r| r.id == recommendation_id) {
+        if let Some(rec) = recommendations
+            .iter_mut()
+            .find(|r| r.id == recommendation_id)
+        {
             rec.status = RecommendationStatus::Dismissed;
             Ok(true)
         } else {
@@ -769,7 +835,9 @@ impl CostOptimizer {
 
     /// Get pending recommendations
     pub fn get_recommendations(&self) -> Vec<CostRecommendation> {
-        let Ok(recommendations) = self.recommendations.read() else { return Vec::new(); };
+        let Ok(recommendations) = self.recommendations.read() else {
+            return Vec::new();
+        };
         recommendations
             .iter()
             .filter(|r| r.status == RecommendationStatus::Pending)
@@ -784,7 +852,10 @@ impl CostOptimizer {
                 total_cost: self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0,
                 total_queries: self.stats.total_queries.load(Ordering::Relaxed),
                 cost_per_query: 0.0,
-                recommendations_generated: self.stats.recommendations_generated.load(Ordering::Relaxed),
+                recommendations_generated: self
+                    .stats
+                    .recommendations_generated
+                    .load(Ordering::Relaxed),
                 recommendations_applied: self.stats.recommendations_applied.load(Ordering::Relaxed),
                 savings_achieved: 0.0,
             };
@@ -795,7 +866,11 @@ impl CostOptimizer {
             cost_per_query: {
                 let cost = self.stats.total_cost.load(Ordering::Relaxed) as f64 / 100.0;
                 let queries = self.stats.total_queries.load(Ordering::Relaxed);
-                if queries > 0 { cost / queries as f64 } else { 0.0 }
+                if queries > 0 {
+                    cost / queries as f64
+                } else {
+                    0.0
+                }
             },
             recommendations_generated: self.stats.recommendations_generated.load(Ordering::Relaxed),
             recommendations_applied: self.stats.recommendations_applied.load(Ordering::Relaxed),
@@ -812,7 +887,9 @@ impl CostOptimizer {
             pessimistic_forecast: 0.0,
             with_recommendations: 0.0,
         };
-        let Ok(history) = self.resource_usage.read() else { return default_forecast; };
+        let Ok(history) = self.resource_usage.read() else {
+            return default_forecast;
+        };
         let monthly_cost = self.project_monthly_cost(&history.samples);
         let daily_cost = monthly_cost / 30.0;
 
@@ -975,15 +1052,16 @@ impl CostAwareAutoScaler {
 
         // Check cooldown
         if let Some(last_action) = state.last_scale_action
-            && last_action.elapsed() < self.config.cooldown_period {
-                return ScalingDecision {
-                    action: ScaleAction::NoChange,
-                    current_replicas: state.replicas,
-                    target_replicas: state.replicas,
-                    reason: "In cooldown period".to_string(),
-                    cost_impact: 0.0,
-                };
-            }
+            && last_action.elapsed() < self.config.cooldown_period
+        {
+            return ScalingDecision {
+                action: ScaleAction::NoChange,
+                current_replicas: state.replicas,
+                target_replicas: state.replicas,
+                reason: "In cooldown period".to_string(),
+                cost_impact: 0.0,
+            };
+        }
 
         let current_replicas = state.replicas;
         drop(state);
@@ -1025,7 +1103,8 @@ impl CostAwareAutoScaler {
                 target_replicas: target,
                 reason: format!(
                     "Low utilization ({:.0}%) and high cost per query (${:.6})",
-                    utilization_per_replica * 100.0, current_cost_per_query
+                    utilization_per_replica * 100.0,
+                    current_cost_per_query
                 ),
                 cost_impact: -cost_savings,
             };
@@ -1047,7 +1126,8 @@ impl CostAwareAutoScaler {
         let memory_per_replica = 8.0;
 
         (cpu_per_replica * pricing.cpu_per_core_hour
-            + memory_per_replica * pricing.memory_per_gb_hour) * 720.0
+            + memory_per_replica * pricing.memory_per_gb_hour)
+            * 720.0
     }
 
     /// Apply scaling decision
@@ -1056,7 +1136,9 @@ impl CostAwareAutoScaler {
             return false;
         }
 
-        let Ok(mut state) = self.current_scale.write() else { return false; };
+        let Ok(mut state) = self.current_scale.write() else {
+            return false;
+        };
         state.replicas = decision.target_replicas;
         state.last_scale_action = Some(Instant::now());
 

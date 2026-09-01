@@ -129,7 +129,10 @@ pub enum DerivationOperation {
     /// Normalization
     Normalization { method: String },
     /// Custom transformation
-    Custom { name: String, parameters: HashMap<String, String> },
+    Custom {
+        name: String,
+        parameters: HashMap<String, String>,
+    },
 }
 
 /// Transformation applied to a vector
@@ -313,14 +316,19 @@ impl LineageTracker {
         // Handle derived sources
         if let VectorSource::Derived { ref parent_ids, .. } = source {
             let Ok(mut forward) = self.forward_deps.write() else {
-                return Err(VecStoreError::Internal("Failed to acquire forward_deps write lock".to_string()));
+                return Err(VecStoreError::Internal(
+                    "Failed to acquire forward_deps write lock".to_string(),
+                ));
             };
             let Ok(mut backward) = self.backward_deps.write() else {
-                return Err(VecStoreError::Internal("Failed to acquire backward_deps write lock".to_string()));
+                return Err(VecStoreError::Internal(
+                    "Failed to acquire backward_deps write lock".to_string(),
+                ));
             };
 
             for parent_id in parent_ids {
-                forward.entry(parent_id.clone())
+                forward
+                    .entry(parent_id.clone())
                     .or_insert_with(HashSet::new)
                     .insert(vector_id.clone());
             }
@@ -329,7 +337,9 @@ impl LineageTracker {
         }
 
         let Ok(mut records) = self.records.write() else {
-            return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+            return Err(VecStoreError::Internal(
+                "Failed to acquire records write lock".to_string(),
+            ));
         };
         records.insert(vector_id, record);
 
@@ -350,7 +360,9 @@ impl LineageTracker {
         // Update input records
         {
             let Ok(mut records) = self.records.write() else {
-                return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+                return Err(VecStoreError::Internal(
+                    "Failed to acquire records write lock".to_string(),
+                ));
             };
             for input_id in &transformation.inputs {
                 if let Some(record) = records.get_mut(input_id) {
@@ -363,10 +375,14 @@ impl LineageTracker {
         // Track dependencies
         {
             let Ok(mut forward) = self.forward_deps.write() else {
-                return Err(VecStoreError::Internal("Failed to acquire forward_deps write lock".to_string()));
+                return Err(VecStoreError::Internal(
+                    "Failed to acquire forward_deps write lock".to_string(),
+                ));
             };
             let Ok(mut backward) = self.backward_deps.write() else {
-                return Err(VecStoreError::Internal("Failed to acquire backward_deps write lock".to_string()));
+                return Err(VecStoreError::Internal(
+                    "Failed to acquire backward_deps write lock".to_string(),
+                ));
             };
 
             for output_id in &transformation.outputs {
@@ -384,12 +400,16 @@ impl LineageTracker {
         }
 
         let Ok(mut transformations) = self.transformations.write() else {
-            return Err(VecStoreError::Internal("Failed to acquire transformations write lock".to_string()));
+            return Err(VecStoreError::Internal(
+                "Failed to acquire transformations write lock".to_string(),
+            ));
         };
         transformations.insert(transform_id, transformation);
 
         use std::sync::atomic::Ordering;
-        self.metrics.transformations_recorded.fetch_add(1, Ordering::Relaxed);
+        self.metrics
+            .transformations_recorded
+            .fetch_add(1, Ordering::Relaxed);
 
         Ok(())
     }
@@ -415,7 +435,9 @@ impl LineageTracker {
         };
 
         let Ok(mut log) = self.access_log.write() else {
-            return Err(VecStoreError::Internal("Failed to acquire access_log write lock".to_string()));
+            return Err(VecStoreError::Internal(
+                "Failed to acquire access_log write lock".to_string(),
+            ));
         };
         log.push_back(record);
 
@@ -542,7 +564,8 @@ impl LineageTracker {
         let Ok(records) = self.records.read() else {
             return Vec::new();
         };
-        records.iter()
+        records
+            .iter()
             .filter(|(_, record)| {
                 let record_type = match &record.source {
                     VectorSource::DirectInsert { .. } => "direct",
@@ -565,7 +588,8 @@ impl LineageTracker {
         let Ok(records) = self.records.read() else {
             return Vec::new();
         };
-        records.iter()
+        records
+            .iter()
             .filter(|(_, record)| record.tags.contains(tag))
             .map(|(id, _)| id.clone())
             .collect()
@@ -574,14 +598,19 @@ impl LineageTracker {
     /// Add tag to vector
     pub fn add_tag(&self, vector_id: &VectorId, tag: &str) -> Result<()> {
         let Ok(mut records) = self.records.write() else {
-            return Err(VecStoreError::Internal("Failed to acquire records write lock".to_string()));
+            return Err(VecStoreError::Internal(
+                "Failed to acquire records write lock".to_string(),
+            ));
         };
         if let Some(record) = records.get_mut(vector_id) {
             record.tags.insert(tag.to_string());
             record.modified_at = current_timestamp();
             Ok(())
         } else {
-            Err(VecStoreError::NotFound(format!("Vector {:?} not found", vector_id)))
+            Err(VecStoreError::NotFound(format!(
+                "Vector {:?} not found",
+                vector_id
+            )))
         }
     }
 
@@ -595,7 +624,9 @@ impl LineageTracker {
         };
 
         if let Some(record) = records.get(vector_id) {
-            record.transformations.iter()
+            record
+                .transformations
+                .iter()
                 .filter_map(|id| transformations.get(id).cloned())
                 .collect()
         } else {
@@ -689,7 +720,10 @@ impl LineageTracker {
                     total_transformations: 0,
                     records_by_source: HashMap::new(),
                     records_created: self.metrics.records_created.load(Ordering::Relaxed),
-                    transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
+                    transformations_recorded: self
+                        .metrics
+                        .transformations_recorded
+                        .load(Ordering::Relaxed),
                     lineage_queries: self.metrics.lineage_queries.load(Ordering::Relaxed),
                     impact_analyses: self.metrics.impact_analyses.load(Ordering::Relaxed),
                 };
@@ -700,7 +734,10 @@ impl LineageTracker {
                     total_transformations: 0,
                     records_by_source: HashMap::new(),
                     records_created: self.metrics.records_created.load(Ordering::Relaxed),
-                    transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
+                    transformations_recorded: self
+                        .metrics
+                        .transformations_recorded
+                        .load(Ordering::Relaxed),
                     lineage_queries: self.metrics.lineage_queries.load(Ordering::Relaxed),
                     impact_analyses: self.metrics.impact_analyses.load(Ordering::Relaxed),
                 };
@@ -729,7 +766,10 @@ impl LineageTracker {
             total_transformations,
             records_by_source: source_counts,
             records_created: self.metrics.records_created.load(Ordering::Relaxed),
-            transformations_recorded: self.metrics.transformations_recorded.load(Ordering::Relaxed),
+            transformations_recorded: self
+                .metrics
+                .transformations_recorded
+                .load(Ordering::Relaxed),
             lineage_queries: self.metrics.lineage_queries.load(Ordering::Relaxed),
             impact_analyses: self.metrics.impact_analyses.load(Ordering::Relaxed),
         }
@@ -737,7 +777,8 @@ impl LineageTracker {
 
     /// Cleanup old records based on retention policy
     pub fn cleanup(&self) -> usize {
-        let cutoff = current_timestamp() - (self.config.retention_days as u64 * 24 * 60 * 60 * 1000);
+        let cutoff =
+            current_timestamp() - (self.config.retention_days as u64 * 24 * 60 * 60 * 1000);
 
         let Ok(mut records) = self.records.write() else {
             return 0;
@@ -807,7 +848,8 @@ fn compute_quality_metrics(vector: &[f32]) -> QualityMetrics {
     }
 
     let n = vector.len() as f32;
-    let entropy: f32 = value_counts.values()
+    let entropy: f32 = value_counts
+        .values()
         .map(|&count| {
             let p = count as f32 / n;
             if p > 0.0 { -p * p.log2() } else { 0.0 }
@@ -838,13 +880,9 @@ mod tests {
             api_version: "v1".to_string(),
         };
 
-        tracker.record_creation(
-            vector_id.clone(),
-            source,
-            128,
-            None,
-            Some(&vec![0.1; 128]),
-        ).unwrap();
+        tracker
+            .record_creation(vector_id.clone(), source, 128, None, Some(&vec![0.1; 128]))
+            .unwrap();
 
         let lineage = tracker.get_lineage(&vector_id).unwrap();
         assert_eq!(lineage.original_dimensions, 128);
@@ -858,32 +896,48 @@ mod tests {
         let parent1 = VectorId::new("test", "parent1");
         let parent2 = VectorId::new("test", "parent2");
 
-        tracker.record_creation(
-            parent1.clone(),
-            VectorSource::DirectInsert {
-                user: None, client_ip: None, api_version: "v1".to_string(),
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                parent1.clone(),
+                VectorSource::DirectInsert {
+                    user: None,
+                    client_ip: None,
+                    api_version: "v1".to_string(),
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
-        tracker.record_creation(
-            parent2.clone(),
-            VectorSource::DirectInsert {
-                user: None, client_ip: None, api_version: "v1".to_string(),
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                parent2.clone(),
+                VectorSource::DirectInsert {
+                    user: None,
+                    client_ip: None,
+                    api_version: "v1".to_string(),
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         // Create derived vector
         let child = VectorId::new("test", "child");
-        tracker.record_creation(
-            child.clone(),
-            VectorSource::Derived {
-                parent_ids: vec![parent1.clone(), parent2.clone()],
-                operation: DerivationOperation::Average,
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                child.clone(),
+                VectorSource::Derived {
+                    parent_ids: vec![parent1.clone(), parent2.clone()],
+                    operation: DerivationOperation::Average,
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         // Check ancestry
         let ancestors = tracker.get_ancestry(&child);
@@ -902,34 +956,52 @@ mod tests {
         let tracker = LineageTracker::new(LineageConfig::default());
 
         let root = VectorId::new("test", "root");
-        tracker.record_creation(
-            root.clone(),
-            VectorSource::DirectInsert {
-                user: None, client_ip: None, api_version: "v1".to_string(),
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                root.clone(),
+                VectorSource::DirectInsert {
+                    user: None,
+                    client_ip: None,
+                    api_version: "v1".to_string(),
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         // Create chain of derived vectors
         let level1 = VectorId::new("test", "level1");
-        tracker.record_creation(
-            level1.clone(),
-            VectorSource::Derived {
-                parent_ids: vec![root.clone()],
-                operation: DerivationOperation::Normalization { method: "l2".to_string() },
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                level1.clone(),
+                VectorSource::Derived {
+                    parent_ids: vec![root.clone()],
+                    operation: DerivationOperation::Normalization {
+                        method: "l2".to_string(),
+                    },
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         let level2 = VectorId::new("test", "level2");
-        tracker.record_creation(
-            level2.clone(),
-            VectorSource::Derived {
-                parent_ids: vec![level1.clone()],
-                operation: DerivationOperation::Quantization { method: "pq".to_string() },
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                level2.clone(),
+                VectorSource::Derived {
+                    parent_ids: vec![level1.clone()],
+                    operation: DerivationOperation::Quantization {
+                        method: "pq".to_string(),
+                    },
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         let report = tracker.impact_analysis(&root);
         assert_eq!(report.total_affected, 2);
@@ -942,22 +1014,32 @@ mod tests {
         let parent = VectorId::new("test", "parent");
         let child = VectorId::new("test", "child");
 
-        tracker.record_creation(
-            parent.clone(),
-            VectorSource::DirectInsert {
-                user: None, client_ip: None, api_version: "v1".to_string(),
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                parent.clone(),
+                VectorSource::DirectInsert {
+                    user: None,
+                    client_ip: None,
+                    api_version: "v1".to_string(),
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
-        tracker.record_creation(
-            child.clone(),
-            VectorSource::Derived {
-                parent_ids: vec![parent.clone()],
-                operation: DerivationOperation::Average,
-            },
-            128, None, None,
-        ).unwrap();
+        tracker
+            .record_creation(
+                child.clone(),
+                VectorSource::Derived {
+                    parent_ids: vec![parent.clone()],
+                    operation: DerivationOperation::Average,
+                },
+                128,
+                None,
+                None,
+            )
+            .unwrap();
 
         let dot = tracker.export_graph(&parent, 2);
         assert!(dot.contains("digraph"));

@@ -293,9 +293,10 @@ impl QueryRouter {
         let node_id = node.id.clone();
         let node = Arc::new(node);
 
-        let mut nodes_guard = self.nodes.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire nodes write lock".into())
-        })?;
+        let mut nodes_guard = self
+            .nodes
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire nodes write lock".into()))?;
         nodes_guard.insert(node_id.clone(), node);
         drop(nodes_guard);
 
@@ -309,9 +310,10 @@ impl QueryRouter {
 
     /// Deregister a replica node
     pub fn deregister_node(&self, node_id: &str) -> Result<()> {
-        let mut nodes_guard = self.nodes.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire nodes write lock".into())
-        })?;
+        let mut nodes_guard = self
+            .nodes
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire nodes write lock".into()))?;
         nodes_guard.remove(node_id);
         drop(nodes_guard);
 
@@ -326,10 +328,12 @@ impl QueryRouter {
     pub fn route(&self, query: &QueryCharacteristics) -> Result<RoutingDecision> {
         self.metrics.requests_total.fetch_add(1, Ordering::Relaxed);
 
-        let nodes = self.nodes.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire nodes read lock".into())
-        })?;
-        let available: Vec<_> = nodes.values()
+        let nodes = self
+            .nodes
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire nodes read lock".into()))?;
+        let available: Vec<_> = nodes
+            .values()
             .filter(|n| self.is_available(n))
             .cloned()
             .collect();
@@ -361,8 +365,8 @@ impl QueryRouter {
 
         let estimated_latency = if let Ok(state) = selected.state.read() {
             if !state.latencies.is_empty() {
-                let avg: Duration = state.latencies.iter().sum::<Duration>()
-                    / state.latencies.len() as u32;
+                let avg: Duration =
+                    state.latencies.iter().sum::<Duration>() / state.latencies.len() as u32;
                 Some(avg)
             } else {
                 None
@@ -381,15 +385,18 @@ impl QueryRouter {
     }
 
     fn is_available(&self, node: &ReplicaNode) -> bool {
-        let Ok(state) = node.state.read() else { return false; };
+        let Ok(state) = node.state.read() else {
+            return false;
+        };
 
         // Check circuit breaker
         if state.circuit_state == CircuitState::Open
             && let Some(opened_at) = state.circuit_opened_at
-                && opened_at.elapsed() < self.config.circuit_breaker_timeout {
-                    return false;
-                }
-                // Allow half-open state
+            && opened_at.elapsed() < self.config.circuit_breaker_timeout
+        {
+            return false;
+        }
+        // Allow half-open state
 
         state.health != HealthStatus::Unhealthy
     }
@@ -399,7 +406,10 @@ impl QueryRouter {
         (nodes[idx].clone(), RoutingReason::LoadBalance)
     }
 
-    fn weighted_round_robin(&self, nodes: &[Arc<ReplicaNode>]) -> (Arc<ReplicaNode>, RoutingReason) {
+    fn weighted_round_robin(
+        &self,
+        nodes: &[Arc<ReplicaNode>],
+    ) -> (Arc<ReplicaNode>, RoutingReason) {
         let total_weight: u32 = nodes.iter().map(|n| n.weight).sum();
         let counter = self.rr_counter.fetch_add(1, Ordering::Relaxed);
         let target = (counter as u32) % total_weight;
@@ -416,9 +426,13 @@ impl QueryRouter {
     }
 
     fn least_connections(&self, nodes: &[Arc<ReplicaNode>]) -> (Arc<ReplicaNode>, RoutingReason) {
-        let selected = nodes.iter()
+        let selected = nodes
+            .iter()
             .min_by_key(|n| {
-                n.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX)
+                n.state
+                    .read()
+                    .map(|s| s.active_connections)
+                    .unwrap_or(u32::MAX)
             })
             .unwrap();
 
@@ -426,7 +440,8 @@ impl QueryRouter {
     }
 
     fn least_latency(&self, nodes: &[Arc<ReplicaNode>]) -> (Arc<ReplicaNode>, RoutingReason) {
-        let selected = nodes.iter()
+        let selected = nodes
+            .iter()
             .min_by(|a, b| {
                 let a_lat = self.avg_latency(a);
                 let b_lat = self.avg_latency(b);
@@ -438,7 +453,9 @@ impl QueryRouter {
     }
 
     fn avg_latency(&self, node: &ReplicaNode) -> Duration {
-        let Ok(state) = node.state.read() else { return Duration::from_millis(100); };
+        let Ok(state) = node.state.read() else {
+            return Duration::from_millis(100);
+        };
         if state.latencies.is_empty() {
             Duration::from_millis(100) // Default estimate
         } else {
@@ -456,16 +473,20 @@ impl QueryRouter {
         (nodes[idx].clone(), RoutingReason::Random)
     }
 
-    fn consistent_hash(&self, nodes: &[Arc<ReplicaNode>], query: &QueryCharacteristics)
-        -> (Arc<ReplicaNode>, RoutingReason)
-    {
+    fn consistent_hash(
+        &self,
+        nodes: &[Arc<ReplicaNode>],
+        query: &QueryCharacteristics,
+    ) -> (Arc<ReplicaNode>, RoutingReason) {
         // Check for cache affinity via consistent hash (Rust 1.92 if-let chain)
         if let Some(hash) = query.query_hash
             && let Ok(ring) = self.hash_ring.read()
             && let Some(node_id) = ring.get_node(hash)
             && let Some(node) = nodes.iter().find(|n| n.id == node_id)
         {
-            self.metrics.cache_affinity_hits.fetch_add(1, Ordering::Relaxed);
+            self.metrics
+                .cache_affinity_hits
+                .fetch_add(1, Ordering::Relaxed);
             return (node.clone(), RoutingReason::CacheAffinity);
         }
 
@@ -473,11 +494,14 @@ impl QueryRouter {
         self.round_robin(nodes)
     }
 
-    fn adaptive(&self, nodes: &[Arc<ReplicaNode>], query: &QueryCharacteristics)
-        -> (Arc<ReplicaNode>, RoutingReason)
-    {
+    fn adaptive(
+        &self,
+        nodes: &[Arc<ReplicaNode>],
+        query: &QueryCharacteristics,
+    ) -> (Arc<ReplicaNode>, RoutingReason) {
         // Score each node based on multiple factors
-        let mut scores: Vec<(Arc<ReplicaNode>, f64)> = nodes.iter()
+        let mut scores: Vec<(Arc<ReplicaNode>, f64)> = nodes
+            .iter()
             .map(|n| {
                 let score = self.compute_adaptive_score(n, query);
                 (n.clone(), score)
@@ -490,7 +514,9 @@ impl QueryRouter {
     }
 
     fn compute_adaptive_score(&self, node: &ReplicaNode, query: &QueryCharacteristics) -> f64 {
-        let Ok(state) = node.state.read() else { return 0.0; };
+        let Ok(state) = node.state.read() else {
+            return 0.0;
+        };
         let mut score = 100.0;
 
         // Penalize based on connections (0-30 points)
@@ -499,8 +525,8 @@ impl QueryRouter {
 
         // Penalize based on latency (0-30 points)
         if !state.latencies.is_empty() {
-            let avg_ms = state.latencies.iter()
-                .sum::<Duration>().as_millis() as f64 / state.latencies.len() as f64;
+            let avg_ms = state.latencies.iter().sum::<Duration>().as_millis() as f64
+                / state.latencies.len() as f64;
             score -= (avg_ms / 100.0).min(30.0);
         }
 
@@ -522,9 +548,10 @@ impl QueryRouter {
         // Bonus for locality
         if self.config.locality_aware_routing
             && let Some(ref local_zone) = self.config.local_zone
-                && &node.zone == local_zone {
-                    score += 10.0;
-                }
+            && &node.zone == local_zone
+        {
+            score += 10.0;
+        }
 
         score.max(0.0)
     }
@@ -543,20 +570,30 @@ impl QueryRouter {
             }
 
             // Try to find a local node with acceptable load
-            let local_nodes: Vec<_> = all_nodes.iter()
-                .filter(|n| &n.zone == local_zone)
-                .collect();
+            let local_nodes: Vec<_> = all_nodes.iter().filter(|n| &n.zone == local_zone).collect();
 
             if !local_nodes.is_empty() {
                 // Pick the least loaded local node
-                let local = local_nodes.iter()
+                let local = local_nodes
+                    .iter()
                     .min_by_key(|n| {
-                        n.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX)
+                        n.state
+                            .read()
+                            .map(|s| s.active_connections)
+                            .unwrap_or(u32::MAX)
                     })
                     .unwrap();
 
-                let local_load = local.state.read().map(|s| s.active_connections).unwrap_or(u32::MAX);
-                let selected_load = selected.state.read().map(|s| s.active_connections).unwrap_or(0);
+                let local_load = local
+                    .state
+                    .read()
+                    .map(|s| s.active_connections)
+                    .unwrap_or(u32::MAX);
+                let selected_load = selected
+                    .state
+                    .read()
+                    .map(|s| s.active_connections)
+                    .unwrap_or(0);
 
                 // Only prefer local if load difference is within 20%
                 if local_load as f64 <= selected_load as f64 * 1.2 {
@@ -569,8 +606,13 @@ impl QueryRouter {
         (selected, reason)
     }
 
-    fn build_fallbacks(&self, selected: &ReplicaNode, all_nodes: &[Arc<ReplicaNode>]) -> Vec<String> {
-        let mut fallbacks: Vec<_> = all_nodes.iter()
+    fn build_fallbacks(
+        &self,
+        selected: &ReplicaNode,
+        all_nodes: &[Arc<ReplicaNode>],
+    ) -> Vec<String> {
+        let mut fallbacks: Vec<_> = all_nodes
+            .iter()
             .filter(|n| n.id != selected.id)
             .filter_map(|n| {
                 let state = n.state.read().ok()?;
@@ -585,9 +627,13 @@ impl QueryRouter {
 
     /// Record request result (for metrics and circuit breaker)
     pub fn record_result(&self, node_id: &str, success: bool, latency: Duration) {
-        let Ok(nodes) = self.nodes.read() else { return; };
+        let Ok(nodes) = self.nodes.read() else {
+            return;
+        };
         if let Some(node) = nodes.get(node_id) {
-            let Ok(mut state) = node.state.write() else { return; };
+            let Ok(mut state) = node.state.write() else {
+                return;
+            };
 
             // Update latency window
             state.latencies.push_back(latency);
@@ -596,7 +642,9 @@ impl QueryRouter {
             }
 
             if success {
-                self.metrics.requests_succeeded.fetch_add(1, Ordering::Relaxed);
+                self.metrics
+                    .requests_succeeded
+                    .fetch_add(1, Ordering::Relaxed);
                 state.recent_errors = 0;
 
                 // Reset circuit breaker on success in half-open state
@@ -610,11 +658,12 @@ impl QueryRouter {
 
                 // Check circuit breaker threshold
                 if state.recent_errors >= self.config.circuit_breaker_threshold
-                    && state.circuit_state == CircuitState::Closed {
-                        state.circuit_state = CircuitState::Open;
-                        state.circuit_opened_at = Some(Instant::now());
-                        self.metrics.circuit_breaks.fetch_add(1, Ordering::Relaxed);
-                    }
+                    && state.circuit_state == CircuitState::Closed
+                {
+                    state.circuit_state = CircuitState::Open;
+                    state.circuit_opened_at = Some(Instant::now());
+                    self.metrics.circuit_breaks.fetch_add(1, Ordering::Relaxed);
+                }
             }
 
             state.active_connections = state.active_connections.saturating_sub(1);
@@ -623,18 +672,26 @@ impl QueryRouter {
 
     /// Increment active connections for a node
     pub fn increment_connections(&self, node_id: &str) {
-        let Ok(nodes) = self.nodes.read() else { return; };
+        let Ok(nodes) = self.nodes.read() else {
+            return;
+        };
         if let Some(node) = nodes.get(node_id) {
-            let Ok(mut state) = node.state.write() else { return; };
+            let Ok(mut state) = node.state.write() else {
+                return;
+            };
             state.active_connections += 1;
         }
     }
 
     /// Update node health status
     pub fn update_health(&self, node_id: &str, health: HealthStatus) {
-        let Ok(nodes) = self.nodes.read() else { return; };
+        let Ok(nodes) = self.nodes.read() else {
+            return;
+        };
         if let Some(node) = nodes.get(node_id) {
-            let Ok(mut state) = node.state.write() else { return; };
+            let Ok(mut state) = node.state.write() else {
+                return;
+            };
             state.health = health;
             state.last_health_check = Instant::now();
         }
@@ -643,7 +700,8 @@ impl QueryRouter {
     /// Get router statistics
     pub fn get_stats(&self) -> RouterStats {
         let node_stats: Vec<NodeStats> = if let Ok(nodes) = self.nodes.read() {
-            nodes.values()
+            nodes
+                .values()
                 .filter_map(|n| {
                     let state = n.state.read().ok()?;
                     Some(NodeStats {
@@ -675,12 +733,20 @@ impl QueryRouter {
             locality_hit_rate: {
                 let total = self.metrics.requests_total.load(Ordering::Relaxed);
                 let hits = self.metrics.locality_hits.load(Ordering::Relaxed);
-                if total > 0 { hits as f64 / total as f64 } else { 0.0 }
+                if total > 0 {
+                    hits as f64 / total as f64
+                } else {
+                    0.0
+                }
             },
             cache_affinity_hit_rate: {
                 let total = self.metrics.requests_total.load(Ordering::Relaxed);
                 let hits = self.metrics.cache_affinity_hits.load(Ordering::Relaxed);
-                if total > 0 { hits as f64 / total as f64 } else { 0.0 }
+                if total > 0 {
+                    hits as f64 / total as f64
+                } else {
+                    0.0
+                }
             },
             node_stats,
         }
@@ -689,7 +755,13 @@ impl QueryRouter {
 
 impl ReplicaNode {
     /// Create a new replica node
-    pub fn new(id: String, address: String, zone: String, weight: u32, capabilities: NodeCapabilities) -> Self {
+    pub fn new(
+        id: String,
+        address: String,
+        zone: String,
+        weight: u32,
+        capabilities: NodeCapabilities,
+    ) -> Self {
         Self {
             id,
             address,
@@ -780,7 +852,9 @@ impl RetryHandler {
 
     /// Check if an error is retryable
     pub fn is_retryable(&self, error: &str) -> bool {
-        self.config.retryable_errors.iter()
+        self.config
+            .retryable_errors
+            .iter()
             .any(|e| error.to_lowercase().contains(&e.to_lowercase()))
     }
 
@@ -848,7 +922,8 @@ fn rand_u16() -> u16 {
     (SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
-        .as_nanos() & 0xFFFF) as u16
+        .as_nanos()
+        & 0xFFFF) as u16
 }
 
 #[cfg(test)]
@@ -878,9 +953,15 @@ mod tests {
             ..Default::default()
         });
 
-        router.register_node(create_test_node("node1", "us-east-1", 1)).unwrap();
-        router.register_node(create_test_node("node2", "us-east-1", 1)).unwrap();
-        router.register_node(create_test_node("node3", "us-east-1", 1)).unwrap();
+        router
+            .register_node(create_test_node("node1", "us-east-1", 1))
+            .unwrap();
+        router
+            .register_node(create_test_node("node2", "us-east-1", 1))
+            .unwrap();
+        router
+            .register_node(create_test_node("node3", "us-east-1", 1))
+            .unwrap();
 
         let query = QueryCharacteristics {
             dimensions: 768,
@@ -912,9 +993,15 @@ mod tests {
             ..Default::default()
         });
 
-        router.register_node(create_test_node("node1", "us-west-1", 1)).unwrap();
-        router.register_node(create_test_node("node2", "us-east-1", 1)).unwrap();
-        router.register_node(create_test_node("node3", "eu-west-1", 1)).unwrap();
+        router
+            .register_node(create_test_node("node1", "us-west-1", 1))
+            .unwrap();
+        router
+            .register_node(create_test_node("node2", "us-east-1", 1))
+            .unwrap();
+        router
+            .register_node(create_test_node("node3", "eu-west-1", 1))
+            .unwrap();
 
         let query = QueryCharacteristics {
             dimensions: 768,
@@ -938,8 +1025,12 @@ mod tests {
             ..Default::default()
         });
 
-        router.register_node(create_test_node("node1", "us-east-1", 1)).unwrap();
-        router.register_node(create_test_node("node2", "us-east-1", 1)).unwrap();
+        router
+            .register_node(create_test_node("node1", "us-east-1", 1))
+            .unwrap();
+        router
+            .register_node(create_test_node("node2", "us-east-1", 1))
+            .unwrap();
 
         // Simulate failures
         for _ in 0..5 {

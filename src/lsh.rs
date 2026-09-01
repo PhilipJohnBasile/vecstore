@@ -49,7 +49,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
@@ -90,7 +90,9 @@ struct HashFunction {
 impl HashFunction {
     /// Create a new random hash function
     fn new(dimension: usize, rng: &mut StdRng) -> Self {
-        let projection: Vec<f32> = (0..dimension).map(|_| rng.random_range(-1.0..1.0)).collect();
+        let projection: Vec<f32> = (0..dimension)
+            .map(|_| rng.random_range(-1.0..1.0))
+            .collect();
 
         Self { projection }
     }
@@ -105,11 +107,7 @@ impl HashFunction {
             .map(|(a, b)| a * b)
             .sum();
 
-        if dot_product >= 0.0 {
-            1
-        } else {
-            0
-        }
+        if dot_product >= 0.0 { 1 } else { 0 }
     }
 }
 
@@ -163,9 +161,7 @@ impl HashTable {
     fn get_candidates(&self, query: &[f32]) -> Vec<(String, Vec<f32>)> {
         let hash_code = self.compute_hash(query);
 
-        self.buckets
-            .get(&hash_code).cloned()
-            .unwrap_or_default()
+        self.buckets.get(&hash_code).cloned().unwrap_or_default()
     }
 
     /// Remove a vector by ID

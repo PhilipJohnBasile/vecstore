@@ -2,8 +2,8 @@
 // Outlier detection, drift monitoring, and data quality analysis
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -240,27 +240,29 @@ impl AnomalyDetector {
         let model = match self.config.method {
             DetectionMethod::IsolationForest => {
                 DetectorModel::IsolationForest(self.build_isolation_forest(vectors)?)
-            }
-            DetectionMethod::LOF => {
-                DetectorModel::LOF(self.build_lof(vectors)?)
-            }
+            },
+            DetectionMethod::LOF => DetectorModel::LOF(self.build_lof(vectors)?),
             DetectionMethod::Statistical => {
                 DetectorModel::Statistical(self.build_statistical(vectors)?)
-            }
+            },
             DetectionMethod::Ensemble => {
                 let detectors: Vec<Box<dyn Detector + Send + Sync>> = Vec::new();
                 // Would add multiple detectors here
                 DetectorModel::Ensemble(detectors)
-            }
-            _ => {
-                DetectorModel::Statistical(self.build_statistical(vectors)?)
-            }
+            },
+            _ => DetectorModel::Statistical(self.build_statistical(vectors)?),
         };
 
-        *self.model.write()
+        *self
+            .model
+            .write()
             .map_err(|_| VecStoreError::LockError("model lock poisoned".into()))? = Some(model);
-        *self.stats.last_training.write()
-            .map_err(|_| VecStoreError::LockError("last_training lock poisoned".into()))? = Some(Instant::now());
+        *self
+            .stats
+            .last_training
+            .write()
+            .map_err(|_| VecStoreError::LockError("last_training lock poisoned".into()))? =
+            Some(Instant::now());
 
         Ok(())
     }
@@ -279,16 +281,15 @@ impl AnomalyDetector {
                 .map(|_| random_usize(0, vectors.len()))
                 .collect();
 
-            let samples: Vec<&Vec<f32>> = sample_indices.iter()
-                .map(|&i| &vectors[i])
-                .collect();
+            let samples: Vec<&Vec<f32>> = sample_indices.iter().map(|&i| &vectors[i]).collect();
 
             let tree = self.build_tree(&samples, 0, max_depth);
             trees.push(tree);
         }
 
         // Compute threshold based on contamination
-        let scores: Vec<f64> = vectors.iter()
+        let scores: Vec<f64> = vectors
+            .iter()
             .map(|v| self.compute_path_length(&trees, v))
             .collect();
 
@@ -303,7 +304,9 @@ impl AnomalyDetector {
 
     fn build_tree(&self, samples: &[&Vec<f32>], depth: usize, max_depth: usize) -> IsolationTree {
         if samples.len() <= 1 || depth >= max_depth {
-            return IsolationTree::Leaf { size: samples.len() };
+            return IsolationTree::Leaf {
+                size: samples.len(),
+            };
         }
 
         let dim = samples[0].len();
@@ -315,13 +318,15 @@ impl AnomalyDetector {
         let max_val = values.iter().fold(f32::NEG_INFINITY, |a, &b| a.max(b));
 
         if (max_val - min_val).abs() < 1e-10 {
-            return IsolationTree::Leaf { size: samples.len() };
+            return IsolationTree::Leaf {
+                size: samples.len(),
+            };
         }
 
         let split_value = random_f32(min_val, max_val);
 
-        let (left, right): (Vec<_>, Vec<_>) = samples.iter()
-            .partition(|s| s[feature] < split_value);
+        let (left, right): (Vec<_>, Vec<_>) =
+            samples.iter().partition(|s| s[feature] < split_value);
 
         IsolationTree::Internal {
             feature,
@@ -332,7 +337,8 @@ impl AnomalyDetector {
     }
 
     fn compute_path_length(&self, trees: &[IsolationTree], sample: &[f32]) -> f64 {
-        let total: f64 = trees.iter()
+        let total: f64 = trees
+            .iter()
             .map(|tree| self.path_length(tree, sample, 0))
             .sum();
         total / trees.len() as f64
@@ -340,16 +346,19 @@ impl AnomalyDetector {
 
     fn path_length(&self, tree: &IsolationTree, sample: &[f32], depth: usize) -> f64 {
         match tree {
-            IsolationTree::Leaf { size } => {
-                depth as f64 + c_factor(*size)
-            }
-            IsolationTree::Internal { feature, split_value, left, right } => {
+            IsolationTree::Leaf { size } => depth as f64 + c_factor(*size),
+            IsolationTree::Internal {
+                feature,
+                split_value,
+                left,
+                right,
+            } => {
                 if (sample[*feature] as f64) < *split_value {
                     self.path_length(left, sample, depth + 1)
                 } else {
                     self.path_length(right, sample, depth + 1)
                 }
-            }
+            },
         }
     }
 
@@ -411,26 +420,37 @@ impl AnomalyDetector {
             })
             .collect();
 
-        let q1: Vec<f64> = sorted_values.iter()
+        let q1: Vec<f64> = sorted_values
+            .iter()
             .map(|vals| vals[vals.len() / 4])
             .collect();
 
-        let q3: Vec<f64> = sorted_values.iter()
+        let q3: Vec<f64> = sorted_values
+            .iter()
             .map(|vals| vals[vals.len() * 3 / 4])
             .collect();
 
-        Ok(StatisticalModel { mean, std, min, max, q1, q3 })
+        Ok(StatisticalModel {
+            mean,
+            std,
+            min,
+            max,
+            q1,
+            q3,
+        })
     }
 
     /// Detect anomalies in a single vector
     pub fn detect(&self, vector_id: &str, vector: &[f32]) -> Result<DetectionResult> {
         self.stats.total_samples.fetch_add(1, Ordering::Relaxed);
 
-        let model = self.model.read()
+        let model = self
+            .model
+            .read()
             .map_err(|_| VecStoreError::LockError("model lock poisoned".into()))?;
-        let model = model.as_ref().ok_or({
-            VecStoreError::IndexNotInitialized
-        })?;
+        let model = model
+            .as_ref()
+            .ok_or({ VecStoreError::IndexNotInitialized })?;
 
         let (score, method_scores) = match model {
             DetectorModel::IsolationForest(m) => {
@@ -439,19 +459,19 @@ impl AnomalyDetector {
                 let mut scores = HashMap::new();
                 scores.insert("isolation_forest".to_string(), score);
                 (score, scores)
-            }
+            },
             DetectorModel::LOF(m) => {
                 let score = self.compute_lof_score(m, vector);
                 let mut scores = HashMap::new();
                 scores.insert("lof".to_string(), score);
                 (score, scores)
-            }
+            },
             DetectorModel::Statistical(m) => {
                 let score = self.compute_statistical_score(m, vector);
                 let mut scores = HashMap::new();
                 scores.insert("statistical".to_string(), score);
                 (score, scores)
-            }
+            },
             DetectorModel::Ensemble(detectors) => {
                 let mut scores = HashMap::new();
                 let mut total = 0.0;
@@ -460,16 +480,22 @@ impl AnomalyDetector {
                     scores.insert(detector.name().to_string(), s);
                     total += s;
                 }
-                let avg = if detectors.is_empty() { 0.0 } else { total / detectors.len() as f64 };
+                let avg = if detectors.is_empty() {
+                    0.0
+                } else {
+                    total / detectors.len() as f64
+                };
                 (avg, scores)
-            }
+            },
         };
 
         let is_anomaly = score >= self.config.alert_threshold;
         let confidence = self.compute_confidence(score);
 
         if is_anomaly {
-            self.stats.anomalies_detected.fetch_add(1, Ordering::Relaxed);
+            self.stats
+                .anomalies_detected
+                .fetch_add(1, Ordering::Relaxed);
 
             // Record anomaly
             let record = AnomalyRecord {
@@ -482,7 +508,8 @@ impl AnomalyDetector {
                 explanation: self.generate_explanation(model, vector, score),
             };
 
-            self.anomalies.write()
+            self.anomalies
+                .write()
                 .map_err(|_| VecStoreError::LockError("anomalies lock poisoned".into()))?
                 .push(record);
         }
@@ -541,17 +568,16 @@ impl AnomalyDetector {
         }
 
         // Find k nearest neighbors
-        let mut distances: Vec<(usize, f64)> = model.samples.iter()
+        let mut distances: Vec<(usize, f64)> = model
+            .samples
+            .iter()
             .enumerate()
             .map(|(i, s)| (i, euclidean_distance(sample, s)))
             .collect();
 
         distances.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
-        let k_neighbors: Vec<usize> = distances.iter()
-            .take(model.k)
-            .map(|(i, _)| *i)
-            .collect();
+        let k_neighbors: Vec<usize> = distances.iter().take(model.k).map(|(i, _)| *i).collect();
 
         // Compute local reachability density
         let k_dist = distances[model.k.min(distances.len() - 1)].1;
@@ -561,12 +587,7 @@ impl AnomalyDetector {
         let mut lof = 0.0;
         for &neighbor_idx in &k_neighbors {
             let neighbor = &model.samples[neighbor_idx];
-            let neighbor_lrd = self.compute_lrd(
-                model,
-                neighbor,
-                &k_neighbors,
-                k_dist
-            );
+            let neighbor_lrd = self.compute_lrd(model, neighbor, &k_neighbors, k_dist);
             if lrd > 0.0 {
                 lof += neighbor_lrd / lrd;
             }
@@ -575,7 +596,13 @@ impl AnomalyDetector {
         lof / k_neighbors.len() as f64
     }
 
-    fn compute_lrd(&self, _model: &LOFModel, _sample: &[f32], _neighbors: &[usize], k_dist: f64) -> f64 {
+    fn compute_lrd(
+        &self,
+        _model: &LOFModel,
+        _sample: &[f32],
+        _neighbors: &[usize],
+        k_dist: f64,
+    ) -> f64 {
         // Simplified LRD computation
         if k_dist > 0.0 { 1.0 / k_dist } else { 1.0 }
     }
@@ -622,7 +649,8 @@ impl AnomalyDetector {
     fn find_contributing_features(&self, model: &DetectorModel, sample: &[f32]) -> Vec<usize> {
         match model {
             DetectorModel::Statistical(m) => {
-                let mut contributions: Vec<(usize, f64)> = sample.iter()
+                let mut contributions: Vec<(usize, f64)> = sample
+                    .iter()
                     .enumerate()
                     .filter_map(|(i, &val)| {
                         if m.std[i] > 0.0 {
@@ -636,7 +664,7 @@ impl AnomalyDetector {
 
                 contributions.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
                 contributions.iter().take(5).map(|(i, _)| *i).collect()
-            }
+            },
             _ => vec![],
         }
     }
@@ -645,22 +673,31 @@ impl AnomalyDetector {
     fn generate_explanation(&self, model: &DetectorModel, sample: &[f32], score: f64) -> String {
         match model {
             DetectorModel::IsolationForest(_) => {
-                format!("Isolation score {:.3}: Vector is isolated from normal distribution", score)
-            }
+                format!(
+                    "Isolation score {:.3}: Vector is isolated from normal distribution",
+                    score
+                )
+            },
             DetectorModel::LOF(_) => {
-                format!("LOF score {:.3}: Vector has low local density compared to neighbors", score)
-            }
+                format!(
+                    "LOF score {:.3}: Vector has low local density compared to neighbors",
+                    score
+                )
+            },
             DetectorModel::Statistical(_m) => {
                 let features = self.find_contributing_features(model, sample);
                 if features.is_empty() {
-                    format!("Statistical score {:.3}: Overall deviation from normal", score)
+                    format!(
+                        "Statistical score {:.3}: Overall deviation from normal",
+                        score
+                    )
                 } else {
                     format!(
                         "Statistical score {:.3}: High deviation in dimensions {:?}",
                         score, features
                     )
                 }
-            }
+            },
             _ => format!("Anomaly score {:.3}", score),
         }
     }
@@ -675,17 +712,23 @@ impl AnomalyDetector {
             detection_rate: {
                 let total = self.stats.total_samples.load(Ordering::Relaxed);
                 let anomalies = self.stats.anomalies_detected.load(Ordering::Relaxed);
-                if total > 0 { anomalies as f64 / total as f64 } else { 0.0 }
+                if total > 0 {
+                    anomalies as f64 / total as f64
+                } else {
+                    0.0
+                }
             },
             last_training: {
-                let Ok(guard) = self.stats.last_training.read() else { return DetectionStats {
-                    total_samples: self.stats.total_samples.load(Ordering::Relaxed),
-                    anomalies_detected: self.stats.anomalies_detected.load(Ordering::Relaxed),
-                    false_positives: self.stats.false_positives.load(Ordering::Relaxed),
-                    true_positives: self.stats.true_positives.load(Ordering::Relaxed),
-                    detection_rate: 0.0,
-                    last_training: None,
-                }; };
+                let Ok(guard) = self.stats.last_training.read() else {
+                    return DetectionStats {
+                        total_samples: self.stats.total_samples.load(Ordering::Relaxed),
+                        anomalies_detected: self.stats.anomalies_detected.load(Ordering::Relaxed),
+                        false_positives: self.stats.false_positives.load(Ordering::Relaxed),
+                        true_positives: self.stats.true_positives.load(Ordering::Relaxed),
+                        detection_rate: 0.0,
+                        last_training: None,
+                    };
+                };
                 guard.map(|t| t.elapsed())
             },
         }
@@ -693,12 +736,10 @@ impl AnomalyDetector {
 
     /// Get recent anomalies
     pub fn get_recent_anomalies(&self, limit: usize) -> Vec<AnomalyRecord> {
-        let Ok(anomalies) = self.anomalies.read() else { return vec![]; };
-        anomalies.iter()
-            .rev()
-            .take(limit)
-            .cloned()
-            .collect()
+        let Ok(anomalies) = self.anomalies.read() else {
+            return vec![];
+        };
+        anomalies.iter().rev().take(limit).cloned().collect()
     }
 
     /// Provide feedback on detection
@@ -712,7 +753,9 @@ impl AnomalyDetector {
 
     /// Online update with new sample
     pub fn update(&self, vector: &[f32]) -> Result<()> {
-        let mut history = self.history.write()
+        let mut history = self
+            .history
+            .write()
             .map_err(|_| VecStoreError::LockError("history lock poisoned".into()))?;
 
         if history.len() >= self.config.window_size {
@@ -832,14 +875,17 @@ impl DriftDetector {
     /// Set reference distribution from data
     pub fn set_reference(&self, vectors: &[Vec<f32>]) -> Result<()> {
         let stats = self.compute_distribution_stats(vectors)?;
-        *self.reference_distribution.write()
-            .map_err(|_| VecStoreError::LockError("reference_distribution lock poisoned".into()))? = Some(stats);
+        *self.reference_distribution.write().map_err(|_| {
+            VecStoreError::LockError("reference_distribution lock poisoned".into())
+        })? = Some(stats);
         Ok(())
     }
 
     /// Add sample to detection window
     pub fn add_sample(&self, vector: Vec<f32>) -> Option<DriftEvent> {
-        let Ok(mut window) = self.current_window.write() else { return None; };
+        let Ok(mut window) = self.current_window.write() else {
+            return None;
+        };
         window.push_back(vector);
 
         if window.len() > self.config.detection_size {
@@ -859,7 +905,9 @@ impl DriftDetector {
 
     /// Check for drift
     fn check_drift(&self, current_samples: &[Vec<f32>]) -> Result<Option<DriftEvent>> {
-        let reference = self.reference_distribution.read()
+        let reference = self
+            .reference_distribution
+            .read()
             .map_err(|_| VecStoreError::LockError("reference_distribution lock poisoned".into()))?;
         let reference = match reference.as_ref() {
             Some(r) => r,
@@ -891,7 +939,8 @@ impl DriftDetector {
                 ),
             };
 
-            self.drift_events.write()
+            self.drift_events
+                .write()
                 .map_err(|_| VecStoreError::LockError("drift_events lock poisoned".into()))?
                 .push(event.clone());
             return Ok(Some(event));
@@ -999,7 +1048,8 @@ impl DriftDetector {
         let mut total_dist = 0.0;
 
         for (ref_q, curr_q) in ref_stats.quantiles.iter().zip(curr_stats.quantiles.iter()) {
-            let dist: f64 = ref_q.iter()
+            let dist: f64 = ref_q
+                .iter()
                 .zip(curr_q.iter())
                 .map(|(r, c)| (r - c).abs())
                 .sum();
@@ -1056,7 +1106,9 @@ impl DriftDetector {
 
     /// Get recent drift events
     pub fn get_drift_events(&self, limit: usize) -> Vec<DriftEvent> {
-        let Ok(events) = self.drift_events.read() else { return vec![]; };
+        let Ok(events) = self.drift_events.read() else {
+            return vec![];
+        };
         events.iter().rev().take(limit).cloned().collect()
     }
 }
@@ -1118,9 +1170,11 @@ fn current_timestamp() -> u64 {
 }
 
 fn random_usize(min: usize, max: usize) -> usize {
-    if max <= min { return min; }
-    use std::hash::{Hash, Hasher};
+    if max <= min {
+        return min;
+    }
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     Instant::now().hash(&mut hasher);
     let hash = hasher.finish();
@@ -1128,8 +1182,8 @@ fn random_usize(min: usize, max: usize) -> usize {
 }
 
 fn random_f32(min: f32, max: f32) -> f32 {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     let mut hasher = DefaultHasher::new();
     Instant::now().hash(&mut hasher);
     let hash = hasher.finish();
@@ -1145,7 +1199,9 @@ fn euclidean_distance(a: &[f32], b: &[f32]) -> f64 {
 }
 
 fn percentile(values: &[f64], p: f64) -> f64 {
-    if values.is_empty() { return 0.0; }
+    if values.is_empty() {
+        return 0.0;
+    }
     let mut sorted = values.to_vec();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
     let idx = ((sorted.len() as f64 - 1.0) * p) as usize;
@@ -1153,14 +1209,18 @@ fn percentile(values: &[f64], p: f64) -> f64 {
 }
 
 fn c_factor(size: usize) -> f64 {
-    if size <= 1 { return 0.0; }
+    if size <= 1 {
+        return 0.0;
+    }
     let n = size as f64;
     2.0 * ((n - 1.0).ln() + 0.5772156649) - (2.0 * (n - 1.0) / n)
 }
 
 fn anomaly_score(path_length: f64, sample_size: usize) -> f64 {
     let c = c_factor(sample_size);
-    if c == 0.0 { return 0.5; }
+    if c == 0.0 {
+        return 0.5;
+    }
     (2.0_f64).powf(-path_length / c)
 }
 
@@ -1205,9 +1265,7 @@ mod tests {
             .build();
 
         // Generate normal data
-        let normal_data: Vec<Vec<f32>> = (0..100)
-            .map(|_| vec![0.5, 0.5, 0.5])
-            .collect();
+        let normal_data: Vec<Vec<f32>> = (0..100).map(|_| vec![0.5, 0.5, 0.5]).collect();
 
         detector.fit(&normal_data).unwrap();
 
@@ -1224,9 +1282,7 @@ mod tests {
     fn test_drift_detector() {
         let detector = DriftDetector::new(DriftConfig::default());
 
-        let reference: Vec<Vec<f32>> = (0..100)
-            .map(|_| vec![0.5, 0.5, 0.5])
-            .collect();
+        let reference: Vec<Vec<f32>> = (0..100).map(|_| vec![0.5, 0.5, 0.5]).collect();
 
         detector.set_reference(&reference).unwrap();
     }

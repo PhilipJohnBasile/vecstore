@@ -38,15 +38,14 @@
 //! let stats = store.column_stats(0)?;
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 use crate::error::VecStoreError;
 
 /// Compression type for columnar data
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum CompressionType {
     /// No compression
     #[default]
@@ -62,7 +61,6 @@ pub enum CompressionType {
     /// Dictionary encoding (for repeated values)
     Dictionary,
 }
-
 
 /// Configuration for columnar storage
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -170,27 +168,31 @@ impl ColumnarChunk {
     pub fn get_vector(&self, local_idx: usize) -> Result<Vec<f32>, VecStoreError> {
         if local_idx >= self.count {
             return Err(VecStoreError::NotFound(format!(
-                "Vector index {} out of range", local_idx
+                "Vector index {} out of range",
+                local_idx
             )));
         }
 
-        let vector: Vec<f32> = self.columns
-            .iter()
-            .map(|col| col[local_idx])
-            .collect();
+        let vector: Vec<f32> = self.columns.iter().map(|col| col[local_idx]).collect();
 
         Ok(vector)
     }
 
     /// Get specific dimensions for a vector
-    pub fn get_dimensions(&self, local_idx: usize, dims: &[usize]) -> Result<Vec<f32>, VecStoreError> {
+    pub fn get_dimensions(
+        &self,
+        local_idx: usize,
+        dims: &[usize],
+    ) -> Result<Vec<f32>, VecStoreError> {
         if local_idx >= self.count {
             return Err(VecStoreError::NotFound(format!(
-                "Vector index {} out of range", local_idx
+                "Vector index {} out of range",
+                local_idx
             )));
         }
 
-        let values: Vec<f32> = dims.iter()
+        let values: Vec<f32> = dims
+            .iter()
             .filter_map(|&d| {
                 if d < self.columns.len() {
                     Some(self.columns[d][local_idx])
@@ -205,7 +207,8 @@ impl ColumnarChunk {
 
     /// Compute statistics for all columns
     pub fn compute_stats(&mut self) {
-        let stats: Vec<ColumnStats> = self.columns
+        let stats: Vec<ColumnStats> = self
+            .columns
             .iter()
             .enumerate()
             .map(|(dim, col)| Self::compute_column_stats(dim, col))
@@ -233,12 +236,14 @@ impl ColumnarChunk {
         let sum: f64 = column.iter().map(|&x| x as f64).sum();
         let mean = sum / column.len() as f64;
 
-        let variance: f64 = column.iter()
+        let variance: f64 = column
+            .iter()
             .map(|&x| {
                 let diff = x as f64 - mean;
                 diff * diff
             })
-            .sum::<f64>() / column.len() as f64;
+            .sum::<f64>()
+            / column.len() as f64;
 
         let non_zero_count = column.iter().filter(|&&x| x != 0.0).count();
 
@@ -260,38 +265,39 @@ impl ColumnarChunk {
             CompressionType::None => {
                 self.compressed_columns = None;
                 Ok(())
-            }
+            },
             CompressionType::Delta => {
-                let compressed: Vec<Vec<u8>> = self.columns
+                let compressed: Vec<Vec<u8>> = self
+                    .columns
                     .iter()
                     .map(|col| Self::delta_encode(col))
                     .collect();
                 self.compressed_columns = Some(compressed);
                 Ok(())
-            }
+            },
             CompressionType::Rle => {
-                let compressed: Vec<Vec<u8>> = self.columns
+                let compressed: Vec<Vec<u8>> = self
+                    .columns
                     .iter()
                     .map(|col| Self::rle_encode(col))
                     .collect();
                 self.compressed_columns = Some(compressed);
                 Ok(())
-            }
+            },
             _ => {
                 // LZ4, Zstd would require external crates
                 // For now, store raw bytes
-                let compressed: Vec<Vec<u8>> = self.columns
+                let compressed: Vec<Vec<u8>> = self
+                    .columns
                     .iter()
                     .map(|col| {
-                        let bytes: Vec<u8> = col.iter()
-                            .flat_map(|&f| f.to_le_bytes())
-                            .collect();
+                        let bytes: Vec<u8> = col.iter().flat_map(|&f| f.to_le_bytes()).collect();
                         bytes
                     })
                     .collect();
                 self.compressed_columns = Some(compressed);
                 Ok(())
-            }
+            },
         }
     }
 
@@ -382,7 +388,11 @@ impl ColumnarStore {
     }
 
     /// Open or create a columnar store at path
-    pub fn open(path: impl AsRef<Path>, dimensions: usize, config: ColumnarConfig) -> Result<Self, VecStoreError> {
+    pub fn open(
+        path: impl AsRef<Path>,
+        dimensions: usize,
+        config: ColumnarConfig,
+    ) -> Result<Self, VecStoreError> {
         let path = path.as_ref().to_path_buf();
 
         if path.exists() {
@@ -398,8 +408,7 @@ impl ColumnarStore {
     fn load(path: &Path, config: ColumnarConfig) -> Result<Self, VecStoreError> {
         let meta_path = path.join("columnar_meta.json");
 
-        let file = std::fs::File::open(&meta_path)
-            .map_err(VecStoreError::Io)?;
+        let file = std::fs::File::open(&meta_path).map_err(VecStoreError::Io)?;
 
         let meta: ColumnarMeta = serde_json::from_reader(file)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
@@ -426,8 +435,7 @@ impl ColumnarStore {
     }
 
     fn load_chunk(&self, path: &Path) -> Result<ColumnarChunk, VecStoreError> {
-        let file = std::fs::File::open(path)
-            .map_err(VecStoreError::Io)?;
+        let file = std::fs::File::open(path).map_err(VecStoreError::Io)?;
 
         let chunk: ColumnarChunk = bincode::deserialize_from(file)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
@@ -487,7 +495,9 @@ impl ColumnarStore {
 
     /// Get a vector by ID
     pub fn get(&self, id: &str) -> Result<Vec<f32>, VecStoreError> {
-        let (chunk_idx, local_idx) = self.id_map.get(id)
+        let (chunk_idx, local_idx) = self
+            .id_map
+            .get(id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Vector {} not found", id)))?;
 
         self.chunks[*chunk_idx].get_vector(*local_idx)
@@ -495,7 +505,9 @@ impl ColumnarStore {
 
     /// Read specific dimensions for a vector
     pub fn read_dimensions(&self, id: &str, dims: &[usize]) -> Result<Vec<f32>, VecStoreError> {
-        let (chunk_idx, local_idx) = self.id_map.get(id)
+        let (chunk_idx, local_idx) = self
+            .id_map
+            .get(id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Vector {} not found", id)))?;
 
         self.chunks[*chunk_idx].get_dimensions(*local_idx, dims)
@@ -505,7 +517,8 @@ impl ColumnarStore {
     pub fn read_column(&self, dimension: usize) -> Result<Vec<f32>, VecStoreError> {
         if dimension >= self.dimensions {
             return Err(VecStoreError::InvalidInput(format!(
-                "Dimension {} out of range (max {})", dimension, self.dimensions
+                "Dimension {} out of range (max {})",
+                dimension, self.dimensions
             )));
         }
 
@@ -522,7 +535,8 @@ impl ColumnarStore {
     pub fn column_stats(&self, dimension: usize) -> Result<ColumnStats, VecStoreError> {
         if dimension >= self.dimensions {
             return Err(VecStoreError::InvalidInput(format!(
-                "Dimension {} out of range", dimension
+                "Dimension {} out of range",
+                dimension
             )));
         }
 
@@ -534,9 +548,8 @@ impl ColumnarStore {
     /// Get global statistics (across all dimensions)
     pub fn global_stats(&mut self) -> Result<&[ColumnStats], VecStoreError> {
         if self.global_stats.is_none() {
-            let stats: Result<Vec<ColumnStats>, _> = (0..self.dimensions)
-                .map(|d| self.column_stats(d))
-                .collect();
+            let stats: Result<Vec<ColumnStats>, _> =
+                (0..self.dimensions).map(|d| self.column_stats(d)).collect();
             self.global_stats = Some(stats?);
         }
 
@@ -545,7 +558,9 @@ impl ColumnarStore {
 
     /// Save to disk
     pub fn save(&self) -> Result<(), VecStoreError> {
-        let path = self.path.as_ref()
+        let path = self
+            .path
+            .as_ref()
             .ok_or_else(|| VecStoreError::InvalidInput("No path set for columnar store".into()))?;
 
         std::fs::create_dir_all(path).map_err(VecStoreError::Io)?;
@@ -559,16 +574,14 @@ impl ColumnarStore {
         };
 
         let meta_path = path.join("columnar_meta.json");
-        let file = std::fs::File::create(&meta_path)
-            .map_err(VecStoreError::Io)?;
+        let file = std::fs::File::create(&meta_path).map_err(VecStoreError::Io)?;
         serde_json::to_writer(file, &meta)
             .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
         // Save chunks
         for (i, chunk) in self.chunks.iter().enumerate() {
             let chunk_path = path.join(format!("chunk_{}.bin", i));
-            let file = std::fs::File::create(&chunk_path)
-                .map_err(VecStoreError::Io)?;
+            let file = std::fs::File::create(&chunk_path).map_err(VecStoreError::Io)?;
             bincode::serialize_into(file, chunk)
                 .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
         }
@@ -623,7 +636,8 @@ impl ColumnarStore {
                 }
                 new_chunks.push(current_chunk);
                 let new_idx = new_chunks.len();
-                current_chunk = ColumnarChunk::new(new_idx, new_count, self.dimensions, self.config.chunk_size);
+                current_chunk =
+                    ColumnarChunk::new(new_idx, new_count, self.dimensions, self.config.chunk_size);
             }
 
             let local_idx = current_chunk.count;
@@ -650,7 +664,10 @@ impl ColumnarStore {
     }
 
     /// Batch distance calculation (leverages columnar layout)
-    pub fn batch_euclidean_distance(&self, query: &[f32]) -> Result<Vec<(String, f32)>, VecStoreError> {
+    pub fn batch_euclidean_distance(
+        &self,
+        query: &[f32],
+    ) -> Result<Vec<(String, f32)>, VecStoreError> {
         if query.len() != self.dimensions {
             return Err(VecStoreError::DimensionMismatch {
                 expected: self.dimensions,
@@ -693,7 +710,8 @@ impl ColumnarStore {
     ) -> Result<Vec<String>, VecStoreError> {
         if dimension >= self.dimensions {
             return Err(VecStoreError::InvalidInput(format!(
-                "Dimension {} out of range", dimension
+                "Dimension {} out of range",
+                dimension
             )));
         }
 
@@ -730,7 +748,9 @@ impl ColumnarStore {
             if let Some(ref compressed) = chunk.compressed_columns {
                 size += compressed.iter().map(|c| c.len()).sum::<usize>();
             } else {
-                size += chunk.columns.iter()
+                size += chunk
+                    .columns
+                    .iter()
                     .map(|c| c.len() * size_of::<f32>())
                     .sum::<usize>();
             }
@@ -772,9 +792,10 @@ impl<'a> Iterator for ColumnarIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let Some((id, (chunk_idx, local_idx))) = self.id_iter.next()
-            && let Ok(vec) = self.store.chunks[*chunk_idx].get_vector(*local_idx) {
-                return Some((id.clone(), vec));
-            }
+            && let Ok(vec) = self.store.chunks[*chunk_idx].get_vector(*local_idx)
+        {
+            return Some((id.clone(), vec));
+        }
         None
     }
 }
