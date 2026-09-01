@@ -381,7 +381,14 @@ impl Federation {
         Ok(eligible)
     }
 
-    fn query_member(&self, state: &MemberState, _query: &FederatedQuery) -> Result<Vec<MemberResult>> {
+    fn query_member(
+        &self,
+        state: &MemberState,
+        query: &FederatedQuery,
+    ) -> Result<Vec<MemberResult>> {
+        // Some feature combinations compile only the local-member branch.
+        let _ = query;
+
         match &state.member.member_type {
             MemberType::Local => {
                 // Local queries should be handled by the local VecStore directly
