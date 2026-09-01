@@ -13,7 +13,7 @@ use tokio::time;
 use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "server")]
-use tonic::{transport::Channel, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Channel};
 
 #[cfg(feature = "server")]
 pub mod pb {
@@ -349,9 +349,9 @@ mod rpc {
             // Configure TLS if enabled
             if self.config.tls_enabled {
                 if let Some(ca_path) = &self.config.tls_ca_path {
-                    let ca_cert = tokio::fs::read(ca_path)
-                        .await
-                        .map_err(|e| RpcError::TlsError(format!("Failed to read CA cert: {}", e)))?;
+                    let ca_cert = tokio::fs::read(ca_path).await.map_err(|e| {
+                        RpcError::TlsError(format!("Failed to read CA cert: {}", e))
+                    })?;
                     let ca = Certificate::from_pem(ca_cert);
 
                     let tls_config = ClientTlsConfig::new().ca_certificate(ca);
@@ -410,12 +410,12 @@ mod rpc {
                     Ok(response) => {
                         self.mark_connection_success(node_id).await;
                         return Ok(response);
-                    }
+                    },
                     Err(e) => {
                         warn!("RequestVote to {} failed: {:?}", node_id, e);
                         self.mark_connection_failed(node_id).await;
                         last_error = Some(e);
-                    }
+                    },
                 }
             }
 
@@ -474,12 +474,12 @@ mod rpc {
                     Ok(response) => {
                         self.mark_connection_success(node_id).await;
                         return Ok(response);
-                    }
+                    },
                     Err(e) => {
                         warn!("AppendEntries to {} failed: {:?}", node_id, e);
                         self.mark_connection_failed(node_id).await;
                         last_error = Some(e);
-                    }
+                    },
                 }
             }
 
@@ -494,11 +494,8 @@ mod rpc {
         ) -> Result<AppendEntriesResponse, RpcError> {
             let mut client = self.get_connection(node_id).await?;
 
-            let pb_entries: Vec<pb::LogEntry> = request
-                .entries
-                .iter()
-                .map(|e| log_entry_to_pb(e))
-                .collect();
+            let pb_entries: Vec<pb::LogEntry> =
+                request.entries.iter().map(|e| log_entry_to_pb(e)).collect();
 
             let pb_request = pb::AppendEntriesRequest {
                 term: request.term,
@@ -620,7 +617,7 @@ mod rpc {
                 RpcError::RpcFailed(msg) => write!(f, "RPC failed: {}", msg),
                 RpcError::DeserializationFailed(msg) => {
                     write!(f, "Deserialization failed: {}", msg)
-                }
+                },
                 RpcError::MaxRetriesExceeded => write!(f, "Max retries exceeded"),
                 RpcError::Timeout => write!(f, "RPC timeout"),
             }
@@ -648,7 +645,11 @@ impl StateMachine {
     /// Apply a command to the state machine
     pub fn apply(&mut self, command: &Command) -> Option<Vec<u8>> {
         match command {
-            Command::Insert { id, vector, metadata } => {
+            Command::Insert {
+                id,
+                vector,
+                metadata,
+            } => {
                 let entry = serde_json::json!({
                     "vector": vector,
                     "metadata": metadata,
@@ -656,12 +657,16 @@ impl StateMachine {
                 let bytes = serde_json::to_vec(&entry).unwrap_or_default();
                 self.data.insert(id.clone(), bytes);
                 None
-            }
+            },
             Command::Delete { id } => {
                 self.data.remove(id);
                 None
-            }
-            Command::Update { id, vector, metadata } => {
+            },
+            Command::Update {
+                id,
+                vector,
+                metadata,
+            } => {
                 let entry = serde_json::json!({
                     "vector": vector,
                     "metadata": metadata,
@@ -669,7 +674,7 @@ impl StateMachine {
                 let bytes = serde_json::to_vec(&entry).unwrap_or_default();
                 self.data.insert(id.clone(), bytes);
                 None
-            }
+            },
             Command::NoOp => None,
         }
     }
@@ -882,7 +887,9 @@ impl RaftNode {
         T: serde::de::DeserializeOwned,
     {
         let state_machine = self.state_machine.read().await;
-        state_machine.get(key).and_then(|bytes| serde_json::from_slice(bytes).ok())
+        state_machine
+            .get(key)
+            .and_then(|bytes| serde_json::from_slice(bytes).ok())
     }
 
     /// Start an election
@@ -965,17 +972,17 @@ impl RaftNode {
                                 self.config.node_id, peer_id, votes, votes_needed
                             );
                         }
-                    }
+                    },
                     Ok(Ok((peer_id, Err(e)))) => {
                         warn!("Failed to get vote from {}: {:?}", peer_id, e);
-                    }
+                    },
                     Ok(Err(e)) => {
                         warn!("Vote task failed: {:?}", e);
-                    }
+                    },
                     Err(_) => {
                         debug!("Vote collection timed out");
                         break;
-                    }
+                    },
                 }
             }
         }
@@ -1150,8 +1157,7 @@ impl RaftNode {
                             if let Some(ls) = leader_state.as_mut() {
                                 if response.success {
                                     // Update next_index and match_index
-                                    ls.match_index
-                                        .insert(peer_id.clone(), response.match_index);
+                                    ls.match_index.insert(peer_id.clone(), response.match_index);
                                     ls.next_index
                                         .insert(peer_id.clone(), response.match_index + 1);
 
@@ -1171,10 +1177,10 @@ impl RaftNode {
                                     debug!("AppendEntries to {} failed, will retry", peer_id);
                                 }
                             }
-                        }
+                        },
                         Err(e) => {
                             warn!("Failed to send heartbeat to {}: {:?}", peer_id, e);
-                        }
+                        },
                     }
                 }));
             }
@@ -1422,8 +1428,9 @@ impl RaftNode {
     fn random_election_timeout(&self) -> Duration {
         use rand::Rng;
         let mut rng = rand::rng();
-        let timeout_ms = rng
-            .random_range(self.config.election_timeout_min_ms..=self.config.election_timeout_max_ms);
+        let timeout_ms = rng.random_range(
+            self.config.election_timeout_min_ms..=self.config.election_timeout_max_ms,
+        );
         Duration::from_millis(timeout_ms)
     }
 
@@ -1592,8 +1599,11 @@ pub mod server {
             let req = request.into_inner();
 
             // Convert protobuf log entries
-            let entries: Result<Vec<LogEntry>, _> =
-                req.entries.iter().map(|e| rpc::pb_to_log_entry(e)).collect();
+            let entries: Result<Vec<LogEntry>, _> = req
+                .entries
+                .iter()
+                .map(|e| rpc::pb_to_log_entry(e))
+                .collect();
 
             let entries = entries.map_err(|e| Status::invalid_argument(format!("{}", e)))?;
 
@@ -1716,7 +1726,7 @@ pub mod server {
 }
 
 #[cfg(feature = "server")]
-pub use server::{start_raft_server, RaftGrpcService};
+pub use server::{RaftGrpcService, start_raft_server};
 
 // ============================================================================
 // Cluster Membership Management
@@ -1928,8 +1938,7 @@ impl FailoverManager {
     /// Update known leader
     pub async fn set_leader(&self, leader: NodeId) {
         *self.current_leader.write().await = Some(leader);
-        self.failures
-            .store(0, std::sync::atomic::Ordering::Relaxed);
+        self.failures.store(0, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Get current leader
@@ -1939,10 +1948,10 @@ impl FailoverManager {
 
     /// Report a failure
     pub async fn report_failure(&self) -> bool {
-        let failures =
-            self.failures
-                .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                + 1;
+        let failures = self
+            .failures
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            + 1;
 
         if failures >= self.config.max_retries {
             // Trigger leader discovery
@@ -2014,7 +2023,7 @@ impl ReplicationCoordinator {
                     }
                     // Would normally redirect to leader here
                     time::sleep(Duration::from_millis(100)).await;
-                }
+                },
                 Err(e) => return Err(e),
             }
         }
@@ -2037,12 +2046,12 @@ impl ReplicationCoordinator {
                 }
                 // Read from leader's state machine
                 Ok(self.node.read_from_state_machine(key).await)
-            }
+            },
             ReadConsistency::Any => {
                 // Any read: Read from local state machine regardless of leader status
                 // May return stale data if this node is behind
                 Ok(self.node.read_from_state_machine(key).await)
-            }
+            },
             ReadConsistency::Linearizable => {
                 // Linearizable read: Strongest guarantee - verify leadership before reading
                 if !self.node.is_leader().await {
@@ -2058,7 +2067,7 @@ impl ReplicationCoordinator {
 
                 // Now safe to read - we confirmed we're still the leader
                 Ok(self.node.read_from_state_machine(key).await)
-            }
+            },
             ReadConsistency::Quorum => {
                 // Quorum read: Read from majority of nodes and return most recent
                 // For now, if we're leader, we know we have the most up-to-date data
@@ -2071,7 +2080,7 @@ impl ReplicationCoordinator {
                     // For now, read local and indicate it may be stale
                     Ok(self.node.read_from_state_machine(key).await)
                 }
-            }
+            },
         }
     }
 
@@ -2177,10 +2186,10 @@ impl ReplicationCoordinator {
         match change {
             MembershipChange::AddNode(node_id) => {
                 config.members.insert(node_id);
-            }
+            },
             MembershipChange::RemoveNode(node_id) => {
                 config.members.remove(&node_id);
-            }
+            },
         }
 
         config.version += 1;

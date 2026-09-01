@@ -2,12 +2,9 @@
 // Copyright 2025 VecStore Contributors
 
 use super::types::{Distance, Id};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use hnsw_rs::api::AnnT;
-use hnsw_rs::prelude::{
-    Hnsw, DistCosine, DistL2, DistDot, DistL1,
-    Distance as HnswDistance,
-};
+use hnsw_rs::prelude::{DistCosine, DistDot, DistL1, DistL2, Distance as HnswDistance, Hnsw};
 use std::collections::HashMap;
 use std::path::Path;
 
@@ -26,7 +23,8 @@ impl HnswDistance<f32> for DistHammingF32 {
             return 0.0;
         }
         let threshold = 0.5;
-        let diff_count: usize = a.iter()
+        let diff_count: usize = a
+            .iter()
             .zip(b.iter())
             .filter(|&(x, y)| {
                 // Convert to binary: > threshold = 1, <= threshold = 0
@@ -94,11 +92,7 @@ impl HnswDistance<f32> for DistCanberra {
             .map(|(x, y)| {
                 let diff = (x - y).abs();
                 let sum = x.abs() + y.abs();
-                if sum > f32::EPSILON {
-                    diff / sum
-                } else {
-                    0.0
-                }
+                if sum > f32::EPSILON { diff / sum } else { 0.0 }
             })
             .sum()
     }
@@ -110,7 +104,8 @@ pub struct DistBrayCurtis;
 
 impl HnswDistance<f32> for DistBrayCurtis {
     fn eval(&self, a: &[f32], b: &[f32]) -> f32 {
-        let (diff_sum, total_sum) = a.iter()
+        let (diff_sum, total_sum) = a
+            .iter()
             .zip(b.iter())
             .fold((0.0_f32, 0.0_f32), |(d, t), (x, y)| {
                 (d + (x - y).abs(), t + x.abs() + y.abs())
@@ -216,9 +211,9 @@ impl HnswBackend {
     pub fn with_config(dimension: usize, distance: Distance, config: HnswConfig) -> Result<Self> {
         let hnsw = match distance {
             Distance::Cosine => HnswInstance::Cosine(Hnsw::<f32, DistCosine>::new(
-                config.m,              // max_nb_connection
-                config.max_elements,   // max_elements
-                config.m,              // max_layer (typically same as M)
+                config.m,               // max_nb_connection
+                config.max_elements,    // max_elements
+                config.m,               // max_layer (typically same as M)
                 config.ef_construction, // ef_construction
                 DistCosine,
             )),
@@ -420,14 +415,14 @@ impl HnswBackend {
                         // Similarity metrics: higher raw value = more similar
                         Distance::Cosine | Distance::DotProduct => neighbor.distance,
                         // Distance metrics: lower raw value = more similar, invert for score
-                        Distance::Euclidean | Distance::Manhattan | Distance::Chebyshev
-                        | Distance::Canberra => {
-                            1.0 / (1.0 + neighbor.distance)
-                        }
+                        Distance::Euclidean
+                        | Distance::Manhattan
+                        | Distance::Chebyshev
+                        | Distance::Canberra => 1.0 / (1.0 + neighbor.distance),
                         // Normalized distance metrics [0,1]: convert to similarity
                         Distance::Hamming | Distance::Jaccard | Distance::BrayCurtis => {
                             1.0 - neighbor.distance.clamp(0.0, 1.0)
-                        }
+                        },
                     };
                     (id.clone(), score)
                 })
@@ -480,7 +475,14 @@ impl HnswBackend {
         idx_to_id: HashMap<usize, Id>,
         next_idx: usize,
     ) -> Result<Self> {
-        Self::restore_with_config(dimension, distance, id_to_idx, idx_to_id, next_idx, HnswConfig::default())
+        Self::restore_with_config(
+            dimension,
+            distance,
+            id_to_idx,
+            idx_to_id,
+            next_idx,
+            HnswConfig::default(),
+        )
     }
 
     pub fn restore_with_config(
@@ -728,14 +730,14 @@ impl HnswBackend {
                         // Similarity metrics: higher raw value = more similar
                         Distance::Cosine | Distance::DotProduct => neighbor.distance,
                         // Distance metrics: lower raw value = more similar, invert for score
-                        Distance::Euclidean | Distance::Manhattan | Distance::Chebyshev
-                        | Distance::Canberra => {
-                            1.0 / (1.0 + neighbor.distance)
-                        }
+                        Distance::Euclidean
+                        | Distance::Manhattan
+                        | Distance::Chebyshev
+                        | Distance::Canberra => 1.0 / (1.0 + neighbor.distance),
                         // Normalized distance metrics [0,1]: convert to similarity
                         Distance::Hamming | Distance::Jaccard | Distance::BrayCurtis => {
                             1.0 - neighbor.distance.clamp(0.0, 1.0)
-                        }
+                        },
                     };
                     (id.clone(), score)
                 })

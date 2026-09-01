@@ -224,29 +224,34 @@ impl Federation {
             avg_latency_ms: RwLock::new(0.0),
         });
 
-        let mut members = self.members.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
+        let mut members = self.members.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on members".into())
+        })?;
         members.insert(member.id.clone(), state);
         Ok(())
     }
 
     /// Remove a member from the federation
     pub fn remove_member(&self, member_id: &str) -> Result<()> {
-        let mut members = self.members.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
-        members.remove(member_id)
+        let mut members = self.members.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on members".into())
+        })?;
+        members
+            .remove(member_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Member {} not found", member_id)))?;
         Ok(())
     }
 
     /// Update member configuration
     pub fn update_member(&self, member: FederationMember) -> Result<()> {
-        let mut members = self.members.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on members".into()))?;
+        let mut members = self.members.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on members".into())
+        })?;
         if let Some(state) = members.get_mut(&member.id) {
             // Create new state preserving runtime info
-            let avg_latency = *state.avg_latency_ms.read()
-                .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on avg_latency_ms".into()))?;
+            let avg_latency = *state.avg_latency_ms.read().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire read lock on avg_latency_ms".into())
+            })?;
             let new_state = Arc::new(MemberState {
                 member,
                 health: state.health.clone(),
@@ -259,7 +264,10 @@ impl Federation {
             members.insert(new_state.member.id.clone(), new_state);
             Ok(())
         } else {
-            Err(VecStoreError::NotFound(format!("Member {} not found", member.id)))
+            Err(VecStoreError::NotFound(format!(
+                "Member {} not found",
+                member.id
+            )))
         }
     }
 
@@ -310,10 +318,10 @@ impl Federation {
                 Ok(results) => {
                     all_results.extend(results);
                     members_succeeded += 1;
-                }
+                },
                 Err(_) => {
                     member_state.total_errors.fetch_add(1, Ordering::Relaxed);
-                }
+                },
             }
 
             member_state.active_queries.fetch_sub(1, Ordering::Relaxed);
@@ -345,8 +353,9 @@ impl Federation {
     }
 
     fn get_eligible_members(&self, query: &FederatedQuery) -> Result<Vec<Arc<MemberState>>> {
-        let members = self.members.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on members".into()))?;
+        let members = self.members.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on members".into())
+        })?;
         let mut eligible = Vec::new();
 
         for state in members.values() {
@@ -365,7 +374,9 @@ impl Federation {
 
             // Filter by collection if specified
             if !query.collections.is_empty() {
-                let has_collection = query.collections.iter()
+                let has_collection = query
+                    .collections
+                    .iter()
                     .any(|c| state.member.collections.contains(c));
                 if !has_collection {
                     continue;
@@ -394,7 +405,7 @@ impl Federation {
                 // Local queries should be handled by the local VecStore directly
                 // Return empty results as local stores are queried separately
                 Ok(Vec::new())
-            }
+            },
             MemberType::RemoteHttp => {
                 #[cfg(feature = "openai-embeddings")]
                 {
@@ -407,7 +418,7 @@ impl Federation {
                         "HTTP federation requires 'openai-embeddings' feature (which includes reqwest)".into()
                     ))
                 }
-            }
+            },
             MemberType::RemoteGrpc => {
                 #[cfg(feature = "server")]
                 {
@@ -417,10 +428,10 @@ impl Federation {
                 #[cfg(not(feature = "server"))]
                 {
                     Err(VecStoreError::InvalidConfig(
-                        "gRPC federation requires 'server' feature (which includes tonic)".into()
+                        "gRPC federation requires 'server' feature (which includes tonic)".into(),
                     ))
                 }
-            }
+            },
             MemberType::External(service_type) => {
                 #[cfg(feature = "openai-embeddings")]
                 {
@@ -434,7 +445,7 @@ impl Federation {
                         "External federation requires 'openai-embeddings' feature (which includes reqwest)".into()
                     ))
                 }
-            }
+            },
         }
     }
 
@@ -494,7 +505,9 @@ impl Federation {
                             score: item.get("score")?.as_f64()? as f32,
                             vector: item.get("vector").and_then(|v| {
                                 v.as_array().map(|arr| {
-                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                    arr.iter()
+                                        .filter_map(|x| x.as_f64().map(|n| n as f32))
+                                        .collect()
                                 })
                             }),
                             metadata: item.get("metadata").cloned(),
@@ -566,9 +579,9 @@ impl Federation {
             )));
         }
 
-        let body: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Pinecone response: {}", e)))?;
+        let body: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse Pinecone response: {}", e))
+        })?;
 
         let results = body
             .get("matches")
@@ -581,7 +594,9 @@ impl Federation {
                             score: item.get("score")?.as_f64()? as f32,
                             vector: item.get("values").and_then(|v| {
                                 v.as_array().map(|arr| {
-                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                    arr.iter()
+                                        .filter_map(|x| x.as_f64().map(|n| n as f32))
+                                        .collect()
                                 })
                             }),
                             metadata: item.get("metadata").cloned(),
@@ -605,7 +620,11 @@ impl Federation {
         query: &FederatedQuery,
         k: usize,
     ) -> Result<Vec<MemberResult>> {
-        let collection = member.collections.first().cloned().unwrap_or_else(|| "default".to_string());
+        let collection = member
+            .collections
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
         let request_body = serde_json::json!({
             "vector": query.vector,
             "limit": k,
@@ -632,9 +651,9 @@ impl Federation {
             )));
         }
 
-        let body: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Qdrant response: {}", e)))?;
+        let body: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse Qdrant response: {}", e))
+        })?;
 
         let results = body
             .get("result")
@@ -647,7 +666,9 @@ impl Federation {
                             score: item.get("score")?.as_f64()? as f32,
                             vector: item.get("vector").and_then(|v| {
                                 v.as_array().map(|arr| {
-                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                    arr.iter()
+                                        .filter_map(|x| x.as_f64().map(|n| n as f32))
+                                        .collect()
                                 })
                             }),
                             metadata: item.get("payload").cloned(),
@@ -671,7 +692,11 @@ impl Federation {
         query: &FederatedQuery,
         k: usize,
     ) -> Result<Vec<MemberResult>> {
-        let class_name = member.collections.first().cloned().unwrap_or_else(|| "Document".to_string());
+        let class_name = member
+            .collections
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "Document".to_string());
 
         // Weaviate uses GraphQL
         let graphql_query = format!(
@@ -708,9 +733,9 @@ impl Federation {
             )));
         }
 
-        let body: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Weaviate response: {}", e)))?;
+        let body: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse Weaviate response: {}", e))
+        })?;
 
         // Parse GraphQL response
         let results = body
@@ -726,7 +751,9 @@ impl Federation {
                             score: 1.0 - additional.get("distance")?.as_f64()? as f32,
                             vector: additional.get("vector").and_then(|v| {
                                 v.as_array().map(|arr| {
-                                    arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect()
+                                    arr.iter()
+                                        .filter_map(|x| x.as_f64().map(|n| n as f32))
+                                        .collect()
                                 })
                             }),
                             metadata: Some(item.clone()),
@@ -750,7 +777,11 @@ impl Federation {
         query: &FederatedQuery,
         k: usize,
     ) -> Result<Vec<MemberResult>> {
-        let collection = member.collections.first().cloned().unwrap_or_else(|| "default".to_string());
+        let collection = member
+            .collections
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "default".to_string());
 
         let request_body = serde_json::json!({
             "query_embeddings": [query.vector],
@@ -777,15 +808,27 @@ impl Federation {
             )));
         }
 
-        let body: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse ChromaDB response: {}", e)))?;
+        let body: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse ChromaDB response: {}", e))
+        })?;
 
         // ChromaDB returns arrays for each field
-        let ids = body.get("ids").and_then(|i| i.get(0)).and_then(|a| a.as_array());
-        let distances = body.get("distances").and_then(|d| d.get(0)).and_then(|a| a.as_array());
-        let embeddings = body.get("embeddings").and_then(|e| e.get(0)).and_then(|a| a.as_array());
-        let metadatas = body.get("metadatas").and_then(|m| m.get(0)).and_then(|a| a.as_array());
+        let ids = body
+            .get("ids")
+            .and_then(|i| i.get(0))
+            .and_then(|a| a.as_array());
+        let distances = body
+            .get("distances")
+            .and_then(|d| d.get(0))
+            .and_then(|a| a.as_array());
+        let embeddings = body
+            .get("embeddings")
+            .and_then(|e| e.get(0))
+            .and_then(|a| a.as_array());
+        let metadatas = body
+            .get("metadatas")
+            .and_then(|m| m.get(0))
+            .and_then(|a| a.as_array());
 
         let mut results = Vec::new();
         if let Some(ids) = ids {
@@ -800,7 +843,11 @@ impl Federation {
                     let vector = embeddings
                         .and_then(|e| e.get(i))
                         .and_then(|v| v.as_array())
-                        .map(|arr| arr.iter().filter_map(|x| x.as_f64().map(|n| n as f32)).collect());
+                        .map(|arr| {
+                            arr.iter()
+                                .filter_map(|x| x.as_f64().map(|n| n as f32))
+                                .collect()
+                        });
 
                     let metadata = metadatas.and_then(|m| m.get(i)).cloned();
 
@@ -827,18 +874,26 @@ impl Federation {
         query: &FederatedQuery,
         k: usize,
     ) -> Result<Vec<MemberResult>> {
-        use crate::server::types::pb::{vec_store_service_client::VecStoreServiceClient, QueryRequest};
+        use crate::server::types::pb::{
+            QueryRequest, vec_store_service_client::VecStoreServiceClient,
+        };
 
         // Create a tokio runtime for blocking on async gRPC calls
-        let rt = tokio::runtime::Runtime::new()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to create tokio runtime: {}", e)))?;
+        let rt = tokio::runtime::Runtime::new().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to create tokio runtime: {}", e))
+        })?;
 
         rt.block_on(async {
             // Connect to the gRPC server
             let endpoint = member.endpoint.clone();
             let mut client = VecStoreServiceClient::connect(endpoint.clone())
                 .await
-                .map_err(|e| VecStoreError::Internal(format!("gRPC connection failed to {}: {}", endpoint, e)))?;
+                .map_err(|e| {
+                    VecStoreError::Internal(format!(
+                        "gRPC connection failed to {}: {}",
+                        endpoint, e
+                    ))
+                })?;
 
             // Build the query request
             let request = QueryRequest {
@@ -849,13 +904,12 @@ impl Federation {
             };
 
             // Execute the query with timeout
-            let response = tokio::time::timeout(
-                self.config.member_timeout,
-                client.query(request)
-            )
-            .await
-            .map_err(|_| VecStoreError::Internal(format!("gRPC query timeout to {}", endpoint)))?
-            .map_err(|e| VecStoreError::Internal(format!("gRPC query failed: {}", e)))?;
+            let response = tokio::time::timeout(self.config.member_timeout, client.query(request))
+                .await
+                .map_err(|_| {
+                    VecStoreError::Internal(format!("gRPC query timeout to {}", endpoint))
+                })?
+                .map_err(|e| VecStoreError::Internal(format!("gRPC query failed: {}", e)))?;
 
             // Convert response to MemberResult
             let results: Vec<MemberResult> = response
@@ -883,11 +937,15 @@ impl Federation {
         })
     }
 
-    fn merge_results(&self, mut results: Vec<MemberResult>, query: &FederatedQuery) -> Vec<FederatedResult> {
+    fn merge_results(
+        &self,
+        mut results: Vec<MemberResult>,
+        query: &FederatedQuery,
+    ) -> Vec<FederatedResult> {
         match self.config.merge_strategy {
             MergeStrategy::ScoreBased => {
                 results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-            }
+            },
             MergeStrategy::RoundRobin => {
                 // Group by member, then interleave
                 let mut by_member: HashMap<String, Vec<MemberResult>> = HashMap::new();
@@ -904,11 +962,12 @@ impl Federation {
                         }
                     }
                 }
-            }
+            },
             MergeStrategy::Priority => {
                 // Already sorted by member priority, just sort within each member by score
                 results.sort_by(|a, b| {
-                    let member_cmp = self.get_member_priority(&b.member_id)
+                    let member_cmp = self
+                        .get_member_priority(&b.member_id)
                         .cmp(&self.get_member_priority(&a.member_id));
                     if member_cmp == std::cmp::Ordering::Equal {
                         b.score.partial_cmp(&a.score).unwrap()
@@ -916,7 +975,7 @@ impl Federation {
                         member_cmp
                     }
                 });
-            }
+            },
             MergeStrategy::Deduplicate => {
                 // Remove duplicates by ID, keeping highest score
                 let mut seen: HashMap<String, MemberResult> = HashMap::new();
@@ -931,7 +990,7 @@ impl Federation {
                 }
                 results = seen.into_values().collect();
                 results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-            }
+            },
             MergeStrategy::Weighted => {
                 // Apply member weights to scores
                 for r in &mut results {
@@ -939,7 +998,7 @@ impl Federation {
                     r.score *= weight;
                 }
                 results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap());
-            }
+            },
         }
 
         // Apply min score filter
@@ -951,7 +1010,8 @@ impl Federation {
         results.truncate(query.k);
 
         // Convert to federated results
-        results.into_iter()
+        results
+            .into_iter()
             .map(|r| FederatedResult {
                 id: r.id,
                 score: r.score,
@@ -964,7 +1024,9 @@ impl Federation {
     }
 
     fn get_member_priority(&self, member_id: &str) -> u32 {
-        let Ok(members) = self.members.read() else { return 0; };
+        let Ok(members) = self.members.read() else {
+            return 0;
+        };
         members
             .get(member_id)
             .map(|s| s.member.priority)
@@ -972,7 +1034,9 @@ impl Federation {
     }
 
     fn get_member_weight(&self, member_id: &str) -> f32 {
-        let Ok(members) = self.members.read() else { return 1.0; };
+        let Ok(members) = self.members.read() else {
+            return 1.0;
+        };
         members
             .get(member_id)
             .map(|s| s.member.weight)
@@ -997,25 +1061,34 @@ impl Federation {
     }
 
     fn get_cached(&self, key: &str) -> Option<Vec<FederatedResult>> {
-        let Ok(cache) = self.cache.read() else { return None; };
+        let Ok(cache) = self.cache.read() else {
+            return None;
+        };
         if let Some(cached) = cache.get(key)
-            && cached.cached_at.elapsed() < self.config.cache_ttl {
-                return Some(cached.results.clone());
-            }
+            && cached.cached_at.elapsed() < self.config.cache_ttl
+        {
+            return Some(cached.results.clone());
+        }
         None
     }
 
     fn cache_result(&self, key: &str, results: Vec<FederatedResult>) {
-        let Ok(mut cache) = self.cache.write() else { return; };
-        cache.insert(key.to_string(), CachedResult {
-            results,
-            cached_at: Instant::now(),
-        });
+        let Ok(mut cache) = self.cache.write() else {
+            return;
+        };
+        cache.insert(
+            key.to_string(),
+            CachedResult {
+                results,
+                cached_at: Instant::now(),
+            },
+        );
 
         // Limit cache size
         if cache.len() > 10000 {
             // Remove oldest entries
-            let mut entries: Vec<_> = cache.iter()
+            let mut entries: Vec<_> = cache
+                .iter()
                 .map(|(k, v)| (k.clone(), v.cached_at))
                 .collect();
             entries.sort_by_key(|(_, t)| *t);
@@ -1028,10 +1101,14 @@ impl Federation {
 
     /// Update member health status
     pub fn update_health(&self, member_id: &str, _health: MemberHealth) -> Result<()> {
-        let members = self.members.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on members".into()))?;
+        let members = self.members.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on members".into())
+        })?;
         let Some(_state) = members.get(member_id) else {
-            return Err(VecStoreError::NotFound(format!("Member {} not found", member_id)));
+            return Err(VecStoreError::NotFound(format!(
+                "Member {} not found",
+                member_id
+            )));
         };
         // Can't mutate through Arc, but in production we'd use interior mutability
         Ok(())
@@ -1052,7 +1129,8 @@ impl Federation {
             };
         };
 
-        let member_statuses: Vec<MemberStatus> = members.values()
+        let member_statuses: Vec<MemberStatus> = members
+            .values()
             .map(|s| {
                 let avg_latency = s.avg_latency_ms.read().map(|g| *g).unwrap_or(0.0);
                 MemberStatus {
@@ -1069,7 +1147,8 @@ impl Federation {
             })
             .collect();
 
-        let healthy_count = member_statuses.iter()
+        let healthy_count = member_statuses
+            .iter()
             .filter(|m| m.health == MemberHealth::Healthy)
             .count();
 
@@ -1095,24 +1174,25 @@ impl Federation {
 
     /// List all members
     pub fn list_members(&self) -> Vec<FederationMember> {
-        let Ok(members) = self.members.read() else { return vec![]; };
-        members
-            .values()
-            .map(|s| s.member.clone())
-            .collect()
+        let Ok(members) = self.members.read() else {
+            return vec![];
+        };
+        members.values().map(|s| s.member.clone()).collect()
     }
 
     /// Get a specific member
     pub fn get_member(&self, member_id: &str) -> Option<FederationMember> {
-        let Ok(members) = self.members.read() else { return None; };
-        members
-            .get(member_id)
-            .map(|s| s.member.clone())
+        let Ok(members) = self.members.read() else {
+            return None;
+        };
+        members.get(member_id).map(|s| s.member.clone())
     }
 
     /// Clear cache
     pub fn clear_cache(&self) {
-        let Ok(mut cache) = self.cache.write() else { return; };
+        let Ok(mut cache) = self.cache.write() else {
+            return;
+        };
         cache.clear();
     }
 }
@@ -1308,7 +1388,7 @@ mod tests {
 
         // Results should be sorted by score
         for i in 1..result.results.len() {
-            assert!(result.results[i-1].score >= result.results[i].score);
+            assert!(result.results[i - 1].score >= result.results[i].score);
         }
     }
 

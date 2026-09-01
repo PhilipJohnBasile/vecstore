@@ -149,7 +149,7 @@ impl WriteAheadLog {
             // Read length prefix
             let mut len_bytes = [0u8; 4];
             match reader.read_exact(&mut len_bytes) {
-                Ok(_) => {}
+                Ok(_) => {},
                 Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                 Err(e) => return Err(e.into()),
             }
@@ -248,7 +248,7 @@ impl WriteAheadLog {
         loop {
             let mut len_bytes = [0u8; 4];
             match reader.read_exact(&mut len_bytes) {
-                Ok(_) => {}
+                Ok(_) => {},
                 Err(ref e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
                 Err(e) => return Err(e.into()),
             }

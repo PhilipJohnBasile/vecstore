@@ -485,16 +485,19 @@ impl OpenApiGenerator {
     }
 
     fn add_schemas(&mut self) {
-        self.schemas.insert("Collection".to_string(), serde_json::json!({
-            "type": "object",
-            "properties": {
-                "name": {"type": "string"},
-                "dimension": {"type": "integer"},
-                "metric": {"type": "string", "enum": ["cosine", "euclidean", "dot"]},
-                "vector_count": {"type": "integer"},
-                "created_at": {"type": "string", "format": "date-time"}
-            }
-        }));
+        self.schemas.insert(
+            "Collection".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "dimension": {"type": "integer"},
+                    "metric": {"type": "string", "enum": ["cosine", "euclidean", "dot"]},
+                    "vector_count": {"type": "integer"},
+                    "created_at": {"type": "string", "format": "date-time"}
+                }
+            }),
+        );
 
         self.schemas.insert("CreateCollectionRequest".to_string(), serde_json::json!({
             "type": "object",
@@ -506,65 +509,80 @@ impl OpenApiGenerator {
             }
         }));
 
-        self.schemas.insert("Point".to_string(), serde_json::json!({
-            "type": "object",
-            "required": ["id", "vector"],
-            "properties": {
-                "id": {"type": "string"},
-                "vector": {"type": "array", "items": {"type": "number"}},
-                "payload": {"type": "object", "additionalProperties": true}
-            }
-        }));
-
-        self.schemas.insert("InsertPointsRequest".to_string(), serde_json::json!({
-            "type": "object",
-            "required": ["points"],
-            "properties": {
-                "points": {
-                    "type": "array",
-                    "items": {"$ref": "#/components/schemas/Point"}
+        self.schemas.insert(
+            "Point".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "required": ["id", "vector"],
+                "properties": {
+                    "id": {"type": "string"},
+                    "vector": {"type": "array", "items": {"type": "number"}},
+                    "payload": {"type": "object", "additionalProperties": true}
                 }
-            }
-        }));
+            }),
+        );
 
-        self.schemas.insert("SearchRequest".to_string(), serde_json::json!({
-            "type": "object",
-            "required": ["vector"],
-            "properties": {
-                "vector": {"type": "array", "items": {"type": "number"}},
-                "limit": {"type": "integer", "default": 10, "maximum": 1000},
-                "filter": {"type": "object"},
-                "with_payload": {"type": "boolean", "default": true},
-                "with_vector": {"type": "boolean", "default": false}
-            }
-        }));
-
-        self.schemas.insert("SearchResponse".to_string(), serde_json::json!({
-            "type": "object",
-            "properties": {
-                "result": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "id": {"type": "string"},
-                            "score": {"type": "number"},
-                            "payload": {"type": "object"},
-                            "vector": {"type": "array", "items": {"type": "number"}}
-                        }
+        self.schemas.insert(
+            "InsertPointsRequest".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "required": ["points"],
+                "properties": {
+                    "points": {
+                        "type": "array",
+                        "items": {"$ref": "#/components/schemas/Point"}
                     }
-                },
-                "time_ms": {"type": "number"}
-            }
-        }));
+                }
+            }),
+        );
 
-        self.schemas.insert("InsertResult".to_string(), serde_json::json!({
-            "type": "object",
-            "properties": {
-                "inserted_count": {"type": "integer"},
-                "operation_id": {"type": "string"}
-            }
-        }));
+        self.schemas.insert(
+            "SearchRequest".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "required": ["vector"],
+                "properties": {
+                    "vector": {"type": "array", "items": {"type": "number"}},
+                    "limit": {"type": "integer", "default": 10, "maximum": 1000},
+                    "filter": {"type": "object"},
+                    "with_payload": {"type": "boolean", "default": true},
+                    "with_vector": {"type": "boolean", "default": false}
+                }
+            }),
+        );
+
+        self.schemas.insert(
+            "SearchResponse".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "result": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "score": {"type": "number"},
+                                "payload": {"type": "object"},
+                                "vector": {"type": "array", "items": {"type": "number"}}
+                            }
+                        }
+                    },
+                    "time_ms": {"type": "number"}
+                }
+            }),
+        );
+
+        self.schemas.insert(
+            "InsertResult".to_string(),
+            serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "inserted_count": {"type": "integer"},
+                    "operation_id": {"type": "string"}
+                }
+            }),
+        );
     }
 
     /// Generate OpenAPI spec
@@ -572,7 +590,9 @@ impl OpenApiGenerator {
         let mut paths: HashMap<String, serde_json::Value> = HashMap::new();
 
         for route in &self.routes {
-            let path_entry = paths.entry(route.path.clone()).or_insert_with(|| serde_json::json!({}));
+            let path_entry = paths
+                .entry(route.path.clone())
+                .or_insert_with(|| serde_json::json!({}));
 
             let method = match route.method {
                 HttpMethod::GET => "get",
@@ -670,7 +690,8 @@ impl OpenApiGenerator {
             if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
                 for (prop_name, prop_schema) in props {
                     let ts_type = self.json_schema_to_ts(prop_schema);
-                    let required = schema.get("required")
+                    let required = schema
+                        .get("required")
                         .and_then(|r| r.as_array())
                         .map(|arr| arr.iter().any(|v| v.as_str() == Some(prop_name)))
                         .unwrap_or(false);
@@ -696,11 +717,12 @@ impl OpenApiGenerator {
             Some("integer") | Some("number") => "number".to_string(),
             Some("boolean") => "boolean".to_string(),
             Some("array") => {
-                let items_type = schema.get("items")
+                let items_type = schema
+                    .get("items")
                     .map(|i| self.json_schema_to_ts(i))
                     .unwrap_or_else(|| "unknown".to_string());
                 format!("{}[]", items_type)
-            }
+            },
             Some("object") => "Record<string, any>".to_string(),
             _ => "unknown".to_string(),
         }
@@ -731,14 +753,16 @@ impl ApiRateLimiter {
 
     /// Check if request is allowed
     pub fn allow(&self, client_id: &str) -> bool {
-        let Ok(mut clients) = self.clients.write() else { return false; };
+        let Ok(mut clients) = self.clients.write() else {
+            return false;
+        };
 
-        let client = clients.entry(client_id.to_string()).or_insert_with(|| {
-            ClientLimit {
+        let client = clients
+            .entry(client_id.to_string())
+            .or_insert_with(|| ClientLimit {
                 tokens: self.rpm,
                 last_refill: Instant::now(),
-            }
-        });
+            });
 
         // Refill tokens
         let elapsed = client.last_refill.elapsed();

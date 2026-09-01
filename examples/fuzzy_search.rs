@@ -18,8 +18,8 @@
 //! ```
 
 use vecstore::fuzzy::{
-    damerau_levenshtein_distance, levenshtein_distance, similarity_score, suggest_corrections,
-    BKTree, FuzzyMatcher,
+    BKTree, FuzzyMatcher, damerau_levenshtein_distance, levenshtein_distance, similarity_score,
+    suggest_corrections,
 };
 
 fn main() {

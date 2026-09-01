@@ -295,65 +295,65 @@ pub mod object_storage;
 pub mod pq;
 
 // 2026 Competitive Features - Phase 2
-pub mod inference;       // Integrated Inference API (embed at query time)
-pub mod sql;             // SQL Interface for vector operations
-pub mod rabitq;          // RaBitQ 1-bit quantization (30x compression)
-pub mod generative;      // Native Generative Search (RAG in single call)
-pub mod llm_cache;       // Semantic LLM Cache (query deduplication)
-pub mod multilang;       // Multi-Language Stemming (17+ languages)
-pub mod typo_tolerance;  // Typo-Tolerant Search (fuzzy matching)
-pub mod graphrag;        // GraphRAG Integration (knowledge graphs)
-pub mod streaming;       // Streaming Index Updates (real-time)
-pub mod edge_runtime;    // Edge Runtime (Workers/Vercel)
-pub mod ml_ranking;      // ONNX/ML Models in Ranking
+pub mod edge_runtime; // Edge Runtime (Workers/Vercel)
+pub mod generative; // Native Generative Search (RAG in single call)
+pub mod graphrag; // GraphRAG Integration (knowledge graphs)
+pub mod inference; // Integrated Inference API (embed at query time)
+pub mod llm_cache; // Semantic LLM Cache (query deduplication)
+pub mod ml_ranking;
+pub mod multilang; // Multi-Language Stemming (17+ languages)
+pub mod rabitq; // RaBitQ 1-bit quantization (30x compression)
+pub mod sql; // SQL Interface for vector operations
+pub mod streaming; // Streaming Index Updates (real-time)
+pub mod typo_tolerance; // Typo-Tolerant Search (fuzzy matching) // ONNX/ML Models in Ranking
 
 // 2026 Competitive Features - Phase 3 (Market Domination)
-pub mod sparse_native;   // Native SPLADE/BM25 sparse vectors
-pub mod serverless;      // Pinecone-style auto-scaling
-pub mod timetravel;      // Milvus-style point-in-time queries
-pub mod payload_index;   // Qdrant-style B-tree/Hash/Geo indexes
-pub mod partition_keys;  // Multi-tenant partition routing
-pub mod graphql_api;     // Weaviate-style GraphQL interface
+pub mod dynamic_schema; // Runtime schema flexibility
+pub mod embedded_onnx;
+pub mod graphql_api; // Weaviate-style GraphQL interface
+pub mod partition_keys; // Multi-tenant partition routing
+pub mod payload_index; // Qdrant-style B-tree/Hash/Geo indexes
 pub mod recommendations; // Item-to-item recommendations
-pub mod zero_copy;       // LanceDB-style versioning
-pub mod dynamic_schema;  // Runtime schema flexibility
-pub mod embedded_onnx;   // Chroma-style local embeddings
+pub mod serverless; // Pinecone-style auto-scaling
+pub mod sparse_native; // Native SPLADE/BM25 sparse vectors
+pub mod timetravel; // Milvus-style point-in-time queries
+pub mod zero_copy; // LanceDB-style versioning // Chroma-style local embeddings
 
 // 2026 Competitive Features - Phase 4 (Market Leadership)
-pub mod agentic;            // Agentic Query Framework (multi-step retrieval)
-pub mod object_store;       // Object Storage Backend (S3/GCS, 100x cost reduction)
-pub mod hybrid_rerank;      // Hybrid Reranking Pipeline (dense+sparse+BM25)
-pub mod managed_embeddings; // Managed Embedding Service (pay-as-you-go)
-pub mod advanced_quant;     // Advanced Quantization (1.5-bit, 2-bit, asymmetric)
-pub mod multimodal_search;  // Multimodal Search (text↔image↔video)
+pub mod advanced_quant; // Advanced Quantization (1.5-bit, 2-bit, asymmetric)
+pub mod agentic; // Agentic Query Framework (multi-step retrieval)
+pub mod change_streams; // Change Streams (real-time subscriptions)
+pub mod discovery; // Discovery API (vector-space exploration)
 pub mod enterprise_protect; // Enterprise Protection (CMEK, backup/restore)
-pub mod discovery;          // Discovery API (vector-space exploration)
-pub mod change_streams;     // Change Streams (real-time subscriptions)
-pub mod gpu_indexing;       // GPU Index Building (10x faster ingestion)
+pub mod gpu_indexing;
+pub mod hybrid_rerank; // Hybrid Reranking Pipeline (dense+sparse+BM25)
+pub mod managed_embeddings; // Managed Embedding Service (pay-as-you-go)
+pub mod multimodal_search; // Multimodal Search (text↔image↔video)
+pub mod object_store; // Object Storage Backend (S3/GCS, 100x cost reduction) // GPU Index Building (10x faster ingestion)
 
 // 2026 Competitive Features - Phase 5 (Production Readiness)
-pub mod otel;            // OpenTelemetry OTLP Export (distributed tracing)
-pub mod query_explain;   // Visual Query Explain (EXPLAIN ANALYZE)
-pub mod adaptive_cache;  // Multi-Tier Adaptive Cache (L1/L2/L3)
-pub mod backpressure;    // Streaming Backpressure (flow control)
-pub mod rest_api;        // REST API with OpenAPI (spec generation)
-pub mod raft_consensus;  // Production Raft Consensus (leader election)
-pub mod sdk_gen;         // Multi-Language SDK Generation (TS/Python/Go)
+pub mod adaptive_cache; // Multi-Tier Adaptive Cache (L1/L2/L3)
+pub mod backpressure; // Streaming Backpressure (flow control)
+pub mod otel; // OpenTelemetry OTLP Export (distributed tracing)
+pub mod query_explain; // Visual Query Explain (EXPLAIN ANALYZE)
+pub mod raft_consensus; // Production Raft Consensus (leader election)
+pub mod rest_api; // REST API with OpenAPI (spec generation)
+pub mod sdk_gen; // Multi-Language SDK Generation (TS/Python/Go)
 
 // 2026 Competitive Features - Phase 6 (Cloud-Native Operations)
-pub mod k8s_operator;      // Kubernetes Operator (CRD, Helm charts)
-pub mod query_router;      // Query Router / Load Balancer (circuit breaker)
-pub mod data_lineage;      // Data Lineage Tracking (provenance, impact analysis)
-pub mod ab_testing;        // A/B Testing Framework (experiments, variants)
+pub mod ab_testing; // A/B Testing Framework (experiments, variants)
+pub mod data_lineage; // Data Lineage Tracking (provenance, impact analysis)
+pub mod federation;
 pub mod incremental_index; // Incremental Index Updates (delta indexes, WAL)
-pub mod federation;        // Federation (cross-store queries, multi-cluster)
+pub mod k8s_operator; // Kubernetes Operator (CRD, Helm charts)
+pub mod query_router; // Query Router / Load Balancer (circuit breaker) // Federation (cross-store queries, multi-cluster)
 
 // 2026 Competitive Features - Phase 7 (Advanced Analytics & ML)
-pub mod neural_ranker;     // Neural Ranker (cross-encoder, late interaction, SPLADE)
-pub mod auto_tuning;       // Auto-Tuning Engine (Bayesian optimization, hyperparameter search)
 pub mod anomaly_detection; // Anomaly Detection (isolation forest, LOF, drift monitoring)
-pub mod query_analytics;   // Query Analytics Dashboard (performance insights, trends)
-pub mod cost_optimizer;    // Cost Optimizer (resource right-sizing, auto-scaling)
+pub mod auto_tuning; // Auto-Tuning Engine (Bayesian optimization, hyperparameter search)
+pub mod cost_optimizer;
+pub mod neural_ranker; // Neural Ranker (cross-encoder, late interaction, SPLADE)
+pub mod query_analytics; // Query Analytics Dashboard (performance insights, trends) // Cost Optimizer (resource right-sizing, auto-scaling)
 
 #[cfg(feature = "async")]
 pub mod kafka_connector;
@@ -368,11 +368,11 @@ pub use namespace::{Namespace, NamespaceId, NamespaceQuotas, NamespaceStatus, Re
 pub use namespace_manager::{AggregateStats, NamespaceManager, NamespaceStats};
 pub use schema::{FieldSchema, FieldType, Schema, ValidationError};
 pub use store::{
-    make_record, parse_filter, BatchError, BatchOperation, BatchResult, CompactionConfig,
-    CompactionResult, Config, Distance, ExplainedNeighbor, FilterExpr, FilterOp, FilterParseError,
-    HNSWSearchParams, HybridQuery, Metadata, Neighbor, PQConfig, PQVectorStore, PrefetchQuery,
-    ProductQuantizer, QuantizationConfig, QuantizationStats, Query, QueryEstimate, QueryExplanation,
-    QueryPlan, QueryStage, QueryStep, Record, VecStore, VecStoreBuilder,
+    BatchError, BatchOperation, BatchResult, CompactionConfig, CompactionResult, Config, Distance,
+    ExplainedNeighbor, FilterExpr, FilterOp, FilterParseError, HNSWSearchParams, HybridQuery,
+    Metadata, Neighbor, PQConfig, PQVectorStore, PrefetchQuery, ProductQuantizer,
+    QuantizationConfig, QuantizationStats, Query, QueryEstimate, QueryExplanation, QueryPlan,
+    QueryStage, QueryStep, Record, VecStore, VecStoreBuilder, make_record, parse_filter,
 };
 pub use text_splitter::{
     RecursiveCharacterTextSplitter, TextChunk, TextSplitter, TokenTextSplitter,
@@ -380,8 +380,8 @@ pub use text_splitter::{
 
 // Export fuzzy search types
 pub use fuzzy::{
-    damerau_levenshtein_distance, levenshtein_distance, similarity_score, suggest_corrections,
-    BKTree, FuzzyMatcher,
+    BKTree, FuzzyMatcher, damerau_levenshtein_distance, levenshtein_distance, similarity_score,
+    suggest_corrections,
 };
 
 // Export auto-tuning types
@@ -389,8 +389,8 @@ pub use autotuning::{AutoTuner, HnswParams, PerformanceConstraints, TuningGoal};
 
 // Export compression types
 pub use compression::{
-    decode_rle, decode_varint, encode_rle, encode_varint, CompressedNeighborList,
-    CompressionConfig, CompressionLevel, CompressionMethod, CompressionStats,
+    CompressedNeighborList, CompressionConfig, CompressionLevel, CompressionMethod,
+    CompressionStats, decode_rle, decode_varint, encode_rle, encode_varint,
 };
 
 // Export real-time indexing types
@@ -453,8 +453,9 @@ pub use benchmark::{
 
 // Export health check types
 pub use health::{
-    print_health_report, Alert, AlertCategory, AlertSeverity, DatabaseHealth, HealthCheckConfig,
-    HealthChecker, HealthReport, HealthStatus, IndexHealth, PerformanceHealth, ResourceHealth,
+    Alert, AlertCategory, AlertSeverity, DatabaseHealth, HealthCheckConfig, HealthChecker,
+    HealthReport, HealthStatus, IndexHealth, PerformanceHealth, ResourceHealth,
+    print_health_report,
 };
 
 // Export metadata indexing types
@@ -485,7 +486,7 @@ pub use anomaly::{
 };
 
 // Export dimensionality reduction types
-pub use dim_reduction::{ReductionStats, PCA};
+pub use dim_reduction::{PCA, ReductionStats};
 
 // Export recommender system types
 pub use recommender::{
@@ -560,7 +561,7 @@ pub use geospatial::{
 };
 
 // Export advanced filter types
-pub use advanced_filter::{parse_advanced_filter, AdvancedFilter, FilterBuilder};
+pub use advanced_filter::{AdvancedFilter, FilterBuilder, parse_advanced_filter};
 
 // Export profiler types
 pub use profiler::{ProfileStage, ProfileSummary, ProfilerConfig, QueryProfile, QueryProfiler};
@@ -568,9 +569,8 @@ pub use profiler::{ProfileStage, ProfileSummary, ProfilerConfig, QueryProfile, Q
 #[cfg(feature = "async")]
 // Export Kafka connector types
 pub use kafka_connector::{
-    ConsumerStats, KafkaConfig, KafkaConsumer, KafkaProducer,
-    Operation as KafkaOperation, PipelineStats as KafkaPipelineStats,
-    ProducerStats, StreamingPipeline, VectorMessage,
+    ConsumerStats, KafkaConfig, KafkaConsumer, KafkaProducer, Operation as KafkaOperation,
+    PipelineStats as KafkaPipelineStats, ProducerStats, StreamingPipeline, VectorMessage,
 };
 
 #[cfg(feature = "async")]
@@ -579,9 +579,9 @@ pub use python_async::{AsyncPyVecStore, AsyncSearchResult};
 
 // Export vectors module types
 pub use vectors::{
-    bm25_score, bm25_score_simple, hybrid_search_score, normalize_scores, normalize_scores_zscore,
     BM25Config, BM25Stats, FusionStrategy, HybridQuery as HybridQueryV2, HybridSearchConfig,
-    KMeans, Vector, VectorOps,
+    KMeans, Vector, VectorOps, bm25_score, bm25_score_simple, hybrid_search_score,
+    normalize_scores, normalize_scores_zscore,
 };
 
 // Export SIMD-accelerated distance functions
@@ -613,114 +613,122 @@ pub use embeddings::{CandleEmbedder, CandleModel};
 pub use wasm::{WasmSearchResult, WasmVecStore};
 
 // Export 2026 Competitive Features - Phase 2
-pub use inference::{EmbeddingProvider, InferenceConfig, InferenceEngine, InferenceStats};
-pub use sql::{DataType, Row, TableSchema, VectorSQL};
-pub use rabitq::{BinaryCode, RaBitQ, RaBitQConfig, RaBitQIndex};
+pub use edge_runtime::{EdgeConfig, EdgeSearchResult, EdgeVectorStore};
 pub use generative::{
     Citation, GenerativeConfig, GenerativeResponse, GenerativeSearch, LLMProvider,
     RetrievedDocument, TokenUsage,
 };
-pub use llm_cache::{CacheConfig, CacheResult, SemanticCache};
-pub use multilang::{AutoLangAnalyzer, Language, MultiLangAnalyzer};
-pub use typo_tolerance::{MatchType, TypoConfig, TypoSearchResult, TypoTolerantSearch};
 pub use graphrag::{Entity as GraphEntity, GraphRAG as GraphRAGV2, Relationship};
-pub use streaming::{ConflictStrategy, StreamConfig, StreamingIndex, StreamingStats};
-pub use edge_runtime::{EdgeConfig, EdgeSearchResult, EdgeVectorStore};
+pub use inference::{EmbeddingProvider, InferenceConfig, InferenceEngine, InferenceStats};
+pub use llm_cache::{CacheConfig, CacheResult, SemanticCache};
 pub use ml_ranking::{
     MLRanker, RankedResult, RankingCandidate, RankingConfig, RankingFeatures, RankingModel,
     RankingPipeline, RankingStage,
 };
+pub use multilang::{AutoLangAnalyzer, Language, MultiLangAnalyzer};
+pub use rabitq::{BinaryCode, RaBitQ, RaBitQConfig, RaBitQIndex};
+pub use sql::{DataType, Row, TableSchema, VectorSQL};
+pub use streaming::{ConflictStrategy, StreamConfig, StreamingIndex, StreamingStats};
+pub use typo_tolerance::{MatchType, TypoConfig, TypoSearchResult, TypoTolerantSearch};
 
 // Export 2026 Competitive Features - Phase 3 (Market Domination)
-pub use sparse_native::{
-    HybridSparseIndex, InvertedSparseIndex, SparseVector as NativeSparseVector,
-    SpladeEncoder as NativeSpladeEncoder,
+pub use dynamic_schema::{
+    DynamicCollection, FieldDef, FieldType as DynamicFieldType, Schema as DynamicSchema,
+    SchemaBuilder, SchemaChange, SchemaEvolution,
 };
-pub use serverless::{
-    Autoscaler, ColdStartOptimizer, LoadBalancer, ReplicaInfo, ServerlessCluster, ServerlessConfig,
-    ServerlessStats,
-};
-pub use timetravel::{
-    SnapshotManager, TimeTravelIndex, TimeTravelResult, Timestamp, VersionEntry,
-    VersionHistory as TimeTravelVersionHistory,
-};
-pub use payload_index::{
-    Filter, GeoIndex as PayloadGeoIndex, GeoPoint as PayloadGeoPoint, HashIndex as PayloadHashIndex,
-    BTreeIndex as PayloadBTreeIndex, FullTextIndex, PayloadIndexManager, IndexType as PayloadIndexType,
-};
-pub use partition_keys::{
-    HashAlgorithm, Partition, PartitionConfig as PartitionKeyConfig, PartitionRouter,
-    PartitionedIndex, PartitionState,
-};
+pub use embedded_onnx::{EmbeddedStore, EmbeddingFunction, EmbeddingModel, ModelConfig, ModelType};
 pub use graphql_api::{
     GqlCollection, GqlField, GqlType, GraphQLExecutor, NearTextInput, NearVectorInput, VectorQuery,
     WhereFilter, WhereOperator,
+};
+pub use partition_keys::{
+    HashAlgorithm, Partition, PartitionConfig as PartitionKeyConfig, PartitionRouter,
+    PartitionState, PartitionedIndex,
+};
+pub use payload_index::{
+    BTreeIndex as PayloadBTreeIndex, Filter, FullTextIndex, GeoIndex as PayloadGeoIndex,
+    GeoPoint as PayloadGeoPoint, HashIndex as PayloadHashIndex, IndexType as PayloadIndexType,
+    PayloadIndexManager,
 };
 pub use recommendations::{
     RecommendRequest, RecommendResult, RecommendStrategy, RecommendationEngine,
     UserProfile as RecommendUserProfile,
 };
+pub use serverless::{
+    Autoscaler, ColdStartOptimizer, LoadBalancer, ReplicaInfo, ServerlessCluster, ServerlessConfig,
+    ServerlessStats,
+};
+pub use sparse_native::{
+    HybridSparseIndex, InvertedSparseIndex, SparseVector as NativeSparseVector,
+    SpladeEncoder as NativeSpladeEncoder,
+};
+pub use timetravel::{
+    SnapshotManager, TimeTravelIndex, TimeTravelResult, Timestamp, VersionEntry,
+    VersionHistory as TimeTravelVersionHistory,
+};
 pub use zero_copy::{
     Branch, BranchName, Commit, CommitHash, Diff, MergeResult, VersionedStore as CowVersionedStore,
 };
-pub use dynamic_schema::{
-    DynamicCollection, FieldDef, FieldType as DynamicFieldType, Schema as DynamicSchema,
-    SchemaBuilder, SchemaChange, SchemaEvolution,
-};
-pub use embedded_onnx::{
-    EmbeddedStore, EmbeddingFunction, EmbeddingModel, ModelConfig, ModelType,
-};
 
 // Export 2026 Competitive Features - Phase 4 (Market Leadership)
+pub use advanced_quant::{
+    AdaptiveQuantizer, AsymmetricQuantizer, BinaryQuantizer as AdvancedBinaryQuantizer, BitWidth,
+    FourBitQuantizer, QuantConfig, QuantParams, QuantStrategy, QuantizedIndex, QuantizedIndexStats,
+    QuantizedVector, TernaryQuantizer, TwoBitQuantizer,
+};
 pub use agentic::{
-    AgentConfig, AgentExecutor, AgentExecutionResult, AgentState, AgentStats,
+    AgentConfig, AgentExecutionResult, AgentExecutor, AgentState, AgentStats,
     DecompositionStrategy, FusedResult, FusionStrategy as AgenticFusionStrategy,
     QueryPlan as AgenticQueryPlan, QueryPlanner, SubQuery, ToolCall, ToolDefinition, ToolResult,
 };
-pub use object_store::{
-    CacheStats, CacheTier, CostEstimate, ObjectMetadata, ObjectStoreBackend, ObjectStoreConfig,
-    ObjectStoreStats, PreWarmingConfig, PreWarmStrategy, StorageProvider, StoredVector,
-    TieredStorageManager, TieredStorageStats,
+pub use change_streams::{
+    ChangeEvent, ChangeFilter, ChangeMetadata, ChangeSource, ChangeStream, ChangeStreamManager,
+    ChangeStreamStats, DocumentSnapshot, Operation, ResumeToken, Subscription,
 };
-pub use hybrid_rerank::{
-    BooleanQuery, FusionMethod, HybridConfig, HybridDocument, HybridPipeline, HybridResult,
-    HybridSearchQuery, PipelineStats, RerankerConfig, RerankerType, ScoreExplanation,
-    SignalType, SparseQueryVector,
-};
-pub use managed_embeddings::{
-    EmbeddingCollection as ManagedEmbeddingCollection, EmbeddingProvider as ManagedEmbeddingProvider, EmbeddingRequest,
-    EmbeddingResponse, EmbeddingService, EmbeddingServiceConfig,
-    ModelConfig as EmbeddingModelConfig, QueryResult as EmbeddingQueryResult, TaskType, UsageStats,
-};
-pub use advanced_quant::{
-    AdaptiveQuantizer, AsymmetricQuantizer, BinaryQuantizer as AdvancedBinaryQuantizer,
-    BitWidth, FourBitQuantizer, QuantConfig, QuantizedIndex, QuantizedIndexStats,
-    QuantizedVector, QuantParams, QuantStrategy, TernaryQuantizer, TwoBitQuantizer,
-};
-pub use multimodal_search::{
-    Modality as SearchModality, MultimodalConfig, MultimodalDocument, MultimodalIndex,
-    MultimodalQuery, MultimodalResult, MultimodalStats,
+pub use discovery::{
+    DiscoveryConfig, DiscoveryIndex, DiscoveryMode, DiscoveryQuery, DiscoveryResult,
+    DiscoveryStats, ExplorationResult, Region,
 };
 pub use enterprise_protect::{
     BackupConfig, BackupManager, BackupMetadata, BackupStats, CMEKConfig, ComplianceChecker,
     ComplianceFramework, ComplianceStatus, ComplianceSummary, EncryptedData, EncryptionManager,
     EnterpriseConfig, KMSProvider, KeyRotationResult, RetentionAction, RetentionPolicy,
 };
-pub use discovery::{
-    DiscoveryConfig, DiscoveryIndex, DiscoveryMode, DiscoveryQuery, DiscoveryResult,
-    DiscoveryStats, ExplorationResult, Region,
-};
-pub use change_streams::{
-    ChangeEvent, ChangeFilter, ChangeMetadata, ChangeSource, ChangeStream, ChangeStreamManager,
-    ChangeStreamStats, DocumentSnapshot, Operation, ResumeToken, Subscription,
-};
 pub use gpu_indexing::{
     BuildStats, GpuBackendType, GpuConfig as GpuIndexConfig, GpuDeviceInfo as GpuIndexDeviceInfo,
-    GpuDistanceMetric, GpuHnswIndex, GpuIndexBuilder, GpuIndexStats,
-    HnswParams as GpuHnswParams, MemoryPoolStats,
+    GpuDistanceMetric, GpuHnswIndex, GpuIndexBuilder, GpuIndexStats, HnswParams as GpuHnswParams,
+    MemoryPoolStats,
+};
+pub use hybrid_rerank::{
+    BooleanQuery, FusionMethod, HybridConfig, HybridDocument, HybridPipeline, HybridResult,
+    HybridSearchQuery, PipelineStats, RerankerConfig, RerankerType, ScoreExplanation, SignalType,
+    SparseQueryVector,
+};
+pub use managed_embeddings::{
+    EmbeddingCollection as ManagedEmbeddingCollection,
+    EmbeddingProvider as ManagedEmbeddingProvider, EmbeddingRequest, EmbeddingResponse,
+    EmbeddingService, EmbeddingServiceConfig, ModelConfig as EmbeddingModelConfig,
+    QueryResult as EmbeddingQueryResult, TaskType, UsageStats,
+};
+pub use multimodal_search::{
+    Modality as SearchModality, MultimodalConfig, MultimodalDocument, MultimodalIndex,
+    MultimodalQuery, MultimodalResult, MultimodalStats,
+};
+pub use object_store::{
+    CacheStats, CacheTier, CostEstimate, ObjectMetadata, ObjectStoreBackend, ObjectStoreConfig,
+    ObjectStoreStats, PreWarmStrategy, PreWarmingConfig, StorageProvider, StoredVector,
+    TieredStorageManager, TieredStorageStats,
 };
 
 // Export 2026 Competitive Features - Phase 5 (Production Readiness)
+pub use adaptive_cache::{
+    AdaptiveCache, BloomFilter, CacheConfig as AdaptiveCacheConfig, CacheEntry, CacheKeyGenerator,
+    CacheStats as AdaptiveCacheStats, CachedResult, TierStats,
+};
+pub use backpressure::{
+    BackpressureController, BackpressureState, BatchProcessor, Checkpoint, DeadLetterRecord,
+    LagMetrics, StreamConfig as BackpressureStreamConfig, StreamRecord, StreamStats,
+};
 pub use otel::{
     BatchConfig as OtelBatchConfig, ExporterType, MetricPoint as OtelMetricPoint,
     MetricType as OtelMetricType, OtelConfig, OtlpExportData, OtlpSpan, SamplingStrategy,
@@ -731,23 +739,14 @@ pub use query_explain::{
     ExecutionStats, ExplainFormat, ExplainOptions, ExplainResult, IndexStats as ExplainIndexStats,
     OptimizationSuggestion, PlanNode, PlanNodeType, QueryExplainer, SuggestionType,
 };
-pub use adaptive_cache::{
-    AdaptiveCache, BloomFilter, CacheConfig as AdaptiveCacheConfig, CacheEntry,
-    CacheKeyGenerator, CacheStats as AdaptiveCacheStats, CachedResult, TierStats,
-};
-pub use backpressure::{
-    BackpressureController, BackpressureState, BatchProcessor, Checkpoint,
-    DeadLetterRecord, LagMetrics, StreamConfig as BackpressureStreamConfig, StreamRecord,
-    StreamStats,
-};
-pub use rest_api::{
-    ApiInfo, ApiRateLimiter, HttpMethod, OpenApiGenerator, Request as RestRequest,
-    Response as RestResponse, RestConfig, Route as RestRoute, Router as RestRouter,
-};
 pub use raft_consensus::{
     AppendEntriesRequest, AppendEntriesResponse, ClusterStatus, EntryType, InstallSnapshotRequest,
     LeaderState, LogEntry, PersistentState, RaftConfig, RaftError, RaftNode, RaftState,
     SnapshotMetadata, VolatileState, VoteRequest, VoteResponse,
+};
+pub use rest_api::{
+    ApiInfo, ApiRateLimiter, HttpMethod, OpenApiGenerator, Request as RestRequest,
+    Response as RestResponse, RestConfig, Route as RestRoute, Router as RestRouter,
 };
 pub use sdk_gen::{
     FieldDef as SdkFieldDef, FieldType as SdkFieldType, Language as SdkLanguage, MethodDef,
@@ -755,6 +754,29 @@ pub use sdk_gen::{
 };
 
 // Export 2026 Competitive Features - Phase 6 (Cloud-Native Operations)
+pub use ab_testing::{
+    ABTestManager, ABTestStats, ExperimentConfig, ExperimentResults, ExperimentStatus,
+    ExperimentSummary, ExperimentType, IndexParams as ABIndexParams, Metric as ABMetric,
+    MetricSummary, MetricType as ABMetricType, RequestResult as ABRequestResult,
+    RerankingConfig as ABRerankingConfig, SearchParams as ABSearchParams, TrafficAllocation,
+    Variant, VariantAssignment, VariantComparison, VariantConfig, VariantResult,
+};
+pub use data_lineage::{
+    AccessRecord, AccessType, DerivationOperation, ImpactReport, LineageConfig, LineageRecord,
+    LineageStats, LineageTracker, QualityMetrics as LineageQualityMetrics, Transformation,
+    TransformationType, VectorId, VectorSource,
+};
+pub use federation::{
+    FederatedQuery, FederatedQueryResult, FederatedResult, Federation, FederationBuilder,
+    FederationConfig, FederationMember, FederationStatus, MemberCapabilities, MemberHealth,
+    MemberStatus, MemberType, MergeStrategy,
+};
+pub use incremental_index::{
+    BatchResult as IncrementalBatchResult, IncrementalConfig, IncrementalIndex,
+    IndexStats as IncrementalIndexStats, MergeResult as IncrementalMergeResult,
+    Operation as IncrementalOperation, RecoveryResult, SearchResult as IncrementalSearchResult,
+    SearchSource, VectorEntry, WalRecovery,
+};
 pub use k8s_operator::{
     AutoscalingConfig, BackupConfig as K8sBackupConfig, ClusterCondition, ClusterPhase,
     ConditionType, DistanceMetric as K8sDistanceMetric, HAConfig, HelmChartGenerator,
@@ -766,56 +788,41 @@ pub use k8s_operator::{
 pub use query_router::{
     CircuitState as RouterCircuitState, FilterComplexity, HealthStatus as RouterHealthStatus,
     LoadBalanceStrategy, NodeCapabilities, NodeStats, QueryCharacteristics, QueryPriority,
-    QueryRouter, ReplicaNode, RequestContext, RetryConfig, RetryHandler, RouterConfig,
-    RouterStats, RoutingDecision, RoutingReason,
-};
-pub use data_lineage::{
-    AccessRecord, AccessType, DerivationOperation, ImpactReport, LineageConfig,
-    LineageRecord, LineageStats, LineageTracker, QualityMetrics as LineageQualityMetrics,
-    Transformation, TransformationType, VectorId, VectorSource,
-};
-pub use ab_testing::{
-    ABTestManager, ABTestStats, ExperimentConfig, ExperimentResults, ExperimentStatus,
-    ExperimentSummary, ExperimentType, IndexParams as ABIndexParams, Metric as ABMetric,
-    MetricSummary, MetricType as ABMetricType, RerankingConfig as ABRerankingConfig,
-    RequestResult as ABRequestResult, SearchParams as ABSearchParams, TrafficAllocation,
-    Variant, VariantAssignment, VariantComparison, VariantConfig, VariantResult,
-};
-pub use incremental_index::{
-    BatchResult as IncrementalBatchResult, IncrementalConfig, IncrementalIndex,
-    IndexStats as IncrementalIndexStats, MergeResult as IncrementalMergeResult,
-    Operation as IncrementalOperation, RecoveryResult, SearchResult as IncrementalSearchResult,
-    SearchSource, VectorEntry, WalRecovery,
-};
-pub use federation::{
-    FederatedQuery, FederatedQueryResult, FederatedResult, Federation, FederationBuilder,
-    FederationConfig, FederationMember, FederationStatus, MemberCapabilities, MemberHealth,
-    MemberStatus, MemberType, MergeStrategy,
+    QueryRouter, ReplicaNode, RequestContext, RetryConfig, RetryHandler, RouterConfig, RouterStats,
+    RoutingDecision, RoutingReason,
 };
 
 // Phase 7 exports
-pub use neural_ranker::{
-    ActivationFn, CombinationMethod, CrossEncoder, CrossEncoderConfig, EnsembleConfig,
-    EnsembleRanker, LateInteractionConfig, LateInteractionModel, LearnedSparseConfig,
-    LearnedSparseModel, ModelType as NeuralModelType, NeuralRanker, NeuralRankerBuilder,
-    NeuralRankerConfig, RankerStatsSummary, Ranker as NeuralRankerTrait, RerankCandidate,
-    RerankResponse, RerankResult, SimilarityFn, SparseRepresentation,
-};
-pub use auto_tuning::{
-    AcquisitionFunction, AutoTuneConfig, AutoTuner as HyperparameterTuner,
-    AutoTunerBuilder as HyperparameterTunerBuilder, Constraint as TuneConstraint,
-    ConstraintType as TuneConstraintType, IndexTuningPreset, OptimizeDirection,
-    Parameter as TuneParameter, ParameterSpace, ParameterType as TuneParameterType,
-    ParameterValue, SearchStrategy, Trial, TrialState, TuneMetric, TuneResult,
-    TunerStatsSummary, WorkloadAnalyzer as TuneWorkloadAnalyzer, WorkloadConfig as TuneWorkloadConfig,
-    WorkloadRecommendation as TuneWorkloadRecommendation,
-    hnsw_parameter_space, ivf_parameter_space,
-};
 pub use anomaly_detection::{
     AnomalyConfig, AnomalyDetector as VectorAnomalyDetector,
     AnomalyDetectorBuilder as VectorAnomalyDetectorBuilder, AnomalyRecord, AnomalyType,
     BatchDetectionResult, DetectionMethod, DetectionResult, DetectionStats, DetectionSummary,
     DriftConfig, DriftDetector, DriftEvent, DriftMethod, DriftSeverity,
+};
+pub use auto_tuning::{
+    AcquisitionFunction, AutoTuneConfig, AutoTuner as HyperparameterTuner,
+    AutoTunerBuilder as HyperparameterTunerBuilder, Constraint as TuneConstraint,
+    ConstraintType as TuneConstraintType, IndexTuningPreset, OptimizeDirection,
+    Parameter as TuneParameter, ParameterSpace, ParameterType as TuneParameterType, ParameterValue,
+    SearchStrategy, Trial, TrialState, TuneMetric, TuneResult, TunerStatsSummary,
+    WorkloadAnalyzer as TuneWorkloadAnalyzer, WorkloadConfig as TuneWorkloadConfig,
+    WorkloadRecommendation as TuneWorkloadRecommendation, hnsw_parameter_space,
+    ivf_parameter_space,
+};
+pub use cost_optimizer::{
+    AutoScalerConfig, BudgetStatus, CostAnalysis, CostAwareAutoScaler,
+    CostBreakdown as CostOptimizerBreakdown, CostForecast, CostOptimizer, CostOptimizerBuilder,
+    CostOptimizerConfig, CostPeriod, CostRecommendation, CostRecord, CostTrend, EffortLevel,
+    OptimizationAction, OptimizationCategory, OptimizerStatsSummary, RecommendationStatus,
+    ResourcePricing, ResourceUsage as CostResourceUsage, RiskLevel, ScaleAction, ScalingDecision,
+    TrendDirection as CostTrendDirection,
+};
+pub use neural_ranker::{
+    ActivationFn, CombinationMethod, CrossEncoder, CrossEncoderConfig, EnsembleConfig,
+    EnsembleRanker, LateInteractionConfig, LateInteractionModel, LearnedSparseConfig,
+    LearnedSparseModel, ModelType as NeuralModelType, NeuralRanker, NeuralRankerBuilder,
+    NeuralRankerConfig, Ranker as NeuralRankerTrait, RankerStatsSummary, RerankCandidate,
+    RerankResponse, RerankResult, SimilarityFn, SparseRepresentation,
 };
 pub use query_analytics::{
     AggregateStats as AnalyticsAggregateStats, Alert as AnalyticsAlert,
@@ -827,18 +834,10 @@ pub use query_analytics::{
     RecommendationCategory, ReportConfig, ReportFormat, TimeRange, TimeSeriesPoint, TrendData,
     TrendDirection as AnalyticsTrendDirection,
 };
-pub use cost_optimizer::{
-    AutoScalerConfig, BudgetStatus, CostAnalysis, CostAwareAutoScaler,
-    CostBreakdown as CostOptimizerBreakdown, CostForecast, CostOptimizer, CostOptimizerBuilder,
-    CostOptimizerConfig, CostPeriod, CostRecommendation, CostRecord, CostTrend, EffortLevel,
-    OptimizationAction, OptimizationCategory, OptimizerStatsSummary, RecommendationStatus,
-    ResourcePricing, ResourceUsage as CostResourceUsage, RiskLevel, ScaleAction, ScalingDecision,
-    TrendDirection as CostTrendDirection,
-};
 
 /// Initialize tracing subscriber for logging
 pub fn init_tracing() {
-    use tracing_subscriber::{fmt, EnvFilter};
+    use tracing_subscriber::{EnvFilter, fmt};
 
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 

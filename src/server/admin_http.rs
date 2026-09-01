@@ -3,11 +3,11 @@
 use crate::namespace::{NamespaceQuotas, NamespaceStatus};
 use crate::namespace_manager::NamespaceManager;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -256,8 +256,8 @@ async fn update_status(
             return Err(AppError::BadRequest(format!(
                 "Invalid status: {}",
                 req.status
-            )))
-        }
+            )));
+        },
     };
 
     let manager = server.manager.write().await;

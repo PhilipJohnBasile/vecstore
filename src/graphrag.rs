@@ -31,10 +31,10 @@
 //! let results = graph_rag.query("vector database languages", 5)?;
 //! ```
 
-use std::collections::{HashMap, HashSet, VecDeque};
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// Entity in the knowledge graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,11 +187,21 @@ pub struct GraphRAGConfig {
     pub use_entity_embeddings: bool,
 }
 
-fn default_vector_weight() -> f32 { 0.7 }
-fn default_graph_weight() -> f32 { 0.3 }
-fn default_max_depth() -> usize { 2 }
-fn default_max_expansion() -> usize { 10 }
-fn default_true() -> bool { true }
+fn default_vector_weight() -> f32 {
+    0.7
+}
+fn default_graph_weight() -> f32 {
+    0.3
+}
+fn default_max_depth() -> usize {
+    2
+}
+fn default_max_expansion() -> usize {
+    10
+}
+fn default_true() -> bool {
+    true
+}
 
 impl Default for GraphRAGConfig {
     fn default() -> Self {
@@ -250,10 +260,16 @@ impl GraphRAG {
     pub fn add_relationship(&mut self, rel: Relationship) -> Result<()> {
         // Verify entities exist
         if !self.entities.contains_key(&rel.from) {
-            return Err(VecStoreError::NotFound(format!("Entity not found: {}", rel.from)));
+            return Err(VecStoreError::NotFound(format!(
+                "Entity not found: {}",
+                rel.from
+            )));
         }
         if !self.entities.contains_key(&rel.to) {
-            return Err(VecStoreError::NotFound(format!("Entity not found: {}", rel.to)));
+            return Err(VecStoreError::NotFound(format!(
+                "Entity not found: {}",
+                rel.to
+            )));
         }
 
         // Add to outgoing edges
@@ -263,10 +279,7 @@ impl GraphRAG {
             .push(rel.clone());
 
         // Add to incoming edges
-        self.incoming
-            .entry(rel.to.clone())
-            .or_default()
-            .push(rel);
+        self.incoming.entry(rel.to.clone()).or_default().push(rel);
 
         Ok(())
     }
@@ -287,7 +300,8 @@ impl GraphRAG {
             });
         }
 
-        let linked_entities: HashSet<String> = entity_ids.iter()
+        let linked_entities: HashSet<String> = entity_ids
+            .iter()
             .filter(|&&id| self.entities.contains_key(id))
             .map(|&s| s.to_string())
             .collect();
@@ -300,23 +314,22 @@ impl GraphRAG {
                 .insert(id.to_string());
         }
 
-        self.documents.insert(id.to_string(), LinkedDocument {
-            id: id.to_string(),
-            content: content.to_string(),
-            embedding,
-            linked_entities,
-            metadata,
-        });
+        self.documents.insert(
+            id.to_string(),
+            LinkedDocument {
+                id: id.to_string(),
+                content: content.to_string(),
+                embedding,
+                linked_entities,
+                metadata,
+            },
+        );
 
         Ok(())
     }
 
     /// Query with graph expansion
-    pub fn query(
-        &self,
-        query_embedding: &[f32],
-        limit: usize,
-    ) -> Result<Vec<GraphRAGResult>> {
+    pub fn query(&self, query_embedding: &[f32], limit: usize) -> Result<Vec<GraphRAGResult>> {
         if query_embedding.len() != self.dimension {
             return Err(VecStoreError::DimensionMismatch {
                 expected: self.dimension,
@@ -335,7 +348,8 @@ impl GraphRAG {
         let expanded_entities = self.expand_entities(&relevant_entities);
 
         // Step 3: Find documents linked to expanded entities
-        let entity_docs: HashSet<&String> = expanded_entities.iter()
+        let entity_docs: HashSet<&String> = expanded_entities
+            .iter()
             .filter_map(|e| self.entity_documents.get(&e.id))
             .flatten()
             .collect();
@@ -348,7 +362,9 @@ impl GraphRAG {
 
             // Calculate graph score based on entity overlap
             let graph_score = if entity_docs.contains(doc_id) {
-                let overlap = doc.linked_entities.iter()
+                let overlap = doc
+                    .linked_entities
+                    .iter()
                     .filter(|e| expanded_entities.iter().any(|exp| exp.id == **e))
                     .count();
                 overlap as f32 / doc.linked_entities.len().max(1) as f32
@@ -356,16 +372,19 @@ impl GraphRAG {
                 0.0
             };
 
-            let combined_score = self.config.vector_weight * vector_score
-                + self.config.graph_weight * graph_score;
+            let combined_score =
+                self.config.vector_weight * vector_score + self.config.graph_weight * graph_score;
 
             // Get linked entities
-            let linked: Vec<Entity> = doc.linked_entities.iter()
+            let linked: Vec<Entity> = doc
+                .linked_entities
+                .iter()
                 .filter_map(|id| self.entities.get(id).cloned())
                 .collect();
 
             // Get related entities (from expansion, not directly linked)
-            let related: Vec<Entity> = expanded_entities.iter()
+            let related: Vec<Entity> = expanded_entities
+                .iter()
                 .filter(|e| !doc.linked_entities.contains(&e.id))
                 .cloned()
                 .collect();
@@ -394,16 +413,19 @@ impl GraphRAG {
 
     /// Find entities similar to query embedding
     fn find_relevant_entities(&self, query: &[f32], limit: usize) -> Vec<Entity> {
-        let mut scored: Vec<(f32, &Entity)> = self.entities.values()
+        let mut scored: Vec<(f32, &Entity)> = self
+            .entities
+            .values()
             .filter_map(|e| {
-                e.embedding.as_ref().map(|emb| {
-                    (Self::cosine_similarity(query, emb), e)
-                })
+                e.embedding
+                    .as_ref()
+                    .map(|emb| (Self::cosine_similarity(query, emb), e))
             })
             .collect();
 
         scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
-        scored.into_iter()
+        scored
+            .into_iter()
             .take(limit)
             .map(|(_, e)| e.clone())
             .collect()
@@ -436,10 +458,11 @@ impl GraphRAG {
             if let Some(rels) = self.outgoing.get(&entity_id) {
                 for rel in rels {
                     if visited.insert(rel.to.clone())
-                        && let Some(entity) = self.entities.get(&rel.to) {
-                            result.push(entity.clone());
-                            queue.push_back((rel.to.clone(), depth + 1));
-                        }
+                        && let Some(entity) = self.entities.get(&rel.to)
+                    {
+                        result.push(entity.clone());
+                        queue.push_back((rel.to.clone(), depth + 1));
+                    }
                 }
             }
 
@@ -447,10 +470,11 @@ impl GraphRAG {
             if let Some(rels) = self.incoming.get(&entity_id) {
                 for rel in rels {
                     if visited.insert(rel.from.clone())
-                        && let Some(entity) = self.entities.get(&rel.from) {
-                            result.push(entity.clone());
-                            queue.push_back((rel.from.clone(), depth + 1));
-                        }
+                        && let Some(entity) = self.entities.get(&rel.from)
+                    {
+                        result.push(entity.clone());
+                        queue.push_back((rel.from.clone(), depth + 1));
+                    }
                 }
             }
         }
@@ -495,21 +519,24 @@ impl GraphRAG {
 
     /// Get all entities of a type
     pub fn get_entities_by_type(&self, entity_type: &str) -> Vec<&Entity> {
-        self.entities.values()
+        self.entities
+            .values()
             .filter(|e| e.entity_type == entity_type)
             .collect()
     }
 
     /// Get relationships from an entity
     pub fn get_outgoing(&self, entity_id: &str) -> Vec<&Relationship> {
-        self.outgoing.get(entity_id)
+        self.outgoing
+            .get(entity_id)
             .map(|rels| rels.iter().collect())
             .unwrap_or_default()
     }
 
     /// Get relationships to an entity
     pub fn get_incoming(&self, entity_id: &str) -> Vec<&Relationship> {
-        self.incoming.get(entity_id)
+        self.incoming
+            .get(entity_id)
             .map(|rels| rels.iter().collect())
             .unwrap_or_default()
     }
@@ -541,7 +568,9 @@ mod tests {
         let mut graph = GraphRAG::new(64).unwrap();
 
         graph.add_entity(Entity::new("rust", "Language")).unwrap();
-        graph.add_entity(Entity::new("vecstore", "Database")).unwrap();
+        graph
+            .add_entity(Entity::new("vecstore", "Database"))
+            .unwrap();
 
         assert!(graph.get_entity("rust").is_some());
         assert!(graph.get_entity("vecstore").is_some());
@@ -552,11 +581,13 @@ mod tests {
         let mut graph = GraphRAG::new(64).unwrap();
 
         graph.add_entity(Entity::new("rust", "Language")).unwrap();
-        graph.add_entity(Entity::new("vecstore", "Database")).unwrap();
+        graph
+            .add_entity(Entity::new("vecstore", "Database"))
+            .unwrap();
 
-        graph.add_relationship(
-            Relationship::new("vecstore", "rust", "written_in")
-        ).unwrap();
+        graph
+            .add_relationship(Relationship::new("vecstore", "rust", "written_in"))
+            .unwrap();
 
         let outgoing = graph.get_outgoing("vecstore");
         assert_eq!(outgoing.len(), 1);
@@ -568,16 +599,20 @@ mod tests {
         let mut graph = GraphRAG::new(64).unwrap();
 
         graph.add_entity(Entity::new("rust", "Language")).unwrap();
-        graph.add_entity(Entity::new("vecstore", "Database")).unwrap();
+        graph
+            .add_entity(Entity::new("vecstore", "Database"))
+            .unwrap();
 
         let embedding = vec![0.1f32; 64];
-        graph.add_document(
-            "doc1",
-            "VecStore is written in Rust",
-            embedding.clone(),
-            &["rust", "vecstore"],
-            None,
-        ).unwrap();
+        graph
+            .add_document(
+                "doc1",
+                "VecStore is written in Rust",
+                embedding.clone(),
+                &["rust", "vecstore"],
+                None,
+            )
+            .unwrap();
 
         let results = graph.query(&embedding, 5).unwrap();
         assert_eq!(results.len(), 1);

@@ -53,8 +53,8 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// DiskANN configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,10 +163,8 @@ impl PQQuantizer {
             let end = start + self.subvector_dim;
 
             // Extract subvectors
-            let subvectors: Vec<Vec<f32>> = vectors
-                .iter()
-                .map(|v| v[start..end].to_vec())
-                .collect();
+            let subvectors: Vec<Vec<f32>> =
+                vectors.iter().map(|v| v[start..end].to_vec()).collect();
 
             // K-means clustering
             let centroids = self.kmeans(&subvectors, self.num_centroids, iterations)?;
@@ -527,7 +525,8 @@ impl DiskANN {
             let node_vec = &vectors[node_idx];
 
             // Greedy search to find candidates
-            let candidates = self.greedy_search_build(vectors, node_vec, self.config.build_beam_width)?;
+            let candidates =
+                self.greedy_search_build(vectors, node_vec, self.config.build_beam_width)?;
 
             // RobustPrune to select neighbors
             let neighbors = self.robust_prune(vectors, node_id, &candidates)?;
@@ -549,8 +548,8 @@ impl DiskANN {
 
                 // Prune if over max degree (done outside the mutable borrow)
                 if needs_prune {
-                    let candidates: Vec<u64> = self.graph.get(&neighbor_id).cloned()
-                        .unwrap_or_default();
+                    let candidates: Vec<u64> =
+                        self.graph.get(&neighbor_id).cloned().unwrap_or_default();
                     let pruned = self.robust_prune(vectors, neighbor_id, &candidates)?;
                     self.graph.insert(neighbor_id, pruned);
                 }
@@ -587,9 +586,11 @@ impl DiskANN {
         while let Some(current) = candidates.pop() {
             // Check if we can stop
             if let Some(std::cmp::Reverse(worst)) = results.peek()
-                && current.distance > worst.distance && results.len() >= beam_width {
-                    break;
-                }
+                && current.distance > worst.distance
+                && results.len() >= beam_width
+            {
+                break;
+            }
 
             // Explore neighbors
             if let Some(neighbors) = self.graph.get(&current.id) {
@@ -674,7 +675,12 @@ impl DiskANN {
 
     /// Search for k nearest neighbors
     #[inline]
-    pub fn search(&self, query: &[f32], k: usize, beam_width: Option<usize>) -> Result<Vec<DiskANNResult>> {
+    pub fn search(
+        &self,
+        query: &[f32],
+        k: usize,
+        beam_width: Option<usize>,
+    ) -> Result<Vec<DiskANNResult>> {
         self.stats.total_searches.fetch_add(1, Ordering::Relaxed);
 
         let beam = beam_width.unwrap_or(self.config.search_beam_width);
@@ -713,15 +719,19 @@ impl DiskANN {
 
             // Check stopping condition
             if let Some(std::cmp::Reverse(worst)) = results.peek()
-                && current.distance > worst.distance && results.len() >= beam {
-                    continue;
-                }
+                && current.distance > worst.distance
+                && results.len() >= beam
+            {
+                continue;
+            }
 
             // Explore neighbors using PQ distances
             if let Some(neighbors) = self.graph.get(&current.id) {
                 for &neighbor_id in neighbors {
                     if visited.insert(neighbor_id) {
-                        self.stats.distance_computations.fetch_add(1, Ordering::Relaxed);
+                        self.stats
+                            .distance_computations
+                            .fetch_add(1, Ordering::Relaxed);
 
                         let dist = if let Some(codes) = self.pq_codes.get(&neighbor_id) {
                             self.quantizer.table_distance(&pq_table, codes)
@@ -1099,6 +1109,10 @@ mod tests {
 
         let recall = correct as f64 / (test_count * 10) as f64;
         println!("Recall@10: {:.2}%", recall * 100.0);
-        assert!(recall > 0.70, "Recall should be > 70%, got {:.2}%", recall * 100.0);
+        assert!(
+            recall > 0.70,
+            "Recall should be > 70%, got {:.2}%",
+            recall * 100.0
+        );
     }
 }

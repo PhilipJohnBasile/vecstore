@@ -27,7 +27,10 @@
 //! ```
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{RwLock, atomic::{AtomicU64, AtomicBool, Ordering}};
+use std::sync::{
+    RwLock,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -192,8 +195,7 @@ pub struct InstallSnapshotRequest {
 }
 
 /// Persistent state (must be saved to stable storage)
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct PersistentState {
     /// Current term
     pub current_term: u64,
@@ -205,17 +207,14 @@ pub struct PersistentState {
     pub snapshot_metadata: Option<SnapshotMetadata>,
 }
 
-
 /// Volatile state (rebuilt after restart)
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct VolatileState {
     /// Index of highest log entry known to be committed
     pub commit_index: u64,
     /// Index of highest log entry applied to state machine
     pub last_applied: u64,
 }
-
 
 /// Leader-specific volatile state
 #[derive(Debug, Clone)]
@@ -312,31 +311,41 @@ impl RaftNode {
     where
         F: Fn(&[u8]) -> Vec<u8> + Send + Sync + 'static,
     {
-        let Ok(mut guard) = self.apply_callback.write() else { return; };
+        let Ok(mut guard) = self.apply_callback.write() else {
+            return;
+        };
         *guard = Some(Box::new(callback));
     }
 
     /// Get current term
     pub fn current_term(&self) -> u64 {
-        let Ok(guard) = self.persistent.read() else { return 0; };
+        let Ok(guard) = self.persistent.read() else {
+            return 0;
+        };
         guard.current_term
     }
 
     /// Get current state
     pub fn current_state(&self) -> RaftState {
-        let Ok(guard) = self.state.read() else { return RaftState::Follower; };
+        let Ok(guard) = self.state.read() else {
+            return RaftState::Follower;
+        };
         *guard
     }
 
     /// Get leader ID
     pub fn leader(&self) -> Option<String> {
-        let Ok(guard) = self.leader_id.read() else { return None; };
+        let Ok(guard) = self.leader_id.read() else {
+            return None;
+        };
         guard.clone()
     }
 
     /// Check if this node is leader
     pub fn is_leader(&self) -> bool {
-        let Ok(guard) = self.state.read() else { return false; };
+        let Ok(guard) = self.state.read() else {
+            return false;
+        };
         *guard == RaftState::Leader
     }
 
@@ -349,7 +358,9 @@ impl RaftNode {
         }
 
         let (index, term) = {
-            let mut persistent = self.persistent.write()
+            let mut persistent = self
+                .persistent
+                .write()
                 .map_err(|_| RaftError::LockError("persistent state write lock".into()))?;
             let index = persistent.log.last().map(|e| e.index).unwrap_or(0) + 1;
             let term = persistent.current_term;
@@ -368,14 +379,15 @@ impl RaftNode {
 
         // Add to pending
         if let Ok(mut leader_guard) = self.leader_state.write()
-            && let Some(ref mut leader_state) = *leader_guard {
-                leader_state.pending.push_back(PendingProposal {
-                    index,
-                    term,
-                    data,
-                    proposed_at: Instant::now(),
-                });
-            }
+            && let Some(ref mut leader_state) = *leader_guard
+        {
+            leader_state.pending.push_back(PendingProposal {
+                index,
+                term,
+                data,
+                proposed_at: Instant::now(),
+            });
+        }
 
         self.proposals.fetch_add(1, Ordering::Relaxed);
         Ok(index)
@@ -384,7 +396,10 @@ impl RaftNode {
     /// Handle vote request
     pub fn handle_vote_request(&self, request: VoteRequest) -> VoteResponse {
         let Ok(mut persistent) = self.persistent.write() else {
-            return VoteResponse { term: 0, vote_granted: false };
+            return VoteResponse {
+                term: 0,
+                vote_granted: false,
+            };
         };
 
         // Update term if necessary
@@ -392,7 +407,10 @@ impl RaftNode {
             persistent.current_term = request.term;
             persistent.voted_for = None;
             let Ok(mut state_guard) = self.state.write() else {
-                return VoteResponse { term: persistent.current_term, vote_granted: false };
+                return VoteResponse {
+                    term: persistent.current_term,
+                    vote_granted: false,
+                };
             };
             *state_guard = RaftState::Follower;
         }
@@ -415,13 +433,15 @@ impl RaftNode {
         let last_log_index = last_log.map(|e| e.index).unwrap_or(0);
 
         let log_ok = request.last_log_term > last_log_term
-            || (request.last_log_term == last_log_term
-                && request.last_log_index >= last_log_index);
+            || (request.last_log_term == last_log_term && request.last_log_index >= last_log_index);
 
         if can_vote && log_ok {
             persistent.voted_for = Some(request.candidate_id);
             let Ok(mut heartbeat_guard) = self.last_heartbeat.write() else {
-                return VoteResponse { term: persistent.current_term, vote_granted: false };
+                return VoteResponse {
+                    term: persistent.current_term,
+                    vote_granted: false,
+                };
             };
             *heartbeat_guard = Instant::now();
 
@@ -505,14 +525,18 @@ impl RaftNode {
 
         // Check if log contains entry at prev_log_index with prev_log_term
         if request.prev_log_index > 0 {
-            let prev_entry = persistent.log.iter()
+            let prev_entry = persistent
+                .log
+                .iter()
                 .find(|e| e.index == request.prev_log_index);
 
             match prev_entry {
                 Some(entry) if entry.term != request.prev_log_term => {
                     // Conflict - delete this entry and all that follow
                     let conflict_term = entry.term;
-                    let conflict_index = persistent.log.iter()
+                    let conflict_index = persistent
+                        .log
+                        .iter()
                         .find(|e| e.term == conflict_term)
                         .map(|e| e.index)
                         .unwrap_or(1);
@@ -526,7 +550,7 @@ impl RaftNode {
                         conflict_term: Some(conflict_term),
                         conflict_index: Some(conflict_index),
                     };
-                }
+                },
                 None if request.prev_log_index > 0 => {
                     // Missing entries
                     return AppendEntriesResponse {
@@ -536,8 +560,8 @@ impl RaftNode {
                         conflict_term: None,
                         conflict_index: Some(persistent.log.len() as u64 + 1),
                     };
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
 
@@ -578,46 +602,61 @@ impl RaftNode {
 
     /// Start election
     pub fn start_election(&self) {
-        let Ok(mut persistent) = self.persistent.write() else { return; };
+        let Ok(mut persistent) = self.persistent.write() else {
+            return;
+        };
         persistent.current_term += 1;
         persistent.voted_for = Some(self.config.node_id.clone());
 
-        let Ok(mut state_guard) = self.state.write() else { return; };
+        let Ok(mut state_guard) = self.state.write() else {
+            return;
+        };
         *state_guard = RaftState::Candidate;
         drop(state_guard);
 
-        let Ok(mut timeout_guard) = self.election_timeout.write() else { return; };
+        let Ok(mut timeout_guard) = self.election_timeout.write() else {
+            return;
+        };
         *timeout_guard = Self::random_election_timeout(&self.config);
         drop(timeout_guard);
 
-        let Ok(mut heartbeat_guard) = self.last_heartbeat.write() else { return; };
+        let Ok(mut heartbeat_guard) = self.last_heartbeat.write() else {
+            return;
+        };
         *heartbeat_guard = Instant::now();
     }
 
     /// Become leader
     pub fn become_leader(&self) {
-        let Ok(mut state_guard) = self.state.write() else { return; };
+        let Ok(mut state_guard) = self.state.write() else {
+            return;
+        };
         *state_guard = RaftState::Leader;
         drop(state_guard);
 
-        let Ok(mut leader_guard) = self.leader_id.write() else { return; };
+        let Ok(mut leader_guard) = self.leader_id.write() else {
+            return;
+        };
         *leader_guard = Some(self.config.node_id.clone());
         drop(leader_guard);
 
         let last_log_index = {
-            let Ok(persistent_guard) = self.persistent.read() else { return; };
+            let Ok(persistent_guard) = self.persistent.read() else {
+                return;
+            };
             persistent_guard.log.last().map(|e| e.index).unwrap_or(0)
         };
 
-        let Ok(mut leader_state_guard) = self.leader_state.write() else { return; };
-        *leader_state_guard = Some(LeaderState::new(
-            &self.config.members,
-            last_log_index,
-        ));
+        let Ok(mut leader_state_guard) = self.leader_state.write() else {
+            return;
+        };
+        *leader_state_guard = Some(LeaderState::new(&self.config.members, last_log_index));
         drop(leader_state_guard);
 
         // Append no-op entry to establish leadership
-        let Ok(mut persistent) = self.persistent.write() else { return; };
+        let Ok(mut persistent) = self.persistent.write() else {
+            return;
+        };
         let index = last_log_index + 1;
         let current_term = persistent.current_term;
         persistent.log.push(LogEntry {
@@ -631,18 +670,24 @@ impl RaftNode {
 
     /// Step down to follower
     pub fn step_down(&self, term: u64) {
-        let Ok(mut persistent) = self.persistent.write() else { return; };
+        let Ok(mut persistent) = self.persistent.write() else {
+            return;
+        };
         if term > persistent.current_term {
             persistent.current_term = term;
             persistent.voted_for = None;
         }
         drop(persistent);
 
-        let Ok(mut state_guard) = self.state.write() else { return; };
+        let Ok(mut state_guard) = self.state.write() else {
+            return;
+        };
         *state_guard = RaftState::Follower;
         drop(state_guard);
 
-        let Ok(mut leader_state_guard) = self.leader_state.write() else { return; };
+        let Ok(mut leader_state_guard) = self.leader_state.write() else {
+            return;
+        };
         *leader_state_guard = None;
     }
 
@@ -661,13 +706,21 @@ impl RaftNode {
             commits: self.commits.load(Ordering::Relaxed),
         };
 
-        let Ok(state_guard) = self.state.read() else { return default_status; };
+        let Ok(state_guard) = self.state.read() else {
+            return default_status;
+        };
         let state = *state_guard;
         drop(state_guard);
 
-        let Ok(persistent) = self.persistent.read() else { return default_status; };
-        let Ok(volatile) = self.volatile.read() else { return default_status; };
-        let Ok(leader_guard) = self.leader_id.read() else { return default_status; };
+        let Ok(persistent) = self.persistent.read() else {
+            return default_status;
+        };
+        let Ok(volatile) = self.volatile.read() else {
+            return default_status;
+        };
+        let Ok(leader_guard) = self.leader_id.read() else {
+            return default_status;
+        };
 
         ClusterStatus {
             node_id: self.config.node_id.clone(),
@@ -685,11 +738,15 @@ impl RaftNode {
 
     /// Check if election timeout elapsed
     pub fn election_timeout_elapsed(&self) -> bool {
-        let Ok(timeout_guard) = self.election_timeout.read() else { return false; };
+        let Ok(timeout_guard) = self.election_timeout.read() else {
+            return false;
+        };
         let timeout = *timeout_guard;
         drop(timeout_guard);
 
-        let Ok(heartbeat_guard) = self.last_heartbeat.read() else { return false; };
+        let Ok(heartbeat_guard) = self.last_heartbeat.read() else {
+            return false;
+        };
         heartbeat_guard.elapsed() > timeout
     }
 
@@ -697,15 +754,21 @@ impl RaftNode {
         while volatile.last_applied < volatile.commit_index {
             volatile.last_applied += 1;
 
-            if let Some(entry) = persistent.log.iter().find(|e| e.index == volatile.last_applied)
-                && entry.entry_type == EntryType::Command {
-                    let Ok(callback_guard) = self.apply_callback.read() else { continue; };
-                    if let Some(ref callback) = *callback_guard {
-                        callback(&entry.data);
-                    }
-                    drop(callback_guard);
-                    self.commits.fetch_add(1, Ordering::Relaxed);
+            if let Some(entry) = persistent
+                .log
+                .iter()
+                .find(|e| e.index == volatile.last_applied)
+                && entry.entry_type == EntryType::Command
+            {
+                let Ok(callback_guard) = self.apply_callback.read() else {
+                    continue;
+                };
+                if let Some(ref callback) = *callback_guard {
+                    callback(&entry.data);
                 }
+                drop(callback_guard);
+                self.commits.fetch_add(1, Ordering::Relaxed);
+            }
         }
     }
 
@@ -716,7 +779,8 @@ impl RaftNode {
         let random = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
-            .subsec_nanos() as u64 % range;
+            .subsec_nanos() as u64
+            % range;
 
         Duration::from_millis(config.election_timeout.0 + random)
     }

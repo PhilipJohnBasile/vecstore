@@ -12,7 +12,7 @@ pub fn evaluate_filter(filter: &FilterExpr, metadata: &Metadata) -> bool {
                 Some(fv) => evaluate_comparison(fv, op, value),
                 None => false,
             }
-        }
+        },
     }
 }
 
@@ -31,28 +31,28 @@ fn evaluate_comparison(field_value: &Value, op: &FilterOp, target: &Value) -> bo
                 (Value::Array(arr), val) => arr.contains(val),
                 _ => false,
             }
-        }
+        },
         FilterOp::In => {
             // Check if field_value is in the target array
             match target {
                 Value::Array(arr) => arr.iter().any(|v| values_equal(field_value, v)),
                 _ => false,
             }
-        }
+        },
         FilterOp::NotIn => {
             // Check if field_value is NOT in the target array
             match target {
                 Value::Array(arr) => !arr.iter().any(|v| values_equal(field_value, v)),
                 _ => true, // If target is not an array, field is "not in" it
             }
-        }
+        },
         FilterOp::StartsWith => {
             // Check if string field starts with prefix (Major Issue #13 fix)
             match (field_value, target) {
                 (Value::String(s), Value::String(prefix)) => s.starts_with(prefix.as_str()),
                 _ => false,
             }
-        }
+        },
     }
 }
 

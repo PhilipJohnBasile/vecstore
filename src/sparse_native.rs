@@ -38,10 +38,10 @@
 //! )?;
 //! ```
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // SPARSE VECTOR
@@ -71,7 +71,8 @@ impl SparseVector {
     /// Create from dense vector (keeping non-zero elements)
     #[inline]
     pub fn from_dense(dense: &[f32], threshold: f32) -> Self {
-        let pairs: Vec<(u32, f32)> = dense.iter()
+        let pairs: Vec<(u32, f32)> = dense
+            .iter()
             .enumerate()
             .filter(|(_, v)| v.abs() > threshold)
             .map(|(i, v)| (i as u32, *v))
@@ -356,7 +357,7 @@ impl HybridSparseIndex {
                 if d.len() != dim {
                     return Err(VecStoreError::DimensionMismatch {
                         expected: dim,
-                        got: d.len()
+                        got: d.len(),
                     });
                 }
             } else {
@@ -414,7 +415,8 @@ impl HybridSparseIndex {
     /// Sparse-only search
     #[inline]
     pub fn sparse_search(&self, query: &SparseVector, top_k: usize) -> Vec<SparseSearchResult> {
-        self.sparse_index.search(query, top_k)
+        self.sparse_index
+            .search(query, top_k)
             .into_iter()
             .filter_map(|(doc_id, score)| {
                 self.idx_to_id.get(&doc_id).map(|id| SparseSearchResult {
@@ -430,7 +432,9 @@ impl HybridSparseIndex {
     /// Dense-only search (brute force)
     #[inline]
     pub fn dense_search(&self, query: &[f32], top_k: usize) -> Vec<SparseSearchResult> {
-        let mut results: Vec<_> = self.dense_vectors.iter()
+        let mut results: Vec<_> = self
+            .dense_vectors
+            .iter()
             .map(|(&doc_id, vec)| {
                 let score = cosine_similarity(query, vec);
                 (doc_id, score)
@@ -440,7 +444,8 @@ impl HybridSparseIndex {
         results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
-        results.into_iter()
+        results
+            .into_iter()
             .filter_map(|(doc_id, score)| {
                 self.idx_to_id.get(&doc_id).map(|id| SparseSearchResult {
                     id: id.clone(),
@@ -460,7 +465,7 @@ impl HybridSparseIndex {
         &self,
         sparse_query: Option<&SparseVector>,
         dense_query: Option<&[f32]>,
-        alpha: f32,  // Weight for dense (0.0 = all sparse, 1.0 = all dense)
+        alpha: f32, // Weight for dense (0.0 = all sparse, 1.0 = all dense)
         top_k: usize,
     ) -> Vec<SparseSearchResult> {
         let mut scores: HashMap<u32, (Option<f32>, Option<f32>)> = HashMap::new();
@@ -481,16 +486,25 @@ impl HybridSparseIndex {
         }
 
         // Normalize and combine
-        let max_sparse = scores.values()
+        let max_sparse = scores
+            .values()
             .filter_map(|(s, _)| *s)
             .fold(0.0f32, |a, b| a.max(b));
-        let max_dense = scores.values()
+        let max_dense = scores
+            .values()
             .filter_map(|(_, d)| *d)
             .fold(0.0f32, |a, b| a.max(b));
 
-        let mut results: Vec<_> = scores.into_iter()
+        let mut results: Vec<_> = scores
+            .into_iter()
             .map(|(doc_id, (sparse, dense))| {
-                let norm_sparse = sparse.map(|s| if max_sparse > 0.0 { s / max_sparse } else { 0.0 });
+                let norm_sparse = sparse.map(|s| {
+                    if max_sparse > 0.0 {
+                        s / max_sparse
+                    } else {
+                        0.0
+                    }
+                });
                 let norm_dense = dense.map(|d| if max_dense > 0.0 { d / max_dense } else { 0.0 });
 
                 let final_score = match (norm_sparse, norm_dense) {
@@ -507,7 +521,8 @@ impl HybridSparseIndex {
         results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
-        results.into_iter()
+        results
+            .into_iter()
             .filter_map(|(doc_id, score, sparse, dense)| {
                 self.idx_to_id.get(&doc_id).map(|id| SparseSearchResult {
                     id: id.clone(),
@@ -588,15 +603,14 @@ impl SpladeEncoder {
     pub fn new(config: SpladeConfig) -> Result<Self> {
         // Initialize stopwords
         let stopwords: std::collections::HashSet<String> = [
-            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for",
-            "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-            "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
-            "used", "it", "its", "this", "that", "these", "those", "i", "you", "he",
-            "she", "we", "they", "what", "which", "who", "whom", "whose", "where",
-            "when", "why", "how", "all", "each", "every", "both", "few", "more",
-            "most", "other", "some", "such", "no", "nor", "not", "only", "own",
-            "same", "so", "than", "too", "very", "just", "also", "now", "here",
+            "the", "a", "an", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+            "by", "from", "as", "is", "was", "are", "were", "been", "be", "have", "has", "had",
+            "do", "does", "did", "will", "would", "could", "should", "may", "might", "must",
+            "shall", "can", "need", "dare", "ought", "used", "it", "its", "this", "that", "these",
+            "those", "i", "you", "he", "she", "we", "they", "what", "which", "who", "whom",
+            "whose", "where", "when", "why", "how", "all", "each", "every", "both", "few", "more",
+            "most", "other", "some", "such", "no", "nor", "not", "only", "own", "same", "so",
+            "than", "too", "very", "just", "also", "now", "here",
         ]
         .iter()
         .map(|s| s.to_string())
@@ -727,8 +741,12 @@ mod tests {
         let sparse2 = SparseVector::new(vec![(2, 0.7), (3, 0.6)]);
         let dense2 = vec![0.5, 0.6, 0.7, 0.8];
 
-        index.upsert("doc1", Some(sparse1), Some(dense1), None).unwrap();
-        index.upsert("doc2", Some(sparse2), Some(dense2), None).unwrap();
+        index
+            .upsert("doc1", Some(sparse1), Some(dense1), None)
+            .unwrap();
+        index
+            .upsert("doc2", Some(sparse2), Some(dense2), None)
+            .unwrap();
 
         // Hybrid search
         let query_sparse = SparseVector::new(vec![(1, 1.0), (2, 0.5)]);
@@ -737,7 +755,7 @@ mod tests {
         let results = index.hybrid_search(
             Some(&query_sparse),
             Some(&query_dense),
-            0.5,  // Equal weight
+            0.5, // Equal weight
             10,
         );
 

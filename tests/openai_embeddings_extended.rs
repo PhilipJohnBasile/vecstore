@@ -7,8 +7,8 @@
 
 #[cfg(feature = "openai-embeddings")]
 mod extended_tests {
-    use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
     use vecstore::embeddings::TextEmbedder;
+    use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
 
     // ========================================================================
     // Empty Input Edge Cases

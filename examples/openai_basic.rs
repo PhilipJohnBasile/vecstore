@@ -34,7 +34,7 @@ async fn main() -> Result<()> {
             eprintln!("\nPlease set your OpenAI API key:");
             eprintln!("  export OPENAI_API_KEY='your-api-key-here'\n");
             std::process::exit(1);
-        }
+        },
     };
 
     println!("✓ API key found\n");

@@ -37,12 +37,12 @@
 //! collection.search_with_filter(&query, "score > 0.9")?;
 //! ```
 
-use std::collections::HashMap;
-use std::sync::RwLock;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
+use std::collections::HashMap;
+use std::sync::RwLock;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // FIELD TYPES
@@ -83,7 +83,7 @@ impl FieldType {
                 } else {
                     FieldType::Float64
                 }
-            }
+            },
             JsonValue::String(_) => FieldType::String,
             JsonValue::Array(arr) => {
                 if arr.is_empty() {
@@ -94,7 +94,7 @@ impl FieldType {
                     let elem_type = FieldType::infer(&arr[0]);
                     FieldType::Array(Box::new(elem_type))
                 }
-            }
+            },
             JsonValue::Object(_) => FieldType::Object,
         }
     }
@@ -111,7 +111,7 @@ impl FieldType {
             (FieldType::Array(_), JsonValue::Array(_)) => true,
             (FieldType::Vector(dim), JsonValue::Array(arr)) => {
                 arr.len() == *dim && arr.iter().all(|v| v.is_f64())
-            }
+            },
             (FieldType::Timestamp, JsonValue::Number(_)) => true,
             (FieldType::Timestamp, JsonValue::String(_)) => true,
             _ => false,
@@ -230,7 +230,9 @@ impl Schema {
 
             Ok(())
         } else {
-            Err(VecStoreError::InvalidInput("Document must be an object".to_string()))
+            Err(VecStoreError::InvalidInput(
+                "Document must be an object".to_string(),
+            ))
         }
     }
 
@@ -268,7 +270,8 @@ impl SchemaBuilder {
 
     #[inline]
     pub fn add_field(mut self, name: &str, field_type: FieldType) -> Self {
-        self.fields.insert(name.to_string(), FieldDef::new(name, field_type));
+        self.fields
+            .insert(name.to_string(), FieldDef::new(name, field_type));
         self
     }
 
@@ -371,7 +374,9 @@ impl SchemaEvolution {
     /// Apply a schema change
     pub fn apply(&mut self, change: SchemaChange) -> Result<Schema> {
         let current_version = *self.versions.keys().max().unwrap_or(&0);
-        let mut new_schema = self.versions.get(&current_version)
+        let mut new_schema = self
+            .versions
+            .get(&current_version)
             .ok_or_else(|| VecStoreError::Internal("No current schema".to_string()))?
             .clone();
 
@@ -384,7 +389,7 @@ impl SchemaEvolution {
                     )));
                 }
                 new_schema.fields.insert(field.name.clone(), field.clone());
-            }
+            },
             SchemaChange::FieldRemoved { name } => {
                 if !new_schema.fields.contains_key(name) {
                     return Err(VecStoreError::InvalidInput(format!(
@@ -393,7 +398,7 @@ impl SchemaEvolution {
                     )));
                 }
                 new_schema.fields.remove(name);
-            }
+            },
             SchemaChange::FieldTypeChanged { name, from, to } => {
                 if let Some(field) = new_schema.fields.get_mut(name) {
                     if field.field_type != *from {
@@ -410,27 +415,27 @@ impl SchemaEvolution {
                     }
                     field.field_type = to.clone();
                 }
-            }
+            },
             SchemaChange::FieldNullable { name } => {
                 if let Some(field) = new_schema.fields.get_mut(name) {
                     field.nullable = true;
                 }
-            }
+            },
             SchemaChange::FieldRequired { name } => {
                 if let Some(field) = new_schema.fields.get_mut(name) {
                     field.nullable = false;
                 }
-            }
+            },
             SchemaChange::IndexAdded { field } => {
                 if let Some(f) = new_schema.fields.get_mut(field) {
                     f.indexed = true;
                 }
-            }
+            },
             SchemaChange::IndexRemoved { field } => {
                 if let Some(f) = new_schema.fields.get_mut(field) {
                     f.indexed = false;
                 }
-            }
+            },
         }
 
         new_schema.version = current_version + 1;
@@ -488,14 +493,18 @@ impl DynamicCollection {
     pub fn insert(&self, doc: JsonValue) -> Result<String> {
         // Validate against schema
         {
-            let schema = self.schema.read()
+            let schema = self
+                .schema
+                .read()
                 .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             schema.validate(&doc)?;
         }
 
         // Extract ID
         let id = {
-            let schema = self.schema.read()
+            let schema = self
+                .schema
+                .read()
                 .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             doc.get(&schema.primary_key)
                 .and_then(|v| v.as_str())
@@ -505,22 +514,29 @@ impl DynamicCollection {
 
         // Extract vector
         let vector = {
-            let schema = self.schema.read()
+            let schema = self
+                .schema
+                .read()
                 .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
             schema.extract_vector(&doc)
         };
 
         // Discover dynamic fields
         if let JsonValue::Object(map) = &doc {
-            let schema = self.schema.read()
+            let schema = self
+                .schema
+                .read()
                 .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))?;
-            let mut dynamic = self.dynamic_fields.write()
+            let mut dynamic = self
+                .dynamic_fields
+                .write()
                 .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?;
 
             for (key, value) in map {
                 if !schema.fields.contains_key(key) {
                     let inferred_type = FieldType::infer(value);
-                    dynamic.entry(key.clone())
+                    dynamic
+                        .entry(key.clone())
                         .and_modify(|existing| {
                             // Promote type if needed
                             if !existing.is_compatible(value) {
@@ -533,13 +549,15 @@ impl DynamicCollection {
         }
 
         // Store document
-        self.documents.write()
+        self.documents
+            .write()
             .map_err(|_| VecStoreError::Internal("Documents lock poisoned".to_string()))?
             .insert(id.clone(), doc);
 
         // Store vector
         if let Some(vec) = vector {
-            self.vectors.write()
+            self.vectors
+                .write()
                 .map_err(|_| VecStoreError::Internal("Vectors lock poisoned".to_string()))?
                 .insert(id.clone(), vec);
         }
@@ -549,13 +567,17 @@ impl DynamicCollection {
 
     /// Get document by ID
     pub fn get(&self, id: &str) -> Option<JsonValue> {
-        let Ok(documents) = self.documents.read() else { return None; };
+        let Ok(documents) = self.documents.read() else {
+            return None;
+        };
         documents.get(id).cloned()
     }
 
     /// Delete document
     pub fn delete(&self, id: &str) -> bool {
-        let Ok(mut documents) = self.documents.write() else { return false; };
+        let Ok(mut documents) = self.documents.write() else {
+            return false;
+        };
         let doc_removed = documents.remove(id).is_some();
         drop(documents); // Release lock before acquiring next
         if let Ok(mut vectors) = self.vectors.write() {
@@ -567,10 +589,14 @@ impl DynamicCollection {
     /// Add a new field to schema
     pub fn add_field(&self, field: FieldDef) -> Result<()> {
         let change = SchemaChange::FieldAdded { field };
-        let new_schema = self.evolution.write()
+        let new_schema = self
+            .evolution
+            .write()
             .map_err(|_| VecStoreError::Internal("Evolution lock poisoned".to_string()))?
             .apply(change)?;
-        *self.schema.write()
+        *self
+            .schema
+            .write()
             .map_err(|_| VecStoreError::Internal("Schema lock poisoned".to_string()))? = new_schema;
         Ok(())
     }
@@ -578,9 +604,13 @@ impl DynamicCollection {
     /// Promote dynamic field to schema
     pub fn promote_field(&self, name: &str) -> Result<()> {
         let field_type = {
-            let dynamic = self.dynamic_fields.read()
+            let dynamic = self
+                .dynamic_fields
+                .read()
                 .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?;
-            dynamic.get(name).cloned()
+            dynamic
+                .get(name)
+                .cloned()
                 .ok_or_else(|| VecStoreError::NotFound(format!("Dynamic field: {}", name)))?
         };
 
@@ -588,7 +618,8 @@ impl DynamicCollection {
         self.add_field(field)?;
 
         // Remove from dynamic fields
-        self.dynamic_fields.write()
+        self.dynamic_fields
+            .write()
             .map_err(|_| VecStoreError::Internal("Dynamic fields lock poisoned".to_string()))?
             .remove(name);
 
@@ -596,20 +627,31 @@ impl DynamicCollection {
     }
 
     /// Search with filter
-    pub fn search(&self, query: &[f32], top_k: usize, filter: Option<&str>) -> Result<Vec<SearchResult>> {
-        let vectors = self.vectors.read()
+    pub fn search(
+        &self,
+        query: &[f32],
+        top_k: usize,
+        filter: Option<&str>,
+    ) -> Result<Vec<SearchResult>> {
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| VecStoreError::Internal("Vectors lock poisoned".to_string()))?;
-        let documents = self.documents.read()
+        let documents = self
+            .documents
+            .read()
             .map_err(|_| VecStoreError::Internal("Documents lock poisoned".to_string()))?;
 
-        let mut results: Vec<_> = vectors.iter()
+        let mut results: Vec<_> = vectors
+            .iter()
             .filter_map(|(id, vec)| {
                 // Apply filter if provided
                 if let Some(filter_str) = filter
                     && let Some(doc) = documents.get(id)
-                        && !self.matches_filter(doc, filter_str) {
-                            return None;
-                        }
+                    && !self.matches_filter(doc, filter_str)
+                {
+                    return None;
+                }
 
                 let score = cosine_similarity(query, vec);
                 Some((id.clone(), score))
@@ -619,7 +661,8 @@ impl DynamicCollection {
         results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
-        Ok(results.into_iter()
+        Ok(results
+            .into_iter()
             .map(|(id, score)| SearchResult { id, score })
             .collect())
     }
@@ -645,32 +688,32 @@ impl DynamicCollection {
                     if let Some(n) = field_value.as_f64() {
                         return n.to_string() == value;
                     }
-                }
+                },
                 ">" => {
                     if let (Some(v), Ok(threshold)) = (field_value.as_f64(), value.parse::<f64>()) {
                         return v > threshold;
                     }
-                }
+                },
                 "<" => {
                     if let (Some(v), Ok(threshold)) = (field_value.as_f64(), value.parse::<f64>()) {
                         return v < threshold;
                     }
-                }
+                },
                 ">=" => {
                     if let (Some(v), Ok(threshold)) = (field_value.as_f64(), value.parse::<f64>()) {
                         return v >= threshold;
                     }
-                }
+                },
                 "<=" => {
                     if let (Some(v), Ok(threshold)) = (field_value.as_f64(), value.parse::<f64>()) {
                         return v <= threshold;
                     }
-                }
+                },
                 "!=" => {
                     if let Some(s) = field_value.as_str() {
                         return s != value;
                     }
-                }
+                },
                 _ => return true,
             }
         }
@@ -769,7 +812,10 @@ mod tests {
         assert_eq!(FieldType::infer(&json!(42)), FieldType::Int64);
         assert_eq!(FieldType::infer(&json!(3.14)), FieldType::Float64);
         assert_eq!(FieldType::infer(&json!(true)), FieldType::Bool);
-        assert_eq!(FieldType::infer(&json!([1.0, 2.0, 3.0])), FieldType::Vector(3));
+        assert_eq!(
+            FieldType::infer(&json!([1.0, 2.0, 3.0])),
+            FieldType::Vector(3)
+        );
     }
 
     #[test]
@@ -783,12 +829,14 @@ mod tests {
         let collection = DynamicCollection::new(schema).unwrap();
 
         // Insert with dynamic fields
-        collection.insert(json!({
-            "id": "doc1",
-            "embedding": [1.0, 0.0, 0.0, 0.0],
-            "title": "Hello World",  // Dynamic field
-            "score": 0.95,           // Dynamic field
-        })).unwrap();
+        collection
+            .insert(json!({
+                "id": "doc1",
+                "embedding": [1.0, 0.0, 0.0, 0.0],
+                "title": "Hello World",  // Dynamic field
+                "score": 0.95,           // Dynamic field
+            }))
+            .unwrap();
 
         // Check dynamic fields discovered
         let dynamic = collection.dynamic_fields();
@@ -796,11 +844,9 @@ mod tests {
         assert!(dynamic.contains_key("score"));
 
         // Search with filter
-        let results = collection.search(
-            &[1.0, 0.0, 0.0, 0.0],
-            10,
-            Some("score > 0.9"),
-        ).unwrap();
+        let results = collection
+            .search(&[1.0, 0.0, 0.0, 0.0], 10, Some("score > 0.9"))
+            .unwrap();
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].id, "doc1");

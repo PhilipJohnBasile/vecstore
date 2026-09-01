@@ -56,7 +56,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -501,7 +501,7 @@ impl MultiModalIndex {
                 }
 
                 Ok(fused)
-            }
+            },
 
             MultiModalFusion::WeightedAverage(weights) => {
                 let embeddings: Vec<&Vec<f32>> = query_embeddings.values().collect();
@@ -515,7 +515,7 @@ impl MultiModalIndex {
                 }
 
                 Ok(fused)
-            }
+            },
 
             MultiModalFusion::Concatenate => {
                 // Concatenate all embeddings
@@ -524,7 +524,7 @@ impl MultiModalIndex {
                     fused.extend_from_slice(embedding);
                 }
                 Ok(fused)
-            }
+            },
 
             MultiModalFusion::Max => {
                 let embeddings: Vec<&Vec<f32>> = query_embeddings.values().collect();
@@ -538,12 +538,12 @@ impl MultiModalIndex {
                 }
 
                 Ok(fused)
-            }
+            },
 
             MultiModalFusion::LateFusion { .. } => {
                 // Should not reach here (handled separately)
                 Err(anyhow!("Late fusion not applicable in early fusion search"))
-            }
+            },
         }
     }
 

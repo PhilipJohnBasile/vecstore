@@ -64,7 +64,7 @@ fn test_agent_styles() {
             AgentStyle::Balanced
             | AgentStyle::Fast
             | AgentStyle::Thorough
-            | AgentStyle::Explainable => {}
+            | AgentStyle::Explainable => {},
         }
     }
 }
@@ -601,7 +601,7 @@ fn test_intent_actions() {
             | IntentAction::Compare
             | IntentAction::Explain
             | IntentAction::Transform
-            | IntentAction::Combine => {}
+            | IntentAction::Combine => {},
         }
     }
 }

@@ -39,7 +39,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -253,7 +253,7 @@ impl Migrator {
                 Err(e) => {
                     stats.add_failure(format!("Line {}: Failed to read line: {}", line_num + 1, e));
                     continue;
-                }
+                },
             };
 
             if line.trim().is_empty() {
@@ -265,15 +265,16 @@ impl Migrator {
                 Ok(record) => {
                     // Validate dimension
                     if let Some(max_dim) = self.max_dimension
-                        && record.vector.len() > max_dim {
-                            stats.add_failure(format!(
-                                "Line {}: Vector dimension {} exceeds maximum {}",
-                                line_num + 1,
-                                record.vector.len(),
-                                max_dim
-                            ));
-                            continue;
-                        }
+                        && record.vector.len() > max_dim
+                    {
+                        stats.add_failure(format!(
+                            "Line {}: Vector dimension {} exceeds maximum {}",
+                            line_num + 1,
+                            record.vector.len(),
+                            max_dim
+                        ));
+                        continue;
+                    }
 
                     // Enforce dimension if specified
                     let record = if let Some(target_dim) = self.enforce_dimension {
@@ -285,14 +286,14 @@ impl Migrator {
                     stats.total_vectors += record.vector.len();
                     records.push(record);
                     stats.add_success();
-                }
+                },
                 Err(e) => {
                     if self.strict_mode {
                         return Err(anyhow!("Line {}: {}", line_num + 1, e));
                     } else {
                         stats.add_failure(format!("Line {}: {}", line_num + 1, e));
                     }
-                }
+                },
             }
         }
 
@@ -315,7 +316,7 @@ impl Migrator {
                     metadata: record.metadata,
                     timestamp: None,
                 })
-            }
+            },
 
             SourceDatabase::Weaviate => {
                 let record: WeaviateRecord = serde_json::from_str(line)?;
@@ -325,7 +326,7 @@ impl Migrator {
                     metadata: record.properties,
                     timestamp: None,
                 })
-            }
+            },
 
             SourceDatabase::Qdrant => {
                 let record: QdrantRecord = serde_json::from_str(line)?;
@@ -341,7 +342,7 @@ impl Migrator {
                     metadata: record.payload,
                     timestamp: None,
                 })
-            }
+            },
 
             SourceDatabase::ChromaDB => {
                 let record: ChromaRecord = serde_json::from_str(line)?;
@@ -358,7 +359,7 @@ impl Migrator {
                     metadata,
                     timestamp: None,
                 })
-            }
+            },
 
             SourceDatabase::Milvus => {
                 let record: MilvusRecord = serde_json::from_str(line)?;
@@ -374,13 +375,13 @@ impl Migrator {
                     metadata: record.fields,
                     timestamp: None,
                 })
-            }
+            },
 
             SourceDatabase::Generic => {
                 // Try to parse as generic migration record
                 serde_json::from_str(line)
                     .map_err(|e| anyhow!("Failed to parse generic record: {}", e))
-            }
+            },
         }
     }
 
@@ -483,7 +484,7 @@ impl Migrator {
                 Err(e) => {
                     stats.add_failure(format!("Line {}: Failed to read: {}", line_num + 2, e));
                     continue;
-                }
+                },
             };
 
             let parts: Vec<&str> = line.split(',').collect();
@@ -506,7 +507,7 @@ impl Migrator {
                             e
                         ));
                         continue;
-                    }
+                    },
                 }
             }
 

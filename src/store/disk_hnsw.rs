@@ -28,10 +28,10 @@
 //! - Background compaction
 //! - Cache-aware graph traversal
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use memmap2::{Mmap, MmapOptions};
-use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fs::OpenOptions;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -399,9 +399,8 @@ impl DiskHNSW {
         // Read current header to get data_length (position after last node)
         let mut header_buf = vec![0u8; FileHeader::SIZE];
         file.read_exact(&mut header_buf)?;
-        let current_data_length = unsafe {
-            (*(header_buf.as_ptr() as *const FileHeader)).data_length
-        };
+        let current_data_length =
+            unsafe { (*(header_buf.as_ptr() as *const FileHeader)).data_length };
 
         // Seek to end of actual data (not end of file which may have padding)
         let file_len = file.metadata()?.len();
@@ -451,7 +450,8 @@ impl DiskHNSW {
         drop(file);
 
         // Update offset tables
-        self.node_layer_offsets.insert((node.id, node.layer), offset);
+        self.node_layer_offsets
+            .insert((node.id, node.layer), offset);
         if node.layer == 0 {
             self.node_offsets.insert(node.id, offset);
         }
@@ -529,7 +529,8 @@ impl DiskHNSW {
             .ok_or_else(|| anyhow!("Index not mapped"))?;
 
         // Try to acquire read lock without blocking
-        let mmap = mmap_arc.try_read()
+        let mmap = mmap_arc
+            .try_read()
             .map_err(|_| anyhow!("Lock held - use get_node_async() for async access"))?;
 
         let offset = offset as usize;
@@ -767,8 +768,8 @@ impl DiskVectorStorage {
         file.write_all(b"VECS")?;
         file.write_all(&1u32.to_le_bytes())?;
         file.write_all(&(dimension as u64).to_le_bytes())?;
-        file.write_all(&0u64.to_le_bytes())?;  // Initial count
-        file.write_all(&[0u8; 8])?;  // Reserved
+        file.write_all(&0u64.to_le_bytes())?; // Initial count
+        file.write_all(&[0u8; 8])?; // Reserved
 
         // Allocate initial space (10K vectors worth)
         let initial_size = Self::HEADER_SIZE + (10_000 * dimension * 4);
@@ -776,9 +777,7 @@ impl DiskVectorStorage {
         file.flush()?;
         drop(file);
 
-        let file = OpenOptions::new()
-            .read(true)
-            .open(&file_path)?;
+        let file = OpenOptions::new().read(true).open(&file_path)?;
         let mmap = unsafe { MmapOptions::new().map(&file)? };
 
         Ok(Self {
@@ -926,7 +925,11 @@ pub struct DiskHNSWIndex {
 
 impl DiskHNSWIndex {
     /// Create a new disk-backed HNSW index
-    pub fn create(base_path: impl AsRef<Path>, dimension: usize, config: DiskHNSWConfig) -> Result<Self> {
+    pub fn create(
+        base_path: impl AsRef<Path>,
+        dimension: usize,
+        config: DiskHNSWConfig,
+    ) -> Result<Self> {
         let base = base_path.as_ref();
         std::fs::create_dir_all(base)?;
 
@@ -1007,7 +1010,9 @@ impl DiskHNSWIndex {
         }
 
         // Get entry point
-        let (ep_id, ep_layer) = self.graph.get_entry_point()
+        let (ep_id, ep_layer) = self
+            .graph
+            .get_entry_point()
             .ok_or_else(|| anyhow!("No entry point found"))?;
 
         let mut current_ep = ep_id;
@@ -1096,7 +1101,7 @@ impl DiskHNSWIndex {
             None => {
                 // Fallback to brute force if no entry point
                 return self.search_brute_force(query, k);
-            }
+            },
         };
 
         let mut current_ep = ep_id;
@@ -1115,9 +1120,7 @@ impl DiskHNSWIndex {
         let results: Vec<(String, f32)> = candidates
             .into_iter()
             .take(k)
-            .filter_map(|(idx, dist)| {
-                self.index_to_id.get(&idx).map(|id| (id.clone(), dist))
-            })
+            .filter_map(|(idx, dist)| self.index_to_id.get(&idx).map(|id| (id.clone(), dist)))
             .collect();
 
         // If we didn't find enough results via HNSW, fall back to brute force
@@ -1149,11 +1152,12 @@ impl DiskHNSWIndex {
             let mut found_closer = false;
             for neighbor in neighbors {
                 if let Ok(dist) = self.get_distance(query, neighbor)
-                    && dist < current_dist {
-                        current = neighbor;
-                        current_dist = dist;
-                        found_closer = true;
-                    }
+                    && dist < current_dist
+                {
+                    current = neighbor;
+                    current_dist = dist;
+                    found_closer = true;
+                }
             }
 
             if !found_closer {
@@ -1166,24 +1170,37 @@ impl DiskHNSWIndex {
 
     /// Beam search within a layer - find ef closest nodes
     #[cfg(not(feature = "async"))]
-    fn search_layer_beam(&self, query: &[f32], entry: u64, layer: u8, ef: usize) -> Result<Vec<(u64, f32)>> {
+    fn search_layer_beam(
+        &self,
+        query: &[f32],
+        entry: u64,
+        layer: u8,
+        ef: usize,
+    ) -> Result<Vec<(u64, f32)>> {
         let mut visited = HashSet::new();
         let mut candidates: BinaryHeap<Candidate> = BinaryHeap::new();
         let mut results: BinaryHeap<MinCandidate> = BinaryHeap::new();
 
         // Start with entry point
         let entry_dist = self.get_distance(query, entry)?;
-        candidates.push(Candidate { id: entry, distance: entry_dist });
-        results.push(MinCandidate { id: entry, distance: entry_dist });
+        candidates.push(Candidate {
+            id: entry,
+            distance: entry_dist,
+        });
+        results.push(MinCandidate {
+            id: entry,
+            distance: entry_dist,
+        });
         visited.insert(entry);
 
         while let Some(current) = candidates.pop() {
             // Stop if current is further than the worst result
             if results.len() >= ef
                 && let Some(worst) = results.peek()
-                    && current.distance > worst.distance {
-                        break;
-                    }
+                && current.distance > worst.distance
+            {
+                break;
+            }
 
             // Get neighbors
             let neighbors = match self.graph.get_neighbors_at_layer(current.id, layer) {
@@ -1208,8 +1225,14 @@ impl DiskHNSWIndex {
                     };
 
                     if should_add {
-                        candidates.push(Candidate { id: neighbor, distance: dist });
-                        results.push(MinCandidate { id: neighbor, distance: dist });
+                        candidates.push(Candidate {
+                            id: neighbor,
+                            distance: dist,
+                        });
+                        results.push(MinCandidate {
+                            id: neighbor,
+                            distance: dist,
+                        });
 
                         // Trim results if too large
                         while results.len() > ef {
@@ -1221,10 +1244,8 @@ impl DiskHNSWIndex {
         }
 
         // Convert to sorted vec
-        let mut result_vec: Vec<(u64, f32)> = results
-            .into_iter()
-            .map(|c| (c.id, c.distance))
-            .collect();
+        let mut result_vec: Vec<(u64, f32)> =
+            results.into_iter().map(|c| (c.id, c.distance)).collect();
         result_vec.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
 
         Ok(result_vec)
@@ -1246,9 +1267,7 @@ impl DiskHNSWIndex {
 
         let results: Vec<(String, f32)> = distances
             .into_iter()
-            .filter_map(|(idx, dist)| {
-                self.index_to_id.get(&idx).map(|id| (id.clone(), dist))
-            })
+            .filter_map(|(idx, dist)| self.index_to_id.get(&idx).map(|id| (id.clone(), dist)))
             .collect();
 
         Ok(results)
@@ -1481,9 +1500,15 @@ mod tests {
         let mut index = DiskHNSWIndex::create(&base_path, 4, config).unwrap();
 
         // Insert vectors
-        index.insert("doc1".to_string(), vec![1.0, 0.0, 0.0, 0.0]).unwrap();
-        index.insert("doc2".to_string(), vec![0.0, 1.0, 0.0, 0.0]).unwrap();
-        index.insert("doc3".to_string(), vec![0.0, 0.0, 1.0, 0.0]).unwrap();
+        index
+            .insert("doc1".to_string(), vec![1.0, 0.0, 0.0, 0.0])
+            .unwrap();
+        index
+            .insert("doc2".to_string(), vec![0.0, 1.0, 0.0, 0.0])
+            .unwrap();
+        index
+            .insert("doc3".to_string(), vec![0.0, 0.0, 1.0, 0.0])
+            .unwrap();
 
         let stats = index.stats();
         assert_eq!(stats.vector_count, 3);

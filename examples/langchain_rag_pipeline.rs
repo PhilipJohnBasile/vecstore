@@ -11,8 +11,8 @@
 use anyhow::Result;
 use vecstore::error::VecStoreError;
 use vecstore::{
-    print_health_report, Document, HealthChecker, LangChainVectorStore, RetrieverConfig, VecStore,
-    VectorStoreRetriever,
+    Document, HealthChecker, LangChainVectorStore, RetrieverConfig, VecStore, VectorStoreRetriever,
+    print_health_report,
 };
 
 fn main() -> Result<()> {

@@ -33,11 +33,7 @@ fn main() -> anyhow::Result<()> {
     println!("\nSending 7 requests:");
     for i in 1..=7 {
         let result = token_limiter.try_acquire_result();
-        let status = if result.allowed {
-            "ALLOWED"
-        } else {
-            "BLOCKED"
-        };
+        let status = if result.allowed { "ALLOWED" } else { "BLOCKED" };
         println!(
             "  Request {}: {} (remaining: {})",
             i, status, result.remaining
@@ -70,11 +66,7 @@ fn main() -> anyhow::Result<()> {
     println!("\nSending 10 requests:");
     for i in 1..=10 {
         let result = burst_limiter.try_acquire_result();
-        let status = if result.allowed {
-            "ALLOWED"
-        } else {
-            "BLOCKED"
-        };
+        let status = if result.allowed { "ALLOWED" } else { "BLOCKED" };
         println!(
             "  Request {}: {} (remaining: {})",
             i, status, result.remaining
@@ -102,11 +94,7 @@ fn main() -> anyhow::Result<()> {
     println!("\nSending 12 requests:");
     for i in 1..=12 {
         let result = sliding_limiter.try_acquire_result();
-        let status = if result.allowed {
-            "ALLOWED"
-        } else {
-            "BLOCKED"
-        };
+        let status = if result.allowed { "ALLOWED" } else { "BLOCKED" };
         println!(
             "  Request {}: {} (remaining: {})",
             i, status, result.remaining
@@ -120,11 +108,7 @@ fn main() -> anyhow::Result<()> {
     println!("\n  After window slides:");
     for i in 13..=15 {
         let result = sliding_limiter.try_acquire_result();
-        let status = if result.allowed {
-            "ALLOWED"
-        } else {
-            "BLOCKED"
-        };
+        let status = if result.allowed { "ALLOWED" } else { "BLOCKED" };
         println!(
             "  Request {}: {} (remaining: {})",
             i, status, result.remaining
@@ -153,11 +137,7 @@ fn main() -> anyhow::Result<()> {
     println!("\nSending 8 requests:");
     for i in 1..=8 {
         let result = leaky_limiter.try_acquire_result();
-        let status = if result.allowed {
-            "ALLOWED"
-        } else {
-            "BLOCKED"
-        };
+        let status = if result.allowed { "ALLOWED" } else { "BLOCKED" };
         println!(
             "  Request {}: {} (remaining: {})",
             i, status, result.remaining

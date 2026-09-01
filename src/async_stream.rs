@@ -273,14 +273,14 @@ impl Stream for ProgressiveQueryStream {
                 match &event {
                     StreamEvent::Result(_) => {
                         self.received += 1;
-                    }
+                    },
                     StreamEvent::Progress { total, .. } => {
                         self.total_expected = Some(*total);
-                    }
-                    _ => {}
+                    },
+                    _ => {},
                 }
                 Poll::Ready(Some(event))
-            }
+            },
             Poll::Ready(None) => Poll::Ready(None),
             Poll::Pending => Poll::Pending,
         }
@@ -402,7 +402,7 @@ mod tests {
             match event {
                 StreamEvent::Result(_) => result_count += 1,
                 StreamEvent::Done => got_done = true,
-                _ => {}
+                _ => {},
             }
         }
 

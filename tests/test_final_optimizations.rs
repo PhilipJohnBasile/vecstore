@@ -258,10 +258,12 @@ fn test_prefetch_empty_stages() {
 
     let result = store.prefetch_query(prefetch_query);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("at least one stage"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one stage")
+    );
 }
 
 #[test]
@@ -276,10 +278,12 @@ fn test_prefetch_mmr_without_previous_stage() {
 
     let result = store.prefetch_query(prefetch_query);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("requires previous stage"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("requires previous stage")
+    );
 }
 
 #[test]

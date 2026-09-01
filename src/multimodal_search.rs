@@ -296,7 +296,9 @@ impl Embedder for MockEmbedder {
 
         for (i, chunk) in bytes.chunks(4).enumerate() {
             let idx = i % self.dimension;
-            let val: u32 = chunk.iter().fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
+            let val: u32 = chunk
+                .iter()
+                .fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
             embedding[idx] = ((val as f32) / 255.0 - 0.5) * 2.0;
         }
 
@@ -362,15 +364,17 @@ impl MultimodalIndex {
 
         // Add to documents
         {
-            let mut docs = self.documents.write()
-                .map_err(|_| VecStoreError::LockError("failed to acquire documents write lock".into()))?;
+            let mut docs = self.documents.write().map_err(|_| {
+                VecStoreError::LockError("failed to acquire documents write lock".into())
+            })?;
             docs.insert(id.clone(), doc);
         }
 
         // Add to modality index
         {
-            let mut indexes = self.modality_indexes.write()
-                .map_err(|_| VecStoreError::LockError("failed to acquire modality_indexes write lock".into()))?;
+            let mut indexes = self.modality_indexes.write().map_err(|_| {
+                VecStoreError::LockError("failed to acquire modality_indexes write lock".into())
+            })?;
             indexes.entry(modality).or_insert_with(Vec::new).push(id);
         }
 
@@ -378,7 +382,12 @@ impl MultimodalIndex {
     }
 
     /// Insert text document
-    pub fn insert_text(&self, id: &str, text: &str, metadata: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn insert_text(
+        &self,
+        id: &str,
+        text: &str,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let embedding = self.embedder.embed_text(text)?;
 
         let doc = MultimodalDocument {
@@ -396,7 +405,13 @@ impl MultimodalIndex {
     }
 
     /// Insert image document
-    pub fn insert_image(&self, id: &str, image_ref: &str, caption: Option<&str>, metadata: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn insert_image(
+        &self,
+        id: &str,
+        image_ref: &str,
+        caption: Option<&str>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let embedding = self.embedder.embed_image(image_ref)?;
 
         let mut aux = HashMap::new();
@@ -432,19 +447,30 @@ impl MultimodalIndex {
             return Err(VecStoreError::InvalidInput("No query provided".to_string()));
         };
 
-        let docs = self.documents.read()
-            .map_err(|_| VecStoreError::LockError("failed to acquire documents read lock".into()))?;
-        let indexes = self.modality_indexes.read()
-            .map_err(|_| VecStoreError::LockError("failed to acquire modality_indexes read lock".into()))?;
+        let docs = self.documents.read().map_err(|_| {
+            VecStoreError::LockError("failed to acquire documents read lock".into())
+        })?;
+        let indexes = self.modality_indexes.read().map_err(|_| {
+            VecStoreError::LockError("failed to acquire modality_indexes read lock".into())
+        })?;
 
         // Determine which documents to search
         let candidate_ids: Vec<&String> = if let Some(target) = &query.target_modality {
             // Search only target modality
-            indexes.get(target).map(|ids| ids.iter().collect()).unwrap_or_default()
+            indexes
+                .get(target)
+                .map(|ids| ids.iter().collect())
+                .unwrap_or_default()
         } else if let Some(filter) = &query.modality_filter {
             // Search filtered modalities
-            filter.iter()
-                .flat_map(|m| indexes.get(m).map(|ids| ids.iter()).unwrap_or_else(|| [].iter()))
+            filter
+                .iter()
+                .flat_map(|m| {
+                    indexes
+                        .get(m)
+                        .map(|ids| ids.iter())
+                        .unwrap_or_else(|| [].iter())
+                })
                 .collect()
         } else {
             // Search all
@@ -474,16 +500,17 @@ impl MultimodalIndex {
                     let final_score = if let Some(ref cs) = cross_scores {
                         match &self.config.fusion_strategy {
                             FusionStrategy::WeightedSum => {
-                                let aux_avg: f32 = cs.values().sum::<f32>() / cs.len().max(1) as f32;
+                                let aux_avg: f32 =
+                                    cs.values().sum::<f32>() / cs.len().max(1) as f32;
                                 score * 0.7 + aux_avg * 0.3
-                            }
+                            },
                             FusionStrategy::MaxScore => {
                                 cs.values().fold(score, |max, &s| max.max(s))
-                            }
+                            },
                             FusionStrategy::Average => {
                                 let sum: f32 = cs.values().sum::<f32>() + score;
                                 sum / (cs.len() + 1) as f32
-                            }
+                            },
                             FusionStrategy::LateFusion { weights } => {
                                 let mut weighted_sum = score;
                                 for (name, &s) in cs {
@@ -491,16 +518,17 @@ impl MultimodalIndex {
                                     weighted_sum += s * w;
                                 }
                                 weighted_sum
-                            }
+                            },
                         }
                     } else {
                         score
                     };
 
                     // Apply metadata filters
-                    let passes_filters = query.filters.iter().all(|(key, value)| {
-                        doc.metadata.get(key) == Some(value)
-                    });
+                    let passes_filters = query
+                        .filters
+                        .iter()
+                        .all(|(key, value)| doc.metadata.get(key) == Some(value));
 
                     if passes_filters {
                         Some(MultimodalResult {
@@ -553,16 +581,22 @@ impl MultimodalIndex {
 
     /// Get document by ID
     pub fn get(&self, id: &str) -> Option<MultimodalDocument> {
-        let Ok(docs) = self.documents.read() else { return None; };
+        let Ok(docs) = self.documents.read() else {
+            return None;
+        };
         docs.get(id).cloned()
     }
 
     /// Delete document
     pub fn delete(&self, id: &str) -> bool {
-        let Ok(mut docs) = self.documents.write() else { return false; };
+        let Ok(mut docs) = self.documents.write() else {
+            return false;
+        };
 
         if let Some(doc) = docs.remove(id) {
-            let Ok(mut indexes) = self.modality_indexes.write() else { return false; };
+            let Ok(mut indexes) = self.modality_indexes.write() else {
+                return false;
+            };
             if let Some(ids) = indexes.get_mut(&doc.modality) {
                 ids.retain(|x| x != id);
             }
@@ -643,10 +677,19 @@ mod tests {
         let index = MultimodalIndex::new(config);
 
         // Insert text
-        index.insert_text("txt1", "A beautiful sunset over the ocean", HashMap::new()).unwrap();
+        index
+            .insert_text("txt1", "A beautiful sunset over the ocean", HashMap::new())
+            .unwrap();
 
         // Insert image
-        index.insert_image("img1", "/path/to/sunset.jpg", Some("sunset photo"), HashMap::new()).unwrap();
+        index
+            .insert_image(
+                "img1",
+                "/path/to/sunset.jpg",
+                Some("sunset photo"),
+                HashMap::new(),
+            )
+            .unwrap();
 
         // Search
         let results = index.search(MultimodalQuery::text("sunset")).unwrap();
@@ -660,12 +703,14 @@ mod tests {
 
         // Insert images
         for i in 0..5 {
-            index.insert_image(
-                &format!("img_{}", i),
-                &format!("/images/{}.jpg", i),
-                Some(&format!("Photo number {}", i)),
-                HashMap::new(),
-            ).unwrap();
+            index
+                .insert_image(
+                    &format!("img_{}", i),
+                    &format!("/images/{}.jpg", i),
+                    Some(&format!("Photo number {}", i)),
+                    HashMap::new(),
+                )
+                .unwrap();
         }
 
         // Text to image search
@@ -682,14 +727,17 @@ mod tests {
         let config = MultimodalConfig::default();
         let index = MultimodalIndex::new(config);
 
-        index.insert_text("txt1", "Hello world", HashMap::new()).unwrap();
-        index.insert_image("img1", "/img.jpg", None, HashMap::new()).unwrap();
+        index
+            .insert_text("txt1", "Hello world", HashMap::new())
+            .unwrap();
+        index
+            .insert_image("img1", "/img.jpg", None, HashMap::new())
+            .unwrap();
 
         // Filter to only text
-        let results = index.search(
-            MultimodalQuery::text("hello")
-                .with_modality_filter(vec![Modality::Text])
-        ).unwrap();
+        let results = index
+            .search(MultimodalQuery::text("hello").with_modality_filter(vec![Modality::Text]))
+            .unwrap();
 
         assert!(results.iter().all(|r| r.modality == Modality::Text));
     }
@@ -699,9 +747,15 @@ mod tests {
         let config = MultimodalConfig::default();
         let index = MultimodalIndex::new(config);
 
-        index.insert_text("txt1", "Text document", HashMap::new()).unwrap();
-        index.insert_text("txt2", "Another text", HashMap::new()).unwrap();
-        index.insert_image("img1", "/img.jpg", None, HashMap::new()).unwrap();
+        index
+            .insert_text("txt1", "Text document", HashMap::new())
+            .unwrap();
+        index
+            .insert_text("txt2", "Another text", HashMap::new())
+            .unwrap();
+        index
+            .insert_image("img1", "/img.jpg", None, HashMap::new())
+            .unwrap();
 
         let stats = index.stats();
         assert_eq!(stats.total_documents, 3);

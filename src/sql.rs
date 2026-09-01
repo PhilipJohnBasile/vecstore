@@ -38,10 +38,10 @@
 //! - `<=>` : Cosine distance
 //! - `<#>` : Inner product (negative dot product)
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// SQL parser and executor for vector operations
 pub struct VectorSQL {
@@ -75,7 +75,7 @@ pub enum DataType {
     Integer,
     Float,
     Boolean,
-    Vector(usize),  // Vector with dimension
+    Vector(usize), // Vector with dimension
     Json,
     Timestamp,
 }
@@ -86,7 +86,7 @@ impl DataType {
         let s = s.trim().to_uppercase();
 
         if s.starts_with("VECTOR(") && s.ends_with(')') {
-            let dim_str = &s[7..s.len()-1];
+            let dim_str = &s[7..s.len() - 1];
             let dim: usize = dim_str.parse().map_err(|_| {
                 VecStoreError::InvalidInput(format!("Invalid vector dimension: {}", dim_str))
             })?;
@@ -100,7 +100,10 @@ impl DataType {
             "BOOL" | "BOOLEAN" => Ok(DataType::Boolean),
             "JSON" | "JSONB" => Ok(DataType::Json),
             "TIMESTAMP" | "DATETIME" => Ok(DataType::Timestamp),
-            _ => Err(VecStoreError::InvalidInput(format!("Unknown data type: {}", s))),
+            _ => Err(VecStoreError::InvalidInput(format!(
+                "Unknown data type: {}",
+                s
+            ))),
         }
     }
 }
@@ -182,7 +185,7 @@ pub struct SelectStmt {
 /// SELECT column expression
 #[derive(Debug, Clone)]
 pub enum SelectColumn {
-    All,  // *
+    All, // *
     Column(String),
     Distance {
         column: String,
@@ -200,8 +203,8 @@ pub enum SelectColumn {
 /// Distance metrics
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DistanceMetric {
-    L2,       // <->
-    Cosine,   // <=>
+    L2,         // <->
+    Cosine,     // <=>
     DotProduct, // <#>
 }
 
@@ -249,7 +252,10 @@ pub struct OrderByClause {
 /// ORDER BY column
 #[derive(Debug, Clone)]
 pub enum OrderByColumn {
-    Column { name: String, descending: bool },
+    Column {
+        name: String,
+        descending: bool,
+    },
     VectorDistance {
         column: String,
         target: Vec<f32>,
@@ -357,7 +363,10 @@ impl VectorSQL {
         } else if upper.starts_with("CREATE INDEX") {
             self.parse_create_index(sql)
         } else {
-            Err(VecStoreError::InvalidInput(format!("Unknown SQL statement: {}", sql)))
+            Err(VecStoreError::InvalidInput(format!(
+                "Unknown SQL statement: {}",
+                sql
+            )))
         }
     }
 
@@ -370,9 +379,9 @@ impl VectorSQL {
         let if_not_exists = upper.contains("IF NOT EXISTS");
 
         // Find table name and columns
-        let paren_start = sql.find('(').ok_or_else(|| {
-            VecStoreError::InvalidInput("Missing column definitions".to_string())
-        })?;
+        let paren_start = sql
+            .find('(')
+            .ok_or_else(|| VecStoreError::InvalidInput("Missing column definitions".to_string()))?;
         let paren_end = sql.rfind(')').ok_or_else(|| {
             VecStoreError::InvalidInput("Missing closing parenthesis".to_string())
         })?;
@@ -380,9 +389,10 @@ impl VectorSQL {
         // Extract table name
         let before_paren = &sql[..paren_start].trim();
         let parts: Vec<&str> = before_paren.split_whitespace().collect();
-        let table_name = parts.last().ok_or_else(|| {
-            VecStoreError::InvalidInput("Missing table name".to_string())
-        })?.to_string();
+        let table_name = parts
+            .last()
+            .ok_or_else(|| VecStoreError::InvalidInput("Missing table name".to_string()))?
+            .to_string();
 
         // Parse columns
         let columns_str = &sql[paren_start + 1..paren_end];
@@ -441,9 +451,11 @@ impl VectorSQL {
     /// Parse DROP TABLE
     fn parse_drop_table(&self, sql: &str) -> Result<Statement> {
         let parts: Vec<&str> = sql.split_whitespace().collect();
-        let table_name = parts.last().ok_or_else(|| {
-            VecStoreError::InvalidInput("Missing table name".to_string())
-        })?.trim_end_matches(';').to_string();
+        let table_name = parts
+            .last()
+            .ok_or_else(|| VecStoreError::InvalidInput("Missing table name".to_string()))?
+            .trim_end_matches(';')
+            .to_string();
 
         Ok(Statement::DropTable(table_name))
     }
@@ -454,9 +466,9 @@ impl VectorSQL {
         let upper = sql.to_uppercase();
 
         // Find table name
-        let into_pos = upper.find("INTO").ok_or_else(|| {
-            VecStoreError::InvalidInput("Missing INTO".to_string())
-        })?;
+        let into_pos = upper
+            .find("INTO")
+            .ok_or_else(|| VecStoreError::InvalidInput("Missing INTO".to_string()))?;
 
         let after_into = &sql[into_pos + 4..].trim_start();
         let paren_pos = after_into.find('(').unwrap_or(after_into.len());
@@ -475,9 +487,9 @@ impl VectorSQL {
         let upper = sql.to_uppercase();
 
         // Find FROM
-        let from_pos = upper.find(" FROM ").ok_or_else(|| {
-            VecStoreError::InvalidInput("Missing FROM clause".to_string())
-        })?;
+        let from_pos = upper
+            .find(" FROM ")
+            .ok_or_else(|| VecStoreError::InvalidInput("Missing FROM clause".to_string()))?;
 
         // Parse columns (between SELECT and FROM)
         let select_pos = upper.find("SELECT").unwrap();
@@ -486,21 +498,24 @@ impl VectorSQL {
         let columns = if columns_str.trim() == "*" {
             vec![SelectColumn::All]
         } else {
-            columns_str.split(',')
+            columns_str
+                .split(',')
                 .map(|c| SelectColumn::Column(c.trim().to_string()))
                 .collect()
         };
 
         // Find table name (after FROM)
         let after_from = &sql[from_pos + 6..];
-        let table_end = after_from.find(|c: char| c.is_whitespace() || c == ';')
+        let table_end = after_from
+            .find(|c: char| c.is_whitespace() || c == ';')
             .unwrap_or(after_from.len());
         let from = after_from[..table_end].trim().to_string();
 
         // Parse LIMIT
         let limit = if let Some(limit_pos) = upper.find(" LIMIT ") {
             let after_limit = &sql[limit_pos + 7..];
-            let end = after_limit.find(|c: char| !c.is_numeric())
+            let end = after_limit
+                .find(|c: char| !c.is_numeric())
                 .unwrap_or(after_limit.len());
             after_limit[..end].trim().parse().ok()
         } else {
@@ -511,9 +526,14 @@ impl VectorSQL {
         let order_by = if let Some(order_pos) = upper.find(" ORDER BY ") {
             let after_order = &sql[order_pos + 10..];
             // Check for vector distance operators
-            if after_order.contains("<->") || after_order.contains("<=>") || after_order.contains("<#>") {
+            if after_order.contains("<->")
+                || after_order.contains("<=>")
+                || after_order.contains("<#>")
+            {
                 // Parse vector order by
-                Some(OrderByClause { columns: Vec::new() })
+                Some(OrderByClause {
+                    columns: Vec::new(),
+                })
             } else {
                 None
             }
@@ -556,7 +576,8 @@ impl VectorSQL {
         let using_pos = upper.find(" USING ");
         let index_type = if let Some(pos) = using_pos {
             let after_using = &upper[pos + 7..];
-            let end = after_using.find(|c: char| c.is_whitespace() || c == '(')
+            let end = after_using
+                .find(|c: char| c.is_whitespace() || c == '(')
                 .unwrap_or(after_using.len());
             match &after_using[..end] {
                 "HNSW" => IndexType::Hnsw,
@@ -590,23 +611,25 @@ impl VectorSQL {
                 });
             }
             return Err(VecStoreError::InvalidInput(format!(
-                "Table '{}' already exists", stmt.table_name
+                "Table '{}' already exists",
+                stmt.table_name
             )));
         }
 
         // Find vector column
-        let vector_column = stmt.columns.iter()
+        let vector_column = stmt
+            .columns
+            .iter()
             .find(|c| matches!(c.data_type, DataType::Vector(_)))
             .map(|c| c.name.clone());
 
-        let dimension = stmt.columns.iter()
-            .find_map(|c| {
-                if let DataType::Vector(dim) = c.data_type {
-                    Some(dim)
-                } else {
-                    None
-                }
-            });
+        let dimension = stmt.columns.iter().find_map(|c| {
+            if let DataType::Vector(dim) = c.data_type {
+                Some(dim)
+            } else {
+                None
+            }
+        });
 
         let primary_key = stmt.columns.first().map(|c| c.name.clone());
 
@@ -656,9 +679,10 @@ impl VectorSQL {
 
     /// Execute SELECT
     fn execute_select(&self, stmt: SelectStmt) -> Result<QueryResult> {
-        let table_data = self.data.get(&stmt.from).ok_or_else(|| {
-            VecStoreError::NotFound(format!("Table '{}' not found", stmt.from))
-        })?;
+        let table_data = self
+            .data
+            .get(&stmt.from)
+            .ok_or_else(|| VecStoreError::NotFound(format!("Table '{}' not found", stmt.from)))?;
 
         let column_names: Vec<String> = match &stmt.columns[..] {
             [SelectColumn::All] => {
@@ -667,26 +691,29 @@ impl VectorSQL {
                 } else {
                     Vec::new()
                 }
-            }
-            cols => cols.iter().map(|c| match c {
-                SelectColumn::Column(name) => name.clone(),
-                SelectColumn::Distance { alias, .. } => {
-                    alias.clone().unwrap_or_else(|| "distance".to_string())
-                }
-                SelectColumn::Function { alias, name, .. } => {
-                    alias.clone().unwrap_or_else(|| name.clone())
-                }
-                SelectColumn::All => "*".to_string(),
-            }).collect(),
+            },
+            cols => cols
+                .iter()
+                .map(|c| match c {
+                    SelectColumn::Column(name) => name.clone(),
+                    SelectColumn::Distance { alias, .. } => {
+                        alias.clone().unwrap_or_else(|| "distance".to_string())
+                    },
+                    SelectColumn::Function { alias, name, .. } => {
+                        alias.clone().unwrap_or_else(|| name.clone())
+                    },
+                    SelectColumn::All => "*".to_string(),
+                })
+                .collect(),
         };
 
-        let rows: Vec<ResultRow> = table_data.iter()
+        let rows: Vec<ResultRow> = table_data
+            .iter()
             .take(stmt.limit.unwrap_or(100))
             .map(|row| {
-                let values: Vec<Value> = column_names.iter()
-                    .map(|col| {
-                        row.metadata.get(col).cloned().unwrap_or(Value::Null)
-                    })
+                let values: Vec<Value> = column_names
+                    .iter()
+                    .map(|col| row.metadata.get(col).cloned().unwrap_or(Value::Null))
                     .collect();
                 ResultRow { values }
             })
@@ -824,7 +851,8 @@ impl VectorQueryBuilder {
             };
             sql.push_str(&format!(
                 " ORDER BY {} {} '[{:?}]'",
-                col, operator,
+                col,
+                operator,
                 vec.iter().take(3).collect::<Vec<_>>()
             ));
         }
@@ -845,13 +873,15 @@ mod tests {
     fn test_create_table() {
         let mut sql = VectorSQL::new();
 
-        let result = sql.execute(
-            "CREATE TABLE documents (
+        let result = sql
+            .execute(
+                "CREATE TABLE documents (
                 id TEXT PRIMARY KEY,
                 embedding VECTOR(384),
                 content TEXT
-            )"
-        ).unwrap();
+            )",
+            )
+            .unwrap();
 
         assert_eq!(result.affected_rows, 0);
         assert!(sql.tables.contains_key("documents"));
@@ -860,7 +890,10 @@ mod tests {
     #[test]
     fn test_data_type_parse() {
         assert_eq!(DataType::parse("TEXT").unwrap(), DataType::Text);
-        assert_eq!(DataType::parse("VECTOR(384)").unwrap(), DataType::Vector(384));
+        assert_eq!(
+            DataType::parse("VECTOR(384)").unwrap(),
+            DataType::Vector(384)
+        );
         assert_eq!(DataType::parse("INTEGER").unwrap(), DataType::Integer);
     }
 

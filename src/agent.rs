@@ -35,7 +35,7 @@
 //! println!("Agent reasoning: {}", result.explanation);
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -168,10 +168,7 @@ pub enum AgentTool {
     },
 
     /// Check privacy constraints
-    PrivacyCheck {
-        operation: String,
-        epsilon: f64,
-    },
+    PrivacyCheck { operation: String, epsilon: f64 },
 
     /// Track lineage
     TrackLineage {
@@ -192,9 +189,15 @@ pub enum FilterExpression {
     /// Less than
     Lt { field: String, value: FilterValue },
     /// In list
-    In { field: String, values: Vec<FilterValue> },
+    In {
+        field: String,
+        values: Vec<FilterValue>,
+    },
     /// Not in list
-    NotIn { field: String, values: Vec<FilterValue> },
+    NotIn {
+        field: String,
+        values: Vec<FilterValue>,
+    },
     /// Contains (for text/arrays)
     Contains { field: String, value: String },
     /// And combination
@@ -413,11 +416,17 @@ pub struct IntentConstraint {
 /// Intent modifiers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum IntentModifier {
-    TimeRange { start: Option<String>, end: Option<String> },
+    TimeRange {
+        start: Option<String>,
+        end: Option<String>,
+    },
     Limit(usize),
     Exclude(Vec<String>),
     Include(Vec<String>),
-    SortBy { field: String, ascending: bool },
+    SortBy {
+        field: String,
+        ascending: bool,
+    },
 }
 
 // ============================================================================
@@ -597,9 +606,10 @@ impl QueryAgent {
         // Parse limits
         if let Some(pos) = query_lower.find("top ")
             && let Some(num_str) = query_lower[pos + 4..].split_whitespace().next()
-                && let Ok(n) = num_str.parse::<usize>() {
-                    modifiers.push(IntentModifier::Limit(n));
-                }
+            && let Ok(n) = num_str.parse::<usize>()
+        {
+            modifiers.push(IntentModifier::Limit(n));
+        }
 
         Ok(QueryIntent {
             action,
@@ -701,7 +711,7 @@ impl QueryAgent {
                     confidence: 0.85,
                     fallback: None,
                 });
-            }
+            },
 
             IntentAction::Explain => {
                 steps.push(PlanStep {
@@ -716,7 +726,7 @@ impl QueryAgent {
                     confidence: 0.9,
                     fallback: None,
                 });
-            }
+            },
 
             IntentAction::Aggregate => {
                 steps.push(PlanStep {
@@ -732,7 +742,7 @@ impl QueryAgent {
                     confidence: 0.95,
                     fallback: None,
                 });
-            }
+            },
 
             _ => {
                 // Default to search
@@ -750,7 +760,7 @@ impl QueryAgent {
                     confidence: 0.8,
                     fallback: None,
                 });
-            }
+            },
         }
 
         let overall_confidence = steps.iter().map(|s| s.confidence).product::<f32>();
@@ -798,7 +808,11 @@ impl QueryAgent {
 
             trace.push(ExecutionStep {
                 step: step.step,
-                tool: format!("{:?}", step.tool).split('{').next().unwrap().to_string(),
+                tool: format!("{:?}", step.tool)
+                    .split('{')
+                    .next()
+                    .unwrap()
+                    .to_string(),
                 input_summary: format!("{} input items", current_ids.len()),
                 output_summary: format!("{} output items", result.result_ids.len()),
                 success: result.success,
@@ -856,36 +870,46 @@ impl QueryAgent {
                 let scores: Vec<f32> = (0..*k).map(|i| 1.0 - (i as f32 * 0.05)).collect();
                 let _ = (query, filters); // Mark as used
                 (ids, scores, None)
-            }
+            },
             AgentTool::KeywordSearch { query, k, filters } => {
                 // Keyword search using BM25-style scoring
                 let ids: Vec<String> = (0..*k).map(|i| format!("kw_result_{}", i)).collect();
                 let scores: Vec<f32> = (0..*k).map(|i| 0.9 - (i as f32 * 0.08)).collect();
                 let _ = (query, filters); // Mark as used
                 (ids, scores, None)
-            }
+            },
             AgentTool::HybridSearch { k, alpha, .. } => {
                 // Hybrid search combining vector and keyword
                 let ids: Vec<String> = (0..*k).map(|i| format!("hybrid_result_{}", i)).collect();
-                let scores: Vec<f32> = (0..*k).map(|i| {
-                    // Blend scores based on alpha
-                    let vec_score = 1.0 - (i as f32 * 0.05);
-                    let kw_score = 0.9 - (i as f32 * 0.08);
-                    alpha * vec_score + (1.0 - alpha) * kw_score
-                }).collect();
+                let scores: Vec<f32> = (0..*k)
+                    .map(|i| {
+                        // Blend scores based on alpha
+                        let vec_score = 1.0 - (i as f32 * 0.05);
+                        let kw_score = 0.9 - (i as f32 * 0.08);
+                        alpha * vec_score + (1.0 - alpha) * kw_score
+                    })
+                    .collect();
                 (ids, scores, None)
-            }
-            AgentTool::Filter { expression, input_ids: filter_input } => {
+            },
+            AgentTool::Filter {
+                expression,
+                input_ids: filter_input,
+            } => {
                 // Filter operation - returns subset of input IDs matching expression
-                let ids: Vec<String> = filter_input.iter()
+                let ids: Vec<String> = filter_input
+                    .iter()
                     .take(filter_input.len() / 2 + 1)
                     .cloned()
                     .collect();
                 let scores: Vec<f32> = vec![1.0; ids.len()];
                 let _ = expression; // Mark as used
                 (ids, scores, None)
-            }
-            AgentTool::Aggregate { operation, input_ids: agg_input, .. } => {
+            },
+            AgentTool::Aggregate {
+                operation,
+                input_ids: agg_input,
+                ..
+            } => {
                 // Aggregate operation
                 let agg_result = match operation {
                     AggregateOp::Count => Some(AggregationResult {
@@ -927,11 +951,14 @@ impl QueryAgent {
                             count: agg_input.len(),
                             groups: Some(groups),
                         })
-                    }
+                    },
                 };
                 (agg_input.clone(), vec![1.0; agg_input.len()], agg_result)
-            }
-            AgentTool::Transform { operation, input_ids: transform_input } => {
+            },
+            AgentTool::Transform {
+                operation,
+                input_ids: transform_input,
+            } => {
                 // Transform operation
                 let ids = match operation {
                     TransformOp::Normalize => transform_input.clone(),
@@ -939,50 +966,53 @@ impl QueryAgent {
                     TransformOp::Cluster { k } => {
                         // Return k cluster representatives
                         transform_input.iter().take(*k).cloned().collect()
-                    }
+                    },
                     TransformOp::Deduplicate { .. } => {
                         // Remove duplicates by taking first half as "unique"
                         let unique_count = (transform_input.len() / 2).max(1);
                         transform_input.iter().take(unique_count).cloned().collect()
-                    }
+                    },
                     TransformOp::Enrich { .. } => transform_input.clone(),
                 };
                 let scores = vec![1.0; ids.len()];
                 (ids, scores, None)
-            }
+            },
             AgentTool::Fetch { ids } => {
                 // Fetch by IDs - return the requested IDs
                 let scores = vec![1.0; ids.len()];
                 (ids.clone(), scores, None)
-            }
-            AgentTool::Rerank { k, input_ids: rerank_input, .. } => {
+            },
+            AgentTool::Rerank {
+                k,
+                input_ids: rerank_input,
+                ..
+            } => {
                 // Rerank - reorder based on relevance
-                let mut reranked: Vec<(usize, f32)> = rerank_input.iter()
+                let mut reranked: Vec<(usize, f32)> = rerank_input
+                    .iter()
                     .enumerate()
                     .map(|(i, _)| (i, 1.0 / (1.0 + i as f32)))
                     .collect();
                 reranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
 
-                let ids: Vec<String> = reranked.iter()
+                let ids: Vec<String> = reranked
+                    .iter()
                     .take(*k)
                     .map(|(i, _)| rerank_input[*i].clone())
                     .collect();
-                let scores: Vec<f32> = reranked.iter()
-                    .take(*k)
-                    .map(|(_, s)| *s)
-                    .collect();
+                let scores: Vec<f32> = reranked.iter().take(*k).map(|(_, s)| *s).collect();
                 (ids, scores, None)
-            }
+            },
             AgentTool::Explain { result_id, .. } => {
                 // Explain - return explanation for a result
                 (vec![result_id.clone()], vec![1.0], None)
-            }
+            },
             AgentTool::TemporalSearch { k, .. } => {
                 // Temporal search - filter by time range
                 let ids: Vec<String> = (0..*k).map(|i| format!("temporal_result_{}", i)).collect();
                 let scores: Vec<f32> = (0..*k).map(|i| 1.0 - (i as f32 * 0.05)).collect();
                 (ids, scores, None)
-            }
+            },
             AgentTool::PrivacyCheck { epsilon, .. } => {
                 // Privacy check - verify privacy constraints
                 // Return whether the privacy budget allows the operation
@@ -993,11 +1023,11 @@ impl QueryAgent {
                     vec!["privacy_denied".to_string()]
                 };
                 (ids, vec![if approved { 1.0 } else { 0.0 }], None)
-            }
+            },
             AgentTool::TrackLineage { vector_id, .. } => {
                 // Track lineage - return the vector ID with lineage info
                 (vec![vector_id.clone()], vec![1.0], None)
-            }
+            },
         };
 
         // Use input_ids if provided and result is empty
@@ -1026,7 +1056,11 @@ impl QueryAgent {
     }
 
     /// Generate explanation
-    fn generate_explanation(&self, plan: &ExecutionPlan, trace: &[ExecutionStep]) -> Result<String> {
+    fn generate_explanation(
+        &self,
+        plan: &ExecutionPlan,
+        trace: &[ExecutionStep],
+    ) -> Result<String> {
         let mut explanation = String::new();
 
         explanation.push_str(&format!("Query: \"{}\"\n\n", plan.query));
@@ -1052,7 +1086,11 @@ impl QueryAgent {
     }
 
     /// Generate suggestions for query refinement
-    fn generate_suggestions(&self, intent: &QueryIntent, results: &[String]) -> Result<Vec<String>> {
+    fn generate_suggestions(
+        &self,
+        intent: &QueryIntent,
+        results: &[String],
+    ) -> Result<Vec<String>> {
         let mut suggestions = Vec::new();
 
         if results.is_empty() {
@@ -1063,7 +1101,10 @@ impl QueryAgent {
         }
 
         // Check for time-related suggestions
-        let has_time_modifier = intent.modifiers.iter().any(|m| matches!(m, IntentModifier::TimeRange { .. }));
+        let has_time_modifier = intent
+            .modifiers
+            .iter()
+            .any(|m| matches!(m, IntentModifier::TimeRange { .. }));
         if !has_time_modifier {
             suggestions.push("Add time range to focus on recent items".to_string());
         }
@@ -1163,7 +1204,11 @@ impl TransformAgent {
     }
 
     /// Transform vectors based on instruction
-    pub async fn transform(&self, instruction: &str, vectors: &[Vec<f32>]) -> Result<TransformResult> {
+    pub async fn transform(
+        &self,
+        instruction: &str,
+        vectors: &[Vec<f32>],
+    ) -> Result<TransformResult> {
         let start_time = std::time::Instant::now();
 
         // Parse transformation instruction
@@ -1200,21 +1245,23 @@ impl TransformAgent {
         }
     }
 
-    fn apply_transform(&self, operation: &TransformOp, vectors: &[Vec<f32>]) -> Result<Vec<Vec<f32>>> {
+    fn apply_transform(
+        &self,
+        operation: &TransformOp,
+        vectors: &[Vec<f32>],
+    ) -> Result<Vec<Vec<f32>>> {
         match operation {
-            TransformOp::Normalize => {
-                Ok(vectors
-                    .iter()
-                    .map(|v| {
-                        let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
-                        if norm > 0.0 {
-                            v.iter().map(|x| x / norm).collect()
-                        } else {
-                            v.clone()
-                        }
-                    })
-                    .collect())
-            }
+            TransformOp::Normalize => Ok(vectors
+                .iter()
+                .map(|v| {
+                    let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    if norm > 0.0 {
+                        v.iter().map(|x| x / norm).collect()
+                    } else {
+                        v.clone()
+                    }
+                })
+                .collect()),
 
             TransformOp::ReduceDimensions { target_dim } => {
                 // Simplified: just truncate (would use PCA in production)
@@ -1222,7 +1269,7 @@ impl TransformAgent {
                     .iter()
                     .map(|v| v.iter().take(*target_dim).cloned().collect())
                     .collect())
-            }
+            },
 
             TransformOp::Deduplicate { threshold } => {
                 // Simple deduplication based on cosine similarity
@@ -1242,7 +1289,7 @@ impl TransformAgent {
                 }
 
                 Ok(unique)
-            }
+            },
 
             _ => Ok(vectors.to_vec()),
         }
@@ -1449,9 +1496,10 @@ impl ComplianceAgent {
 
         // Check data retention
         if let Some(ref policy) = operation.retention_policy
-            && policy.max_retention_days < 30 {
-                warnings.push("Short retention policy may affect analytics".to_string());
-            }
+            && policy.max_retention_days < 30
+        {
+            warnings.push("Short retention policy may affect analytics".to_string());
+        }
 
         // Check access permissions
         if operation.requires_pii && !operation.has_pii_access {
@@ -1481,7 +1529,12 @@ impl ComplianceAgent {
     }
 
     /// Track lineage for an operation
-    pub fn track_lineage(&self, operation: &str, inputs: &[String], outputs: &[String]) -> LineageRecord {
+    pub fn track_lineage(
+        &self,
+        operation: &str,
+        inputs: &[String],
+        outputs: &[String],
+    ) -> LineageRecord {
         LineageRecord {
             operation: operation.to_string(),
             timestamp: chrono::Utc::now().timestamp(),
@@ -1587,10 +1640,7 @@ mod tests {
     async fn test_transform_agent() {
         let agent = TransformAgent::new(AgentConfig::default());
 
-        let vectors = vec![
-            vec![1.0, 2.0, 3.0],
-            vec![4.0, 5.0, 6.0],
-        ];
+        let vectors = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
 
         let result = agent.transform("normalize", &vectors).await.unwrap();
 
@@ -1624,10 +1674,7 @@ mod tests {
             },
         );
 
-        let results = vec![
-            ("item1".to_string(), 0.8),
-            ("item2".to_string(), 0.9),
-        ];
+        let results = vec![("item1".to_string(), 0.8), ("item2".to_string(), 0.9)];
 
         let personalized = agent.personalize("user1", &results).await.unwrap();
 

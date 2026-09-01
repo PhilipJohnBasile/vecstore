@@ -21,8 +21,8 @@
 
 use std::collections::HashMap;
 use vecstore::{
-    reranking::{CrossEncoderFn, IdentityReranker, MMRReranker, Reranker, ScoreReranker},
     Metadata, Query, VecDatabase,
+    reranking::{CrossEncoderFn, IdentityReranker, MMRReranker, Reranker, ScoreReranker},
 };
 
 fn main() -> anyhow::Result<()> {

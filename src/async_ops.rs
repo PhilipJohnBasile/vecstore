@@ -107,9 +107,9 @@ impl AsyncStoreOps {
         for chunk in chunks {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let mut store = store_clone
-                    .lock()
-                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch upsert".into()))?;
+                let mut store = store_clone.lock().map_err(|_| {
+                    VecStoreError::LockError("failed to acquire store lock for batch upsert".into())
+                })?;
                 for (id, vector, metadata) in chunk {
                     let metadata: Metadata = serde_json::from_value(metadata)?;
                     store.upsert(id, vector, metadata)?;
@@ -158,9 +158,9 @@ impl AsyncStoreOps {
         for query_vec in queries {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let store = store_clone
-                    .lock()
-                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch query".into()))?;
+                let store = store_clone.lock().map_err(|_| {
+                    VecStoreError::LockError("failed to acquire store lock for batch query".into())
+                })?;
                 let query = Query::new(query_vec).with_limit(k);
                 store.query(query)
             });
@@ -183,9 +183,9 @@ impl AsyncStoreOps {
         for id in ids {
             let store_clone = self.store.clone();
             let handle = task::spawn_blocking(move || {
-                let mut store = store_clone
-                    .lock()
-                    .map_err(|_| VecStoreError::LockError("failed to acquire store lock for batch delete".into()))?;
+                let mut store = store_clone.lock().map_err(|_| {
+                    VecStoreError::LockError("failed to acquire store lock for batch delete".into())
+                })?;
                 store.delete(&id)
             });
             handles.push(handle);

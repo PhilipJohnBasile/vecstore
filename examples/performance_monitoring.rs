@@ -7,7 +7,7 @@
 //! - Resource utilization
 
 use anyhow::Result;
-use vecstore::{print_health_report, BenchmarkConfig, Benchmarker, HealthChecker, VecStore};
+use vecstore::{BenchmarkConfig, Benchmarker, HealthChecker, VecStore, print_health_report};
 
 fn main() -> Result<()> {
     println!("📊 VecStore Performance Monitoring Example\n");
