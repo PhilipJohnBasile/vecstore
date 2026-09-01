@@ -1,7 +1,9 @@
 # VecStore Product Improvement Report
-**Date:** December 27, 2025  
-**Version Analyzed:** 0.1.0 (post-0.0.2)  
+**Date:** December 27, 2025
+**Version Analyzed:** 0.1.0 (post-0.0.2)
 **Scope:** Comprehensive analysis of current state and strategic recommendations
+
+> Historical snapshot: this report records the repository state observed on December 27, 2025. Re-verify build, test, feature, and release claims against the current repository.
 
 ---
 
@@ -163,8 +165,8 @@ error: could not compile `vecstore` (lib test) due to 1 previous error; 101 warn
 
 ### 2.1 🔴 **CRITICAL: Tests Don't Compile**
 
-**Impact:** Cannot verify ANY functionality works  
-**Effort:** 2-5 days  
+**Impact:** Cannot verify ANY functionality works
+**Effort:** 2-5 days
 **Priority:** P0 - Block all other work
 
 **Actions:**
@@ -176,8 +178,8 @@ error: could not compile `vecstore` (lib test) due to 1 previous error; 101 warn
 
 ### 2.2 🔴 **CRITICAL: Version & Claim Inconsistencies**
 
-**Impact:** Destroys user trust, confusing for contributors  
-**Effort:** 4 hours  
+**Impact:** Destroys user trust, confusing for contributors
+**Effort:** 4 hours
 **Priority:** P0
 
 **Actions:**
@@ -188,8 +190,8 @@ error: could not compile `vecstore` (lib test) due to 1 previous error; 101 warn
 
 ### 2.3 🔴 **CRITICAL: Scope Creep & Focus**
 
-**Impact:** Impossible to ship stable 1.0, technical debt growing  
-**Effort:** Ongoing  
+**Impact:** Impossible to ship stable 1.0, technical debt growing
+**Effort:** Ongoing
 **Priority:** P0
 
 **Problem:** Codebase has 50+ modules, many experimental. This is **5-10x more features than "SQLite of vector search" should have**.
@@ -202,8 +204,8 @@ error: could not compile `vecstore` (lib test) due to 1 previous error; 101 warn
 
 ### 2.4 🟡 **HIGH: No Public Benchmarks**
 
-**Impact:** Cannot claim performance parity with competitors  
-**Effort:** 1-2 weeks  
+**Impact:** Cannot claim performance parity with competitors
+**Effort:** 1-2 weeks
 **Priority:** P1
 
 **Actions:**
@@ -214,8 +216,8 @@ error: could not compile `vecstore` (lib test) due to 1 previous error; 101 warn
 
 ### 2.5 🟡 **HIGH: Unclear Production Readiness**
 
-**Impact:** Users don't know what's safe to use  
-**Effort:** 1 week  
+**Impact:** Users don't know what's safe to use
+**Effort:** 1 week
 **Priority:** P1
 
 **Actions:**
@@ -284,15 +286,15 @@ Instead of competing on **all** features, dominate **one** category:
 
 To maintain focus, explicitly **remove** these from near-term roadmap:
 
-❌ **Distributed/Multi-Node** - Use existing tools (Kubernetes) instead  
-❌ **Real-time Indexing** - Batch is good enough for v1.0  
-❌ **Neural Rankers** - Too experimental, limited use cases  
-❌ **A/B Testing Framework** - Not core to vector search  
-❌ **Cost Optimizer** - Niche feature, build later  
-❌ **Federation** - Complexity explosion, defer  
-❌ **CDC/Change Streams** - Use external tools (Debezium)  
-❌ **Clustering Algorithms** - Scikit-learn does this better  
-❌ **Auto-tuning** - Manual tuning works for v1.0  
+❌ **Distributed/Multi-Node** - Use existing tools (Kubernetes) instead
+❌ **Real-time Indexing** - Batch is good enough for v1.0
+❌ **Neural Rankers** - Too experimental, limited use cases
+❌ **A/B Testing Framework** - Not core to vector search
+❌ **Cost Optimizer** - Niche feature, build later
+❌ **Federation** - Complexity explosion, defer
+❌ **CDC/Change Streams** - Use external tools (Debezium)
+❌ **Clustering Algorithms** - Scikit-learn does this better
+❌ **Auto-tuning** - Manual tuning works for v1.0
 
 **Save these for 2.0+** once 1.0 is rock-solid.
 
@@ -348,18 +350,18 @@ To maintain focus, explicitly **remove** these from near-term roadmap:
 1. **Create Feature Maturity Model**
    ```markdown
    # Feature Stability
-   
+
    ## Stable (Production-Ready)
    - HNSW indexing
    - Basic vector operations (upsert, query, delete)
    - Metadata filtering
    - Snapshots
-   
+
    ## Beta (Use with Caution)
    - Hybrid search
    - Server mode (gRPC/HTTP)
    - Python bindings
-   
+
    ## Experimental (Preview Only)
    - Explainable search
    - GPU acceleration
@@ -467,7 +469,7 @@ To maintain focus, explicitly **remove** these from near-term roadmap:
 3. **Add Prominent Alpha Warnings**
    ```markdown
    # VecStore
-   
+
    > ⚠️ **ALPHA SOFTWARE**: VecStore is in early development.
    > APIs may change. Not recommended for production use with
    > data you can't regenerate. See [MATURITY.md](MATURITY.md)
@@ -665,7 +667,7 @@ To maintain focus, explicitly **remove** these from near-term roadmap:
 
 ### 7.2 Strategic Positioning
 
-**From:** "Feature-rich experimental vector DB with 50+ modules"  
+**From:** "Feature-rich experimental vector DB with 50+ modules"
 **To:** "Production-ready embeddable vector DB with explainability"
 
 **Key Messages:**
@@ -728,7 +730,7 @@ VecStore has **tremendous potential** but needs **focus and execution** to reali
 
 ---
 
-**Report Author:** AI Product Analyst  
-**Review Status:** Draft for stakeholder review  
-**Last Updated:** December 27, 2025  
+**Report Author:** AI Product Analyst
+**Review Status:** Draft for stakeholder review
+**Last Updated:** December 27, 2025
 **Next Review:** January 15, 2026

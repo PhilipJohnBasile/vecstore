@@ -1,7 +1,9 @@
 # VecStore - Immediate Action Plan
-**Based on:** Product Improvement Report (Dec 27, 2025)  
-**Timeline:** 30-Day Sprint to Stabilization  
+**Based on:** Product Improvement Report (Dec 27, 2025)
+**Timeline:** 30-Day Sprint to Stabilization
 **Goal:** Fix critical issues and establish foundation for 1.0
+
+> Historical proposal: this plan reflects the December 27, 2025 assessment. Re-baseline every task against the current repository before execution.
 
 ---
 
@@ -9,7 +11,7 @@
 
 This document provides a **concrete, actionable 30-day plan** to address the most critical issues identified in the Product Improvement Report.
 
-**Current State:** ❌ Build failing, 101 warnings, unclear production status  
+**Current State:** ❌ Build failing, 101 warnings, unclear production status
 **Target State:** ✅ Clean build, passing tests, clear roadmap, v0.2.0 released
 
 ---
@@ -18,7 +20,7 @@ This document provides a **concrete, actionable 30-day plan** to address the mos
 
 ### Day 1-2: Fix Compilation & Tests
 
-**Owner:** Development Team  
+**Owner:** Development Team
 **Priority:** P0 - BLOCKER
 
 **Tasks:**
@@ -52,7 +54,7 @@ grep -E "test result: (ok|FAILED)" test-run.log
 
 ### Day 3: Resolve Compiler Warnings
 
-**Owner:** Development Team  
+**Owner:** Development Team
 **Priority:** P0
 
 **Tasks:**
@@ -82,7 +84,7 @@ cargo clippy --all-features -- -D warnings
 
 ### Day 4: Standardize Versions
 
-**Owner:** Development Team  
+**Owner:** Development Team
 **Priority:** P0
 
 **Tasks:**
@@ -114,7 +116,7 @@ grep -r "0\.1\.0" . --include="*.md" --include="*.toml" --include="*.json"
 
 ### Day 5: Add Prominent Warnings & Create MATURITY.md
 
-**Owner:** Documentation Team  
+**Owner:** Documentation Team
 **Priority:** P0
 
 **Tasks:**
@@ -173,7 +175,7 @@ grep -r "0\.1\.0" . --include="*.md" --include="*.toml" --include="*.json"
 
 ### Day 6-7: Set Up CI/CD
 
-**Owner:** DevOps Team  
+**Owner:** DevOps Team
 **Priority:** P0
 
 **Tasks:**
@@ -211,7 +213,7 @@ jobs:
         override: true
     - name: Build
       run: cargo build --all-features --verbose
-    
+
   test:
     runs-on: ubuntu-latest
     steps:
@@ -222,7 +224,7 @@ jobs:
         override: true
     - name: Run tests
       run: cargo test --all-features --verbose
-  
+
   clippy:
     runs-on: ubuntu-latest
     steps:
@@ -234,7 +236,7 @@ jobs:
         override: true
     - name: Clippy
       run: cargo clippy --all-features -- -D warnings
-  
+
   format:
     runs-on: ubuntu-latest
     steps:
@@ -254,7 +256,7 @@ jobs:
 
 ### Day 8-9: Audit All Documentation
 
-**Owner:** Documentation Team  
+**Owner:** Documentation Team
 **Priority:** P1
 
 **Tasks:**
@@ -273,7 +275,7 @@ jobs:
 
 ### Day 10-11: Create Missing Documentation
 
-**Owner:** Documentation Team  
+**Owner:** Documentation Team
 **Priority:** P1
 
 **Tasks:**
@@ -292,7 +294,7 @@ jobs:
 
 ### Day 12-14: Reorganize Experimental Features
 
-**Owner:** Development Team  
+**Owner:** Development Team
 **Priority:** P1
 
 **Tasks:**
@@ -345,7 +347,7 @@ Cargo.toml (workspace root)
 
 ### Day 15-17: Test Coverage Analysis
 
-**Owner:** QA Team  
+**Owner:** QA Team
 **Priority:** P1
 
 **Tasks:**
@@ -376,7 +378,7 @@ open coverage/index.html
 
 ### Day 18-19: Benchmark Creation
 
-**Owner:** Development Team  
+**Owner:** Development Team
 **Priority:** P1
 
 **Tasks:**
@@ -402,7 +404,7 @@ use vecstore::VecStore;
 
 fn benchmark_upsert(c: &mut Criterion) {
     let mut group = c.benchmark_group("upsert");
-    
+
     for size in [1_000, 10_000, 100_000] {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, &size| {
             let mut store = VecStore::open_in_memory(384).unwrap();
@@ -425,7 +427,7 @@ criterion_main!(benches);
 
 ### Day 20-21: Data Safety Testing
 
-**Owner:** QA Team  
+**Owner:** QA Team
 **Priority:** P1
 
 **Tasks:**
@@ -446,7 +448,7 @@ criterion_main!(benches);
 
 ### Day 22-24: Documentation Polish
 
-**Owner:** Documentation Team  
+**Owner:** Documentation Team
 **Priority:** P1
 
 **Tasks:**
@@ -465,7 +467,7 @@ criterion_main!(benches);
 
 ### Day 25-27: Final Testing & Bug Fixes
 
-**Owner:** Full Team  
+**Owner:** Full Team
 **Priority:** P0
 
 **Tasks:**
@@ -484,7 +486,7 @@ criterion_main!(benches);
 
 ### Day 28-29: Community Preparation
 
-**Owner:** Community Team  
+**Owner:** Community Team
 **Priority:** P2
 
 **Tasks:**
@@ -503,7 +505,7 @@ criterion_main!(benches);
 
 ### Day 30: Release!
 
-**Owner:** Release Manager  
+**Owner:** Release Manager
 **Priority:** P0
 
 **Tasks:**
@@ -563,16 +565,16 @@ criterion_main!(benches);
 
 At end of 30 days, VecStore should have:
 
-✅ **Clean build:** Zero errors, zero warnings  
-✅ **Passing tests:** >80% tests passing, failures documented  
-✅ **Clear positioning:** MATURITY.md published, alpha warnings visible  
-✅ **Organized code:** Core vs. Labs separation  
-✅ **CI/CD active:** Automated quality checks  
-✅ **Documented state:** All claims verified or corrected  
-✅ **Baseline metrics:** Test coverage, benchmarks, known issues  
-✅ **Community ready:** Discord, GitHub Discussions, issue templates  
-✅ **Release published:** v0.2.0-alpha on crates.io, PyPI, npm  
-✅ **Path forward:** Clear roadmap to 1.0.0  
+✅ **Clean build:** Zero errors, zero warnings
+✅ **Passing tests:** >80% tests passing, failures documented
+✅ **Clear positioning:** MATURITY.md published, alpha warnings visible
+✅ **Organized code:** Core vs. Labs separation
+✅ **CI/CD active:** Automated quality checks
+✅ **Documented state:** All claims verified or corrected
+✅ **Baseline metrics:** Test coverage, benchmarks, known issues
+✅ **Community ready:** Discord, GitHub Discussions, issue templates
+✅ **Release published:** v0.2.0-alpha on crates.io, PyPI, npm
+✅ **Path forward:** Clear roadmap to 1.0.0
 
 ---
 
@@ -586,7 +588,7 @@ At end of 30 days, VecStore should have:
 
 ---
 
-**Document Owner:** Project Lead  
-**Review Cadence:** Weekly standup  
-**Update Frequency:** Daily progress tracking  
+**Document Owner:** Project Lead
+**Review Cadence:** Weekly standup
+**Update Frequency:** Daily progress tracking
 **Completion Target:** January 26, 2026
