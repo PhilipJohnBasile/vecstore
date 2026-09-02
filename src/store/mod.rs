@@ -2759,6 +2759,25 @@ mod soft_delete_tests {
     }
 
     #[test]
+    fn test_full_query_survives_random_hnsw_layers_and_restores() {
+        for _ in 0..64 {
+            let (mut store, _temp_dir) = create_test_store();
+            let query = Query {
+                vector: vec![1.0, 2.0, 3.0],
+                k: 10,
+                filter: None,
+            };
+            assert_eq!(store.query(query.clone()).unwrap().len(), 3);
+            store.soft_delete("doc1").unwrap();
+            let results = store.query(query.clone()).unwrap();
+            assert_eq!(results.len(), 2);
+            assert!(results.iter().all(|n| n.id != "doc1"));
+            store.restore("doc1").unwrap();
+            assert_eq!(store.query(query).unwrap().len(), 3);
+        }
+    }
+
+    #[test]
     fn test_query_excludes_deleted() {
         let (mut store, _temp_dir) = create_test_store();
 

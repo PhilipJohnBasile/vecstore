@@ -4,9 +4,42 @@
 use super::types::{Distance, Id};
 use anyhow::{Result, anyhow};
 use hnsw_rs::api::AnnT;
-use hnsw_rs::prelude::{DistCosine, DistDot, DistL1, DistL2, Distance as HnswDistance, Hnsw};
+use hnsw_rs::prelude::{
+    DistCosine, DistDot, DistL1, DistL2, Distance as HnswDistance, Hnsw, Neighbour,
+};
 use std::collections::HashMap;
 use std::path::Path;
+
+/// Enumerate the index when the caller asks for every raw node. In a small
+/// randomly layered HNSW graph, approximate traversal can omit a node even
+/// when `k` and `ef` exceed the population. That is not a useful approximation
+/// for a full-population request (including over-fetches used for deletions).
+fn search_hnsw<D: HnswDistance<f32> + Send + Sync>(
+    hnsw: &Hnsw<'_, f32, D>,
+    vector: &[f32],
+    k: usize,
+    ef: usize,
+) -> Vec<Neighbour> {
+    if k == 0 || hnsw.get_nb_point() == 0 {
+        return Vec::new();
+    }
+    if k < hnsw.get_nb_point() {
+        return hnsw.search(vector, k, ef);
+    }
+    let mut neighbors: Vec<_> = hnsw
+        .get_point_indexation()
+        .into_iter()
+        .map(|point| {
+            Neighbour::new(
+                point.get_origin_id(),
+                hnsw.get_distance().eval(vector, point.get_v()),
+                point.get_point_id(),
+            )
+        })
+        .collect();
+    neighbors.sort_by(|a, b| a.distance.total_cmp(&b.distance).then(a.d_id.cmp(&b.d_id)));
+    neighbors
+}
 
 // ============================================================================
 // CUSTOM DISTANCE METRICS FOR F32 VECTORS
@@ -395,15 +428,15 @@ impl HnswBackend {
         }
 
         let neighbors = match &self.hnsw {
-            HnswInstance::Cosine(h) => h.search(vector, k, 30),
-            HnswInstance::Euclidean(h) => h.search(vector, k, 30),
-            HnswInstance::DotProduct(h) => h.search(vector, k, 30),
-            HnswInstance::Manhattan(h) => h.search(vector, k, 30),
-            HnswInstance::Hamming(h) => h.search(vector, k, 30),
-            HnswInstance::Jaccard(h) => h.search(vector, k, 30),
-            HnswInstance::Chebyshev(h) => h.search(vector, k, 30),
-            HnswInstance::Canberra(h) => h.search(vector, k, 30),
-            HnswInstance::BrayCurtis(h) => h.search(vector, k, 30),
+            HnswInstance::Cosine(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Euclidean(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::DotProduct(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Manhattan(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Hamming(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Jaccard(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Chebyshev(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::Canberra(h) => search_hnsw(h, vector, k, 30),
+            HnswInstance::BrayCurtis(h) => search_hnsw(h, vector, k, 30),
         };
 
         neighbors
@@ -710,15 +743,15 @@ impl HnswBackend {
         }
 
         let neighbors = match &self.hnsw {
-            HnswInstance::Cosine(h) => h.search(vector, k, ef_search),
-            HnswInstance::Euclidean(h) => h.search(vector, k, ef_search),
-            HnswInstance::DotProduct(h) => h.search(vector, k, ef_search),
-            HnswInstance::Manhattan(h) => h.search(vector, k, ef_search),
-            HnswInstance::Hamming(h) => h.search(vector, k, ef_search),
-            HnswInstance::Jaccard(h) => h.search(vector, k, ef_search),
-            HnswInstance::Chebyshev(h) => h.search(vector, k, ef_search),
-            HnswInstance::Canberra(h) => h.search(vector, k, ef_search),
-            HnswInstance::BrayCurtis(h) => h.search(vector, k, ef_search),
+            HnswInstance::Cosine(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Euclidean(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::DotProduct(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Manhattan(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Hamming(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Jaccard(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Chebyshev(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::Canberra(h) => search_hnsw(h, vector, k, ef_search),
+            HnswInstance::BrayCurtis(h) => search_hnsw(h, vector, k, ef_search),
         };
 
         Ok(neighbors
