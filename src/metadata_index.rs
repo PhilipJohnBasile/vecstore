@@ -92,7 +92,7 @@ impl IndexedValue {
                 } else {
                     IndexedValue::Null
                 }
-            }
+            },
             serde_json::Value::Bool(b) => IndexedValue::Bool(*b),
             _ => IndexedValue::Null,
         }
@@ -132,10 +132,7 @@ impl BTreeIndex {
 
     /// Insert value
     pub fn insert(&mut self, value: IndexedValue, id: String) {
-        self.tree
-            .entry(value)
-            .or_default()
-            .insert(id);
+        self.tree.entry(value).or_default().insert(id);
     }
 
     /// Remove value
@@ -157,14 +154,14 @@ impl BTreeIndex {
                 if let Some(ids) = self.tree.get(value) {
                     result.extend(ids.iter().cloned());
                 }
-            }
+            },
             "!=" => {
                 for (k, ids) in &self.tree {
                     if k != value {
                         result.extend(ids.iter().cloned());
                     }
                 }
-            }
+            },
             ">" => {
                 for (_k, ids) in self.tree.range((
                     std::ops::Bound::Excluded(value.clone()),
@@ -172,7 +169,7 @@ impl BTreeIndex {
                 )) {
                     result.extend(ids.iter().cloned());
                 }
-            }
+            },
             ">=" => {
                 for (_k, ids) in self.tree.range((
                     std::ops::Bound::Included(value.clone()),
@@ -180,7 +177,7 @@ impl BTreeIndex {
                 )) {
                     result.extend(ids.iter().cloned());
                 }
-            }
+            },
             "<" => {
                 for (_k, ids) in self.tree.range((
                     std::ops::Bound::Unbounded,
@@ -188,7 +185,7 @@ impl BTreeIndex {
                 )) {
                     result.extend(ids.iter().cloned());
                 }
-            }
+            },
             "<=" => {
                 for (_k, ids) in self.tree.range((
                     std::ops::Bound::Unbounded,
@@ -196,8 +193,8 @@ impl BTreeIndex {
                 )) {
                     result.extend(ids.iter().cloned());
                 }
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         result
@@ -233,10 +230,7 @@ impl HashIndex {
 
     /// Insert value
     pub fn insert(&mut self, value: IndexedValue, id: String) {
-        self.map
-            .entry(value)
-            .or_default()
-            .insert(id);
+        self.map.entry(value).or_default().insert(id);
     }
 
     /// Remove value
@@ -386,15 +380,15 @@ impl MetadataIndex {
         match self {
             MetadataIndex::BTree(idx) => {
                 idx.insert(IndexedValue::from_json(value), id);
-            }
+            },
             MetadataIndex::Hash(idx) => {
                 idx.insert(IndexedValue::from_json(value), id);
-            }
+            },
             MetadataIndex::Inverted(idx) => {
                 if let serde_json::Value::String(text) = value {
                     idx.insert(text, id);
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -404,15 +398,15 @@ impl MetadataIndex {
         match self {
             MetadataIndex::BTree(idx) => {
                 idx.remove(&IndexedValue::from_json(value), id);
-            }
+            },
             MetadataIndex::Hash(idx) => {
                 idx.remove(&IndexedValue::from_json(value), id);
-            }
+            },
             MetadataIndex::Inverted(idx) => {
                 if let serde_json::Value::String(text) = value {
                     idx.remove(text, id);
                 }
-            }
+            },
         }
         Ok(())
     }
@@ -512,7 +506,7 @@ impl MetadataIndexManager {
                 } else {
                     HashSet::new()
                 }
-            }
+            },
         };
 
         Some(result)
@@ -527,7 +521,7 @@ impl MetadataIndexManager {
                 let indexed_values: Vec<IndexedValue> =
                     values.iter().map(IndexedValue::from_json).collect();
                 Some(idx.query_in(&indexed_values))
-            }
+            },
             _ => None,
         }
     }
@@ -546,17 +540,17 @@ impl MetadataIndexManager {
                 let unique = idx.tree.len();
                 let total = idx.all_ids().len();
                 (IndexType::BTree, unique, total)
-            }
+            },
             MetadataIndex::Hash(idx) => {
                 let unique = idx.map.len();
                 let total = idx.all_ids().len();
                 (IndexType::Hash, unique, total)
-            }
+            },
             MetadataIndex::Inverted(idx) => {
                 let unique = idx.index.len();
                 let total: usize = idx.index.values().map(|s| s.len()).sum();
                 (IndexType::Inverted, unique, total)
-            }
+            },
         };
 
         Some(IndexStats {

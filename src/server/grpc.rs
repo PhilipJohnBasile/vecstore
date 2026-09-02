@@ -84,7 +84,7 @@ impl pb::vec_store_service_server::VecStoreService for VecStoreGrpcServer {
                         Ok(_) => inserted += 1,
                         Err(e) => errors.push(format!("{}: {}", upsert_req.id, e)),
                     }
-                }
+                },
                 Err(e) => errors.push(format!("{}: invalid metadata: {}", upsert_req.id, e)),
             }
         }

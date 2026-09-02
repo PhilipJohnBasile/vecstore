@@ -17,8 +17,8 @@
 
 #[cfg(feature = "embeddings")]
 use vecstore::{
-    embeddings::{EmbeddingCollection, SimpleEmbedder, TextEmbedder},
     Metadata, VecDatabase,
+    embeddings::{EmbeddingCollection, SimpleEmbedder, TextEmbedder},
 };
 
 #[cfg(feature = "embeddings")]

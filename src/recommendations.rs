@@ -30,11 +30,11 @@
 //! let recommendations = engine.recommend(request)?;
 //! ```
 
-use std::collections::{HashMap, HashSet};
-use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{HashMap, HashSet};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // CONFIGURATION
@@ -239,7 +239,10 @@ impl UserProfile {
         if !self.positive_items.contains(&item_id.to_string()) {
             self.positive_items.push(item_id.to_string());
         }
-        *self.item_interactions.entry(item_id.to_string()).or_insert(0) += 1;
+        *self
+            .item_interactions
+            .entry(item_id.to_string())
+            .or_insert(0) += 1;
         self.last_updated = unix_timestamp();
     }
 
@@ -327,18 +330,14 @@ impl RecommendationEngine {
     /// Get or create user profile
     pub fn get_user(&mut self, user_id: &str) -> &mut UserProfile {
         if !self.users.contains_key(user_id) {
-            self.users.insert(user_id.to_string(), UserProfile::new(user_id));
+            self.users
+                .insert(user_id.to_string(), UserProfile::new(user_id));
         }
         self.users.get_mut(user_id).unwrap()
     }
 
     /// Record user interaction
-    pub fn record_interaction(
-        &mut self,
-        user_id: &str,
-        item_id: &str,
-        positive: bool,
-    ) {
+    pub fn record_interaction(&mut self, user_id: &str, item_id: &str, positive: bool) {
         let user = self.get_user(user_id);
         if positive {
             user.record_positive(item_id);
@@ -350,13 +349,15 @@ impl RecommendationEngine {
         if positive {
             for other_item in &user.positive_items.clone() {
                 if other_item != item_id {
-                    *self.cooccurrence
+                    *self
+                        .cooccurrence
                         .entry(item_id.to_string())
                         .or_default()
                         .entry(other_item.clone())
                         .or_insert(0) += 1;
 
-                    *self.cooccurrence
+                    *self
+                        .cooccurrence
                         .entry(other_item.clone())
                         .or_default()
                         .entry(item_id.to_string())
@@ -401,10 +402,14 @@ impl RecommendationEngine {
 
     /// Recommend items similar to a single item
     pub fn recommend_similar(&self, item_id: &str, limit: usize) -> Result<Vec<Recommendation>> {
-        let item_vector = self.items.get(item_id)
+        let item_vector = self
+            .items
+            .get(item_id)
             .ok_or_else(|| VecStoreError::NotFound(format!("Item: {}", item_id)))?;
 
-        let mut results: Vec<Recommendation> = self.items.iter()
+        let mut results: Vec<Recommendation> = self
+            .items
+            .iter()
             .filter(|(id, _)| *id != item_id)
             .map(|(id, vec)| {
                 let score = cosine_similarity(item_vector, vec);
@@ -430,33 +435,31 @@ impl RecommendationEngine {
         if request.positive.is_empty() {
             // Use user profile if available
             if let Some(user_id) = &request.user_id
-                && let Some(user) = self.users.get(user_id) {
-                    if let Some(pref) = &user.preference_vector {
-                        return Ok(pref.clone());
-                    }
-                    // Build from user's positive items
-                    let positive_ids: Vec<&str> = user.positive_items.iter()
-                        .map(|s| s.as_str())
-                        .collect();
-                    return self.average_vectors(&positive_ids);
+                && let Some(user) = self.users.get(user_id)
+            {
+                if let Some(pref) = &user.preference_vector {
+                    return Ok(pref.clone());
                 }
+                // Build from user's positive items
+                let positive_ids: Vec<&str> =
+                    user.positive_items.iter().map(|s| s.as_str()).collect();
+                return self.average_vectors(&positive_ids);
+            }
             return Err(VecStoreError::InvalidInput(
-                "No positive examples or user profile".to_string()
+                "No positive examples or user profile".to_string(),
             ));
         }
 
         match request.strategy {
             RecommendStrategy::AverageVector | RecommendStrategy::Hybrid => {
-                let positive_refs: Vec<&str> = request.positive.iter()
-                    .map(|s| s.as_str())
-                    .collect();
+                let positive_refs: Vec<&str> =
+                    request.positive.iter().map(|s| s.as_str()).collect();
                 let mut avg = self.average_vectors(&positive_refs)?;
 
                 // Subtract negative vectors
                 if !request.negative.is_empty() {
-                    let negative_refs: Vec<&str> = request.negative.iter()
-                        .map(|s| s.as_str())
-                        .collect();
+                    let negative_refs: Vec<&str> =
+                        request.negative.iter().map(|s| s.as_str()).collect();
                     if let Ok(neg_avg) = self.average_vectors(&negative_refs) {
                         for (i, v) in avg.iter_mut().enumerate() {
                             *v -= neg_avg[i] * 0.5;
@@ -473,14 +476,15 @@ impl RecommendationEngine {
                 }
 
                 Ok(avg)
-            }
+            },
             _ => {
                 // For other strategies, use first positive
                 let first = &request.positive[0];
-                self.items.get(first)
+                self.items
+                    .get(first)
                     .cloned()
                     .ok_or_else(|| VecStoreError::NotFound(format!("Item: {}", first)))
-            }
+            },
         }
     }
 
@@ -515,11 +519,15 @@ impl RecommendationEngine {
         query_vector: &[f32],
         request: &RecommendRequest,
     ) -> Result<Vec<Recommendation>> {
-        let excluded: HashSet<_> = request.positive.iter()
+        let excluded: HashSet<_> = request
+            .positive
+            .iter()
             .chain(request.negative.iter())
             .collect();
 
-        let candidates: Vec<Recommendation> = self.items.iter()
+        let candidates: Vec<Recommendation> = self
+            .items
+            .iter()
             .filter(|(id, _)| !excluded.contains(id))
             .map(|(id, vec)| {
                 let score = cosine_similarity(query_vector, vec);
@@ -551,10 +559,11 @@ impl RecommendationEngine {
 
             for positive_id in &request.positive {
                 if let Some(cooc) = self.cooccurrence.get(positive_id)
-                    && let Some(&freq) = cooc.get(&candidate.id) {
-                        collab_score += freq as f32;
-                        count += 1;
-                    }
+                    && let Some(&freq) = cooc.get(&candidate.id)
+                {
+                    collab_score += freq as f32;
+                    count += 1;
+                }
             }
 
             if count > 0 {
@@ -563,7 +572,8 @@ impl RecommendationEngine {
                 candidate.collaborative_score = Some(collab_score);
 
                 // Blend with content score
-                candidate.score = candidate.content_score * (1.0 - self.config.collaborative_weight)
+                candidate.score = candidate.content_score
+                    * (1.0 - self.config.collaborative_weight)
                     + collab_score * self.config.collaborative_weight;
             }
         }
@@ -606,9 +616,7 @@ impl RecommendationEngine {
             total_items: self.items.len(),
             total_users: self.users.len(),
             cached_similarities: self.similarity_cache.len(),
-            cooccurrence_pairs: self.cooccurrence.values()
-                .map(|m| m.len())
-                .sum(),
+            cooccurrence_pairs: self.cooccurrence.values().map(|m| m.len()).sum(),
         }
     }
 }
@@ -653,9 +661,15 @@ mod tests {
     fn test_recommend_similar() {
         let mut engine = RecommendationEngine::new(4);
 
-        engine.add_item("item1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
-        engine.add_item("item2", vec![0.9, 0.1, 0.0, 0.0], None).unwrap();
-        engine.add_item("item3", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
+        engine
+            .add_item("item1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("item2", vec![0.9, 0.1, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("item3", vec![0.0, 1.0, 0.0, 0.0], None)
+            .unwrap();
 
         let results = engine.recommend_similar("item1", 10).unwrap();
         assert_eq!(results.len(), 2);
@@ -666,10 +680,18 @@ mod tests {
     fn test_recommend_with_positives() {
         let mut engine = RecommendationEngine::new(4);
 
-        engine.add_item("liked1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
-        engine.add_item("liked2", vec![0.8, 0.2, 0.0, 0.0], None).unwrap();
-        engine.add_item("candidate1", vec![0.9, 0.1, 0.0, 0.0], None).unwrap();
-        engine.add_item("candidate2", vec![0.0, 0.0, 1.0, 0.0], None).unwrap();
+        engine
+            .add_item("liked1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("liked2", vec![0.8, 0.2, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("candidate1", vec![0.9, 0.1, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("candidate2", vec![0.0, 0.0, 1.0, 0.0], None)
+            .unwrap();
 
         let request = RecommendRequest::new()
             .with_positive(&["liked1", "liked2"])
@@ -686,9 +708,15 @@ mod tests {
         let mut engine = RecommendationEngine::new(4);
 
         // Add items
-        engine.add_item("item1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
-        engine.add_item("item2", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
-        engine.add_item("item3", vec![0.0, 0.0, 1.0, 0.0], None).unwrap();
+        engine
+            .add_item("item1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("item2", vec![0.0, 1.0, 0.0, 0.0], None)
+            .unwrap();
+        engine
+            .add_item("item3", vec![0.0, 0.0, 1.0, 0.0], None)
+            .unwrap();
 
         // User1 likes item1 and item2
         engine.record_interaction("user1", "item1", true);

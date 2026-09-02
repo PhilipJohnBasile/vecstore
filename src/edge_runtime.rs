@@ -33,10 +33,10 @@
 //! let state = store.to_bytes()?;
 //! ```
 
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// Edge runtime configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,11 +61,21 @@ pub struct EdgeConfig {
     pub hnsw_ef: usize,
 }
 
-fn default_max_vectors() -> usize { 10000 }
-fn default_quant_bits() -> u8 { 8 }
-fn default_true() -> bool { true }
-fn default_m() -> usize { 8 }
-fn default_ef() -> usize { 64 }
+fn default_max_vectors() -> usize {
+    10000
+}
+fn default_quant_bits() -> u8 {
+    8
+}
+fn default_true() -> bool {
+    true
+}
+fn default_m() -> usize {
+    8
+}
+fn default_ef() -> usize {
+    64
+}
 
 impl Default for EdgeConfig {
     fn default() -> Self {
@@ -143,8 +153,8 @@ struct CompactVector {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum VectorData {
     Full(Vec<f32>),
-    Quantized8(Vec<u8>, f32, f32),  // data, min, scale
-    Quantized4(Vec<u8>, f32, f32),  // data (packed), min, scale
+    Quantized8(Vec<u8>, f32, f32), // data, min, scale
+    Quantized4(Vec<u8>, f32, f32), // data (packed), min, scale
 }
 
 impl VectorData {
@@ -153,10 +163,8 @@ impl VectorData {
         match self {
             VectorData::Full(v) => v.clone(),
             VectorData::Quantized8(data, min, scale) => {
-                data.iter()
-                    .map(|&b| min + (b as f32) * scale)
-                    .collect()
-            }
+                data.iter().map(|&b| min + (b as f32) * scale).collect()
+            },
             VectorData::Quantized4(data, min, scale) => {
                 let mut result = Vec::with_capacity(dimension);
                 for byte in data {
@@ -168,7 +176,7 @@ impl VectorData {
                     }
                 }
                 result
-            }
+            },
         }
     }
 
@@ -225,9 +233,7 @@ impl EdgeVectorStore {
             VectorData::Full(vector)
         };
 
-        let metadata_bytes = metadata.map(|m| {
-            serde_json::to_vec(&m).unwrap_or_default()
-        });
+        let metadata_bytes = metadata.map(|m| serde_json::to_vec(&m).unwrap_or_default());
 
         let index = self.vectors.len();
         self.vectors.push(CompactVector {
@@ -249,11 +255,12 @@ impl EdgeVectorStore {
         match self.config.quantization_bits {
             8 => {
                 let scale = if range > 0.0 { range / 255.0 } else { 1.0 };
-                let data: Vec<u8> = vector.iter()
+                let data: Vec<u8> = vector
+                    .iter()
                     .map(|&v| ((v - min) / scale).round() as u8)
                     .collect();
                 VectorData::Quantized8(data, min, scale)
-            }
+            },
             4 => {
                 let scale = if range > 0.0 { range / 15.0 } else { 1.0 };
                 let mut data = Vec::with_capacity(vector.len().div_ceil(2));
@@ -267,7 +274,7 @@ impl EdgeVectorStore {
                     data.push(lo | (hi << 4));
                 }
                 VectorData::Quantized4(data, min, scale)
-            }
+            },
             _ => VectorData::Full(vector.to_vec()),
         }
     }
@@ -281,14 +288,17 @@ impl EdgeVectorStore {
             });
         }
 
-        let mut results: Vec<EdgeSearchResult> = self.vectors.iter()
+        let mut results: Vec<EdgeSearchResult> = self
+            .vectors
+            .iter()
             .map(|v| {
                 let vec = v.data.to_f32(self.dimension);
                 let score = Self::cosine_similarity(query, &vec);
 
-                let metadata = v.metadata.as_ref().and_then(|bytes| {
-                    serde_json::from_slice(bytes).ok()
-                });
+                let metadata = v
+                    .metadata
+                    .as_ref()
+                    .and_then(|bytes| serde_json::from_slice(bytes).ok());
 
                 EdgeSearchResult {
                     id: v.id.clone(),
@@ -308,9 +318,10 @@ impl EdgeVectorStore {
     pub fn get(&self, id: &str) -> Option<EdgeSearchResult> {
         self.id_to_index.get(id).map(|&idx| {
             let v = &self.vectors[idx];
-            let metadata = v.metadata.as_ref().and_then(|bytes| {
-                serde_json::from_slice(bytes).ok()
-            });
+            let metadata = v
+                .metadata
+                .as_ref()
+                .and_then(|bytes| serde_json::from_slice(bytes).ok());
 
             EdgeSearchResult {
                 id: v.id.clone(),
@@ -346,18 +357,17 @@ impl EdgeVectorStore {
             vectors: self.vectors.clone(),
         };
 
-        bincode::serialize(&state).map_err(|e| {
-            VecStoreError::Serialization(e.to_string())
-        })
+        bincode::serialize(&state).map_err(|e| VecStoreError::Serialization(e.to_string()))
     }
 
     /// Load from bytes
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let state: EdgeState = bincode::deserialize(bytes).map_err(|e| {
-            VecStoreError::Serialization(e.to_string())
-        })?;
+        let state: EdgeState =
+            bincode::deserialize(bytes).map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
-        let id_to_index: HashMap<String, usize> = state.vectors.iter()
+        let id_to_index: HashMap<String, usize> = state
+            .vectors
+            .iter()
             .enumerate()
             .map(|(i, v)| (v.id.clone(), i))
             .collect();
@@ -405,18 +415,16 @@ impl EdgeVectorStore {
 
     /// Get memory usage estimate
     pub fn memory_usage(&self) -> MemoryUsage {
-        let vector_bytes: usize = self.vectors.iter()
-            .map(|v| v.data.memory_size())
-            .sum();
+        let vector_bytes: usize = self.vectors.iter().map(|v| v.data.memory_size()).sum();
 
-        let metadata_bytes: usize = self.vectors.iter()
+        let metadata_bytes: usize = self
+            .vectors
+            .iter()
             .filter_map(|v| v.metadata.as_ref())
             .map(|m| m.len())
             .sum();
 
-        let id_bytes: usize = self.vectors.iter()
-            .map(|v| v.id.len())
-            .sum();
+        let id_bytes: usize = self.vectors.iter().map(|v| v.id.len()).sum();
 
         MemoryUsage {
             vector_bytes,
@@ -475,17 +483,19 @@ pub mod wasm {
 
         #[wasm_bindgen]
         pub fn add(&mut self, id: &str, vector: &[f32]) -> Result<(), JsValue> {
-            self.inner.add(id, vector.to_vec(), None)
+            self.inner
+                .add(id, vector.to_vec(), None)
                 .map_err(|e| JsValue::from_str(&e.to_string()))
         }
 
         #[wasm_bindgen]
         pub fn search(&self, query: &[f32], k: usize) -> Result<JsValue, JsValue> {
-            let results = self.inner.search(query, k)
+            let results = self
+                .inner
+                .search(query, k)
                 .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-            serde_wasm_bindgen::to_value(&results)
-                .map_err(|e| JsValue::from_str(&e.to_string()))
+            serde_wasm_bindgen::to_value(&results).map_err(|e| JsValue::from_str(&e.to_string()))
         }
 
         #[wasm_bindgen]

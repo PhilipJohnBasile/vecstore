@@ -32,11 +32,11 @@
 //! let all_results = index.search_all_partitions(&query, 10)?;
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // CONFIGURATION
@@ -241,7 +241,11 @@ impl Partition {
     pub fn get(&self, id: &str) -> Option<(Vec<f32>, Option<serde_json::Value>)> {
         let vectors = self.vectors.read().ok()?;
         vectors.get(id).map(|v| {
-            let meta = self.vector_metadata.read().ok().and_then(|m| m.get(id).cloned());
+            let meta = self
+                .vector_metadata
+                .read()
+                .ok()
+                .and_then(|m| m.get(id).cloned());
             (v.clone(), meta)
         })
     }
@@ -252,7 +256,8 @@ impl Partition {
             return Vec::new();
         };
 
-        let mut results: Vec<_> = vectors.iter()
+        let mut results: Vec<_> = vectors
+            .iter()
             .map(|(id, vec)| {
                 let score = cosine_similarity(query, vec);
                 (id.clone(), score)
@@ -264,7 +269,8 @@ impl Partition {
 
         let partition_id = self.meta.read().map(|m| m.id).unwrap_or(0);
 
-        results.into_iter()
+        results
+            .into_iter()
             .map(|(id, score)| PartitionSearchResult {
                 id,
                 score,
@@ -275,17 +281,20 @@ impl Partition {
 
     /// Get partition metadata
     pub fn meta(&self) -> PartitionMeta {
-        self.meta.read().map(|m| m.clone()).unwrap_or_else(|_| PartitionMeta {
-            id: 0,
-            key_value: String::new(),
-            state: PartitionState::Active,
-            created_at: 0,
-            last_accessed: 0,
-            vector_count: 0,
-            deleted_count: 0,
-            ttl_expiry: 0,
-            metadata: None,
-        })
+        self.meta
+            .read()
+            .map(|m| m.clone())
+            .unwrap_or_else(|_| PartitionMeta {
+                id: 0,
+                key_value: String::new(),
+                state: PartitionState::Active,
+                created_at: 0,
+                last_accessed: 0,
+                vector_count: 0,
+                deleted_count: 0,
+                ttl_expiry: 0,
+                metadata: None,
+            })
     }
 
     /// Check if compaction is needed
@@ -296,7 +305,8 @@ impl Partition {
         if meta.vector_count == 0 {
             return false;
         }
-        let delete_ratio = meta.deleted_count as f32 / (meta.vector_count + meta.deleted_count) as f32;
+        let delete_ratio =
+            meta.deleted_count as f32 / (meta.vector_count + meta.deleted_count) as f32;
         delete_ratio > threshold
     }
 
@@ -381,18 +391,18 @@ impl PartitionedIndex {
                     h ^= h >> 47;
                 }
                 h % self.config.max_partitions as u64
-            }
+            },
             HashAlgorithm::XXHash => {
                 use std::collections::hash_map::DefaultHasher;
                 use std::hash::{Hash, Hasher};
                 let mut hasher = DefaultHasher::new();
                 key_value.hash(&mut hasher);
                 hasher.finish() % self.config.max_partitions as u64
-            }
+            },
             HashAlgorithm::Modulo => {
                 // For testing - just use first char
                 key_value.bytes().next().unwrap_or(0) as u64 % self.config.max_partitions as u64
-            }
+            },
         }
     }
 
@@ -441,23 +451,20 @@ impl PartitionedIndex {
 
     /// Extract partition key from metadata
     fn extract_partition_key(&self, metadata: &serde_json::Value) -> Option<String> {
-        metadata.get(&self.config.partition_key)
+        metadata
+            .get(&self.config.partition_key)
             .and_then(|v| v.as_str())
             .map(String::from)
     }
 
     /// Insert or update a vector
-    pub fn upsert(
-        &self,
-        id: &str,
-        vector: Vec<f32>,
-        metadata: serde_json::Value,
-    ) -> Result<()> {
-        let key_value = self.extract_partition_key(&metadata)
-            .ok_or_else(|| VecStoreError::InvalidInput(format!(
+    pub fn upsert(&self, id: &str, vector: Vec<f32>, metadata: serde_json::Value) -> Result<()> {
+        let key_value = self.extract_partition_key(&metadata).ok_or_else(|| {
+            VecStoreError::InvalidInput(format!(
                 "Missing partition key: {}",
                 self.config.partition_key
-            )))?;
+            ))
+        })?;
 
         let partition = self.get_or_create_partition(&key_value)?;
         partition.upsert(id, vector, Some(metadata))?;
@@ -510,7 +517,7 @@ impl PartitionedIndex {
     ) -> Result<Vec<PartitionSearchResult>> {
         if !self.config.allow_cross_partition {
             return Err(VecStoreError::InvalidInput(
-                "Cross-partition queries not allowed".to_string()
+                "Cross-partition queries not allowed".to_string(),
             ));
         }
 
@@ -559,7 +566,10 @@ impl PartitionedIndex {
 
     /// List all partitions
     pub fn list_partitions(&self) -> Vec<PartitionMeta> {
-        self.partitions.read().map(|p| p.values().map(|p| p.meta()).collect()).unwrap_or_default()
+        self.partitions
+            .read()
+            .map(|p| p.values().map(|p| p.meta()).collect())
+            .unwrap_or_default()
     }
 
     /// Drop a partition
@@ -668,12 +678,18 @@ impl PartitionRouter {
 
     /// Get hot partitions
     pub fn hot_partitions(&self) -> Vec<u64> {
-        self.hot_partitions.read().map(|h| h.clone()).unwrap_or_default()
+        self.hot_partitions
+            .read()
+            .map(|h| h.clone())
+            .unwrap_or_default()
     }
 
     /// Get cold partitions (candidates for archival)
     pub fn cold_partitions(&self) -> Vec<u64> {
-        self.cold_partitions.read().map(|c| c.clone()).unwrap_or_default()
+        self.cold_partitions
+            .read()
+            .map(|c| c.clone())
+            .unwrap_or_default()
     }
 
     /// Reset access counts (call periodically)
@@ -721,8 +737,12 @@ mod tests {
     fn test_partition() {
         let partition = Partition::new(1, "tenant_a", 4);
 
-        partition.upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
-        partition.upsert("doc2", vec![0.0, 1.0, 0.0, 0.0], None).unwrap();
+        partition
+            .upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
+        partition
+            .upsert("doc2", vec![0.0, 1.0, 0.0, 0.0], None)
+            .unwrap();
 
         let results = partition.search(&[1.0, 0.0, 0.0, 0.0], 10);
         assert_eq!(results.len(), 2);
@@ -738,13 +758,25 @@ mod tests {
         let index = PartitionedIndex::new(4, config).unwrap();
 
         // Insert to different partitions
-        index.upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], serde_json::json!({
-            "tenant_id": "acme"
-        })).unwrap();
+        index
+            .upsert(
+                "doc1",
+                vec![1.0, 0.0, 0.0, 0.0],
+                serde_json::json!({
+                    "tenant_id": "acme"
+                }),
+            )
+            .unwrap();
 
-        index.upsert("doc2", vec![0.0, 1.0, 0.0, 0.0], serde_json::json!({
-            "tenant_id": "globex"
-        })).unwrap();
+        index
+            .upsert(
+                "doc2",
+                vec![0.0, 1.0, 0.0, 0.0],
+                serde_json::json!({
+                    "tenant_id": "globex"
+                }),
+            )
+            .unwrap();
 
         // Search within partition
         let results = index.search(&[1.0, 0.0, 0.0, 0.0], 10, "acme").unwrap();
@@ -759,14 +791,19 @@ mod tests {
 
     #[test]
     fn test_partition_listing() {
-        let config = PartitionConfig::new()
-            .with_partition_key("tenant_id");
+        let config = PartitionConfig::new().with_partition_key("tenant_id");
 
         let index = PartitionedIndex::new(4, config).unwrap();
 
-        index.upsert("doc1", vec![1.0; 4], serde_json::json!({"tenant_id": "a"})).unwrap();
-        index.upsert("doc2", vec![1.0; 4], serde_json::json!({"tenant_id": "b"})).unwrap();
-        index.upsert("doc3", vec![1.0; 4], serde_json::json!({"tenant_id": "c"})).unwrap();
+        index
+            .upsert("doc1", vec![1.0; 4], serde_json::json!({"tenant_id": "a"}))
+            .unwrap();
+        index
+            .upsert("doc2", vec![1.0; 4], serde_json::json!({"tenant_id": "b"}))
+            .unwrap();
+        index
+            .upsert("doc3", vec![1.0; 4], serde_json::json!({"tenant_id": "c"}))
+            .unwrap();
 
         let partitions = index.list_partitions();
         assert_eq!(partitions.len(), 3);

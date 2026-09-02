@@ -30,13 +30,13 @@
 //! let results = index.search(&query, 10)?;
 //! ```
 
-use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock, Mutex};
-use std::time::{Duration, Instant};
-use std::thread;
 use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::sync::{Arc, Mutex, RwLock};
+use std::thread;
+use std::time::{Duration, Instant};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// Streaming configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -61,10 +61,18 @@ pub struct StreamConfig {
     pub buffer_size: usize,
 }
 
-fn default_batch_size() -> usize { 100 }
-fn default_flush_interval() -> u64 { 100 }
-fn default_true() -> bool { true }
-fn default_buffer_size() -> usize { 10000 }
+fn default_batch_size() -> usize {
+    100
+}
+fn default_flush_interval() -> u64 {
+    100
+}
+fn default_true() -> bool {
+    true
+}
+fn default_buffer_size() -> usize {
+    10000
+}
 
 impl Default for StreamConfig {
     fn default() -> Self {
@@ -222,7 +230,9 @@ impl StreamingIndex {
                 thread::sleep(interval);
 
                 // Check shutdown
-                let Ok(shutdown_guard) = shutdown.read() else { break; };
+                let Ok(shutdown_guard) = shutdown.read() else {
+                    break;
+                };
                 if *shutdown_guard {
                     break;
                 }
@@ -230,18 +240,17 @@ impl StreamingIndex {
 
                 // Flush pending operations
                 let start = Instant::now();
-                let ops_count = Self::flush_pending(
-                    &index,
-                    &pending,
-                    &version,
-                    batch_size,
-                    conflict_strategy,
-                );
+                let ops_count =
+                    Self::flush_pending(&index, &pending, &version, batch_size, conflict_strategy);
 
                 if ops_count > 0 {
-                    let Ok(mut stats) = stats.write() else { continue; };
+                    let Ok(mut stats) = stats.write() else {
+                        continue;
+                    };
                     stats.total_flushes += 1;
-                    let Ok(index_guard) = index.read() else { continue; };
+                    let Ok(index_guard) = index.read() else {
+                        continue;
+                    };
                     stats.vectors_in_index = index_guard.len();
 
                     let latency = start.elapsed().as_secs_f64() * 1000.0;
@@ -267,7 +276,9 @@ impl StreamingIndex {
 
         // Drain up to batch_size operations
         {
-            let Ok(mut pending) = pending.lock() else { return 0; };
+            let Ok(mut pending) = pending.lock() else {
+                return 0;
+            };
             for _ in 0..batch_size {
                 if let Some(op) = pending.pop_front() {
                     ops.push(op);
@@ -284,12 +295,21 @@ impl StreamingIndex {
         let count = ops.len();
 
         // Apply operations
-        let Ok(mut index) = index.write() else { return 0; };
-        let Ok(mut version) = version.write() else { return 0; };
+        let Ok(mut index) = index.write() else {
+            return 0;
+        };
+        let Ok(mut version) = version.write() else {
+            return 0;
+        };
 
         for op in ops {
             match op {
-                Operation::Upsert { id, vector, metadata, timestamp } => {
+                Operation::Upsert {
+                    id,
+                    vector,
+                    metadata,
+                    timestamp,
+                } => {
                     let should_update = match conflict_strategy {
                         ConflictStrategy::LastWriteWins => true,
                         ConflictStrategy::FirstWriteWins => !index.contains_key(&id),
@@ -303,7 +323,9 @@ impl StreamingIndex {
                         let final_vector = if matches!(conflict_strategy, ConflictStrategy::Merge) {
                             if let Some(existing) = index.get(&id) {
                                 // Average the vectors
-                                existing.vector.iter()
+                                existing
+                                    .vector
+                                    .iter()
                                     .zip(vector.iter())
                                     .map(|(a, b)| (a + b) / 2.0)
                                     .collect()
@@ -314,18 +336,21 @@ impl StreamingIndex {
                             vector
                         };
 
-                        index.insert(id.clone(), IndexedVector {
-                            id,
-                            vector: final_vector,
-                            metadata,
-                            version: *version,
-                            updated_at: timestamp,
-                        });
+                        index.insert(
+                            id.clone(),
+                            IndexedVector {
+                                id,
+                                vector: final_vector,
+                                metadata,
+                                version: *version,
+                                updated_at: timestamp,
+                            },
+                        );
                     }
-                }
+                },
                 Operation::Delete { id, .. } => {
                     index.remove(&id);
-                }
+                },
             }
         }
 
@@ -354,7 +379,9 @@ impl StreamingIndex {
         };
 
         {
-            let mut pending = self.pending.lock()
+            let mut pending = self
+                .pending
+                .lock()
                 .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?;
             if pending.len() >= self.config.buffer_size {
                 return Err(VecStoreError::InvalidInput("Buffer full".to_string()));
@@ -362,14 +389,18 @@ impl StreamingIndex {
             pending.push_back(op);
         }
 
-        self.stats.write()
+        self.stats
+            .write()
             .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
             .total_upserts += 1;
-        self.stats.write()
+        self.stats
+            .write()
             .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
-            .pending_operations = self.pending.lock()
-                .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?
-                .len();
+            .pending_operations = self
+            .pending
+            .lock()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?
+            .len();
 
         Ok(())
     }
@@ -382,12 +413,15 @@ impl StreamingIndex {
         };
 
         {
-            let mut pending = self.pending.lock()
+            let mut pending = self
+                .pending
+                .lock()
                 .map_err(|_| VecStoreError::LockError("Failed to acquire pending lock".into()))?;
             pending.push_back(op);
         }
 
-        self.stats.write()
+        self.stats
+            .write()
             .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
             .total_deletes += 1;
 
@@ -411,14 +445,18 @@ impl StreamingIndex {
             }
         }
 
-        self.stats.write()
+        self.stats
+            .write()
             .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
             .pending_operations = 0;
-        self.stats.write()
+        self.stats
+            .write()
             .map_err(|_| VecStoreError::LockError("Failed to acquire stats write lock".into()))?
-            .vectors_in_index = self.index.read()
-                .map_err(|_| VecStoreError::LockError("Failed to acquire index read lock".into()))?
-                .len();
+            .vectors_in_index = self
+            .index
+            .read()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire index read lock".into()))?
+            .len();
 
         Ok(total)
     }
@@ -432,10 +470,13 @@ impl StreamingIndex {
             });
         }
 
-        let index = self.index.read()
+        let index = self
+            .index
+            .read()
             .map_err(|_| VecStoreError::LockError("Failed to acquire index read lock".into()))?;
 
-        let mut results: Vec<StreamSearchResult> = index.values()
+        let mut results: Vec<StreamSearchResult> = index
+            .values()
             .map(|v| {
                 let score = Self::cosine_similarity(query, &v.vector);
                 StreamSearchResult {
@@ -455,7 +496,9 @@ impl StreamingIndex {
 
     /// Get a vector by ID
     pub fn get(&self, id: &str) -> Option<StreamSearchResult> {
-        let Ok(index) = self.index.read() else { return None; };
+        let Ok(index) = self.index.read() else {
+            return None;
+        };
         index.get(id).map(|v| StreamSearchResult {
             id: v.id.clone(),
             score: 1.0,
@@ -466,25 +509,33 @@ impl StreamingIndex {
 
     /// Get statistics
     pub fn stats(&self) -> StreamingStats {
-        let Ok(stats) = self.stats.read() else { return StreamingStats::default(); };
+        let Ok(stats) = self.stats.read() else {
+            return StreamingStats::default();
+        };
         stats.clone()
     }
 
     /// Get number of vectors in index
     pub fn len(&self) -> usize {
-        let Ok(index) = self.index.read() else { return 0; };
+        let Ok(index) = self.index.read() else {
+            return 0;
+        };
         index.len()
     }
 
     /// Check if index is empty
     pub fn is_empty(&self) -> bool {
-        let Ok(index) = self.index.read() else { return true; };
+        let Ok(index) = self.index.read() else {
+            return true;
+        };
         index.is_empty()
     }
 
     /// Get current version
     pub fn version(&self) -> u64 {
-        let Ok(version) = self.version.read() else { return 0; };
+        let Ok(version) = self.version.read() else {
+            return 0;
+        };
         *version
     }
 
@@ -503,7 +554,9 @@ impl StreamingIndex {
 
     /// Shutdown the streaming index
     pub fn shutdown(&self) {
-        let Ok(mut shutdown) = self.shutdown.write() else { return; };
+        let Ok(mut shutdown) = self.shutdown.write() else {
+            return;
+        };
         *shutdown = true;
     }
 }
@@ -542,14 +595,18 @@ impl StreamConsumer {
 
         for record in records {
             match record {
-                StreamRecord::Upsert { id, vector, metadata } => {
+                StreamRecord::Upsert {
+                    id,
+                    vector,
+                    metadata,
+                } => {
                     self.index.upsert(&id, vector, metadata)?;
                     count += 1;
-                }
+                },
                 StreamRecord::Delete { id } => {
                     self.index.delete(&id)?;
                     count += 1;
-                }
+                },
             }
         }
 
@@ -623,8 +680,7 @@ mod tests {
 
     #[test]
     fn test_conflict_strategy() {
-        let config = StreamConfig::new()
-            .with_conflict_strategy(ConflictStrategy::FirstWriteWins);
+        let config = StreamConfig::new().with_conflict_strategy(ConflictStrategy::FirstWriteWins);
 
         let index = StreamingIndex::new(64, config).unwrap();
 

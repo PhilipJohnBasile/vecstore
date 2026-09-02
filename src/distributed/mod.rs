@@ -444,7 +444,7 @@ impl DistributedStore {
                 let mut hasher = DefaultHasher::new();
                 key.hash(&mut hasher);
                 (hasher.finish() as usize) % self.config.num_shards
-            }
+            },
             ShardingStrategy::ConsistentHash => {
                 // Use consistent hash ring
                 let node = self.hash_ring.get_node(key).unwrap_or_default();
@@ -454,15 +454,15 @@ impl DistributedStore {
                     .iter()
                     .fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
                 (sum as usize) % self.config.num_shards
-            }
+            },
             ShardingStrategy::Range => {
                 // Range-based (simplified - would use key ranges in production)
                 key.as_bytes().first().copied().unwrap_or(0) as usize % self.config.num_shards
-            }
+            },
             ShardingStrategy::Random => {
                 // Random (simplified)
                 key.len() % self.config.num_shards
-            }
+            },
         }
     }
 
@@ -720,7 +720,7 @@ impl DistributedStore {
                 let mut hasher = DefaultHasher::new();
                 key.hash(&mut hasher);
                 (hasher.finish() as usize) % self.config.num_shards
-            }
+            },
             ShardingStrategy::ConsistentHash => {
                 let ring = self.hash_ring.read().await;
                 let node = ring.get_node(key).unwrap_or_default();
@@ -729,10 +729,10 @@ impl DistributedStore {
                     .iter()
                     .fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
                 (sum as usize) % self.config.num_shards
-            }
+            },
             ShardingStrategy::Range => {
                 key.as_bytes().first().copied().unwrap_or(0) as usize % self.config.num_shards
-            }
+            },
             ShardingStrategy::Random => key.len() % self.config.num_shards,
         }
     }
@@ -826,18 +826,18 @@ impl DistributedStore {
                     // Simulate sync latency
                     // In production: await network RPC
                 }
-            }
+            },
             ConsistencyLevel::Quorum => {
                 // Wait for majority (N/2 + 1)
                 let quorum_size = (replicas.len() / 2) + 1;
                 for _i in 0..quorum_size {
                     // Simulate sync to quorum
                 }
-            }
+            },
             ConsistencyLevel::One => {
                 // Fire and forget - don't wait for acknowledgment
                 // Replicas will eventually sync
-            }
+            },
         }
 
         Ok(())
@@ -872,18 +872,18 @@ impl DistributedStore {
                 // Always query primary for strong consistency
                 // In real implementation: send RPC to primary node
                 Ok(vec![])
-            }
+            },
             ConsistencyLevel::Quorum => {
                 // Query quorum of nodes and return most recent results
                 // In real implementation: scatter to quorum, gather results
                 Ok(vec![])
-            }
+            },
             ConsistencyLevel::One => {
                 // Query any available replica (round-robin or least loaded)
                 // For now, use the first available replica
                 // In real implementation: check node health and load
                 Ok(vec![])
-            }
+            },
         }
     }
 

@@ -41,8 +41,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Level of explanation detail
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 pub enum ExplainLevel {
     /// Minimal - just the score
     Minimal,
@@ -56,7 +55,6 @@ pub enum ExplainLevel {
     /// Debug - all internal details
     Debug,
 }
-
 
 /// Dimension contribution to similarity
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -302,7 +300,7 @@ impl ExplainableSearch {
                 } else {
                     0.0
                 }
-            }
+            },
             DistanceMetric::Euclidean => {
                 let dist: f32 = a
                     .iter()
@@ -311,7 +309,7 @@ impl ExplainableSearch {
                     .sum::<f32>()
                     .sqrt();
                 1.0 / (1.0 + dist) // Convert to similarity
-            }
+            },
             DistanceMetric::DotProduct => a.iter().zip(b.iter()).map(|(x, y)| x * y).sum(),
         }
     }
@@ -355,30 +353,28 @@ impl ExplainableSearch {
                         }
                     })
                     .collect()
-            }
-            DistanceMetric::DotProduct => {
-                query
-                    .iter()
-                    .zip(result.iter())
-                    .enumerate()
-                    .map(|(i, (q, r))| {
-                        let contribution = q * r;
-                        let percentage = if total_similarity.abs() > 1e-9 {
-                            contribution / total_similarity * 100.0
-                        } else {
-                            0.0
-                        };
-                        DimensionContribution {
-                            index: i,
-                            contribution,
-                            percentage,
-                            query_value: *q,
-                            result_value: *r,
-                            label: self.get_dimension_label(i),
-                        }
-                    })
-                    .collect()
-            }
+            },
+            DistanceMetric::DotProduct => query
+                .iter()
+                .zip(result.iter())
+                .enumerate()
+                .map(|(i, (q, r))| {
+                    let contribution = q * r;
+                    let percentage = if total_similarity.abs() > 1e-9 {
+                        contribution / total_similarity * 100.0
+                    } else {
+                        0.0
+                    };
+                    DimensionContribution {
+                        index: i,
+                        contribution,
+                        percentage,
+                        query_value: *q,
+                        result_value: *r,
+                        label: self.get_dimension_label(i),
+                    }
+                })
+                .collect(),
             DistanceMetric::Euclidean => {
                 // For Euclidean, contribution is negative of squared difference
                 let total_dist_sq: f32 = query
@@ -409,7 +405,7 @@ impl ExplainableSearch {
                         }
                     })
                     .collect()
-            }
+            },
         }
     }
 
@@ -426,10 +422,7 @@ impl ExplainableSearch {
         bottom: &[DimensionContribution],
         score: f32,
     ) -> String {
-        let mut summary = format!(
-            "Similarity score: {:.4} ({:?}). ",
-            score, self.metric
-        );
+        let mut summary = format!("Similarity score: {:.4} ({:?}). ", score, self.metric);
 
         if !top.is_empty() {
             let top_dims: Vec<String> = top
@@ -507,10 +500,7 @@ impl ExplainableSearch {
             .collect();
 
         let summary = if !shared_themes.is_empty() {
-            format!(
-                "Vectors match on themes: {}",
-                shared_themes.join(", ")
-            )
+            format!("Vectors match on themes: {}", shared_themes.join(", "))
         } else if !matching_features.is_empty() {
             format!("Similarity driven by: {}", matching_features[0])
         } else {
@@ -525,12 +515,7 @@ impl ExplainableSearch {
         }
     }
 
-    fn compute_confidence(
-        &self,
-        query: &[f32],
-        result: &[f32],
-        score: f32,
-    ) -> ConfidenceInfo {
+    fn compute_confidence(&self, query: &[f32], result: &[f32], score: f32) -> ConfidenceInfo {
         // Estimate confidence based on vector properties
         let dim = query.len() as f32;
 
@@ -571,7 +556,8 @@ impl ExplainableSearch {
             .iter()
             .filter(|c| c.contribution < 0.0)
             .collect();
-        negative_dims.sort_by(|a, b| OrderedFloat(a.contribution).cmp(&OrderedFloat(b.contribution)));
+        negative_dims
+            .sort_by(|a, b| OrderedFloat(a.contribution).cmp(&OrderedFloat(b.contribution)));
 
         if let Some(worst) = negative_dims.first() {
             let hypothetical: Vec<f32> = result
@@ -648,15 +634,29 @@ impl ExplainableSearch {
         info.insert("query_norm".to_string(), format!("{:.6}", query_norm));
         info.insert("result_norm".to_string(), format!("{:.6}", result_norm));
 
-        let positive_contribs: usize = contributions.iter().filter(|c| c.contribution > 0.0).count();
-        let negative_contribs: usize = contributions.iter().filter(|c| c.contribution < 0.0).count();
+        let positive_contribs: usize = contributions
+            .iter()
+            .filter(|c| c.contribution > 0.0)
+            .count();
+        let negative_contribs: usize = contributions
+            .iter()
+            .filter(|c| c.contribution < 0.0)
+            .count();
         info.insert("positive_dims".to_string(), positive_contribs.to_string());
         info.insert("negative_dims".to_string(), negative_contribs.to_string());
 
-        let sparsity_q = query.iter().filter(|&&x| x.abs() < 1e-6).count() as f32 / query.len() as f32;
-        let sparsity_r = result.iter().filter(|&&x| x.abs() < 1e-6).count() as f32 / result.len() as f32;
-        info.insert("query_sparsity".to_string(), format!("{:.2}%", sparsity_q * 100.0));
-        info.insert("result_sparsity".to_string(), format!("{:.2}%", sparsity_r * 100.0));
+        let sparsity_q =
+            query.iter().filter(|&&x| x.abs() < 1e-6).count() as f32 / query.len() as f32;
+        let sparsity_r =
+            result.iter().filter(|&&x| x.abs() < 1e-6).count() as f32 / result.len() as f32;
+        info.insert(
+            "query_sparsity".to_string(),
+            format!("{:.2}%", sparsity_q * 100.0),
+        );
+        info.insert(
+            "result_sparsity".to_string(),
+            format!("{:.2}%", sparsity_r * 100.0),
+        );
 
         info
     }

@@ -3,9 +3,9 @@
 
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
+use flate2::Compression;
 use flate2::read::GzDecoder;
 use flate2::write::GzEncoder;
-use flate2::Compression;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter};
@@ -315,7 +315,7 @@ fn main() -> Result<()> {
             } else {
                 println!("  Dimension will be auto-detected from first insert");
             }
-        }
+        },
 
         Commands::Ingest { dir, id, vec, meta } => {
             let mut store = VecStore::open(&dir)?;
@@ -335,7 +335,7 @@ fn main() -> Result<()> {
             store.save()?;
 
             println!("✓ Ingested record: {}", id);
-        }
+        },
 
         Commands::IngestBatch { dir, jsonl } => {
             let mut store = VecStore::open(&dir)?;
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
                 elapsed.as_secs_f64(),
                 count as f64 / elapsed.as_secs_f64()
             );
-        }
+        },
 
         Commands::Query {
             dir,
@@ -417,7 +417,7 @@ fn main() -> Result<()> {
                     }
                 }
             }
-        }
+        },
 
         Commands::Stats { dir, detailed } => {
             let store = VecStore::open(&dir)?;
@@ -435,7 +435,7 @@ fn main() -> Result<()> {
                     (store.count() * store.dimension() * 4) / 1_048_576
                 );
             }
-        }
+        },
 
         Commands::Export {
             dir,
@@ -452,43 +452,47 @@ fn main() -> Result<()> {
                     let _lines: Vec<String> = Vec::new();
                     // Implementation would iterate and export
                     println!("✓ Exported to JSONL format");
-                }
+                },
                 ExportFormat::Csv => {
                     println!("✓ Exported to CSV format");
-                }
+                },
                 ExportFormat::Parquet => {
                     println!("✓ Exported to Parquet format");
-                }
+                },
                 ExportFormat::Npy => {
                     println!("✓ Exported to NumPy format");
-                }
+                },
             }
-        }
+        },
 
-        Commands::Import { dir: _, input, format } => {
+        Commands::Import {
+            dir: _,
+            input,
+            format,
+        } => {
             println!("Importing from {:?} ({:?} format)...", input, format);
 
             match format {
                 ImportFormat::Jsonl => {
                     println!("✓ Imported from JSONL");
-                }
+                },
                 ImportFormat::Csv => {
                     println!("✓ Imported from CSV");
-                }
+                },
                 ImportFormat::Npy => {
                     println!("✓ Imported from NumPy");
-                }
+                },
                 ImportFormat::Pinecone => {
                     println!("✓ Imported from Pinecone export");
-                }
+                },
                 ImportFormat::Weaviate => {
                     println!("✓ Imported from Weaviate export");
-                }
+                },
                 ImportFormat::Qdrant => {
                     println!("✓ Imported from Qdrant export");
-                }
+                },
             }
-        }
+        },
 
         Commands::Migrate {
             source,
@@ -503,25 +507,25 @@ fn main() -> Result<()> {
                 MigrationSource::Pinecone => {
                     println!("   Connecting to Pinecone...");
                     println!("✓ Migration complete!");
-                }
+                },
                 MigrationSource::Weaviate => {
                     println!("   Connecting to Weaviate...");
                     println!("✓ Migration complete!");
-                }
+                },
                 MigrationSource::Qdrant => {
                     println!("   Connecting to Qdrant...");
                     println!("✓ Migration complete!");
-                }
+                },
                 MigrationSource::ChromaDB => {
                     println!("   Connecting to ChromaDB...");
                     println!("✓ Migration complete!");
-                }
+                },
                 MigrationSource::Milvus => {
                     println!("   Connecting to Milvus...");
                     println!("✓ Migration complete!");
-                }
+                },
             }
-        }
+        },
 
         Commands::Backup {
             dir,
@@ -545,7 +549,9 @@ fn main() -> Result<()> {
 
             // Determine output path with proper extension
             let output_path = if compress {
-                if !output.to_string_lossy().ends_with(".tar.gz") && !output.to_string_lossy().ends_with(".tgz") {
+                if !output.to_string_lossy().ends_with(".tar.gz")
+                    && !output.to_string_lossy().ends_with(".tgz")
+                {
                     output.with_extension("tar.gz")
                 } else {
                     output.clone()
@@ -587,15 +593,20 @@ fn main() -> Result<()> {
                         file_count += 1;
 
                         let mut f = File::open(path)?;
-                        archive.append_file(relative_path, &mut f)
-                            .with_context(|| format!("Failed to add file to archive: {:?}", path))?;
+                        archive
+                            .append_file(relative_path, &mut f)
+                            .with_context(|| {
+                                format!("Failed to add file to archive: {:?}", path)
+                            })?;
                     } else if path.is_dir() && path != dir {
-                        archive.append_dir(relative_path, path)
-                            .with_context(|| format!("Failed to add directory to archive: {:?}", path))?;
+                        archive.append_dir(relative_path, path).with_context(|| {
+                            format!("Failed to add directory to archive: {:?}", path)
+                        })?;
                     }
                 }
 
-                archive.finish()
+                archive
+                    .finish()
                     .context("Failed to finalize backup archive")?;
             } else {
                 println!("   Compression: disabled");
@@ -611,15 +622,20 @@ fn main() -> Result<()> {
                         file_count += 1;
 
                         let mut f = File::open(path)?;
-                        archive.append_file(relative_path, &mut f)
-                            .with_context(|| format!("Failed to add file to archive: {:?}", path))?;
+                        archive
+                            .append_file(relative_path, &mut f)
+                            .with_context(|| {
+                                format!("Failed to add file to archive: {:?}", path)
+                            })?;
                     } else if path.is_dir() && path != dir {
-                        archive.append_dir(relative_path, path)
-                            .with_context(|| format!("Failed to add directory to archive: {:?}", path))?;
+                        archive.append_dir(relative_path, path).with_context(|| {
+                            format!("Failed to add directory to archive: {:?}", path)
+                        })?;
                     }
                 }
 
-                archive.finish()
+                archive
+                    .finish()
                     .context("Failed to finalize backup archive")?;
             }
 
@@ -633,14 +649,17 @@ fn main() -> Result<()> {
 
             println!("✓ Backup complete!");
             println!("   Files: {}", file_count);
-            println!("   Original size: {:.2} MB", total_bytes as f64 / 1_048_576.0);
+            println!(
+                "   Original size: {:.2} MB",
+                total_bytes as f64 / 1_048_576.0
+            );
             println!("   Backup size: {:.2} MB", output_size as f64 / 1_048_576.0);
             if compress {
                 println!("   Compression ratio: {:.1}%", compression_ratio);
             }
             println!("   Time: {:.2}s", elapsed.as_secs_f64());
             println!("   Output: {:?}", output_path);
-        }
+        },
 
         Commands::Restore { backup, dest } => {
             println!("📥 Restoring from backup...");
@@ -662,8 +681,9 @@ fn main() -> Result<()> {
             if dest.exists() {
                 println!("   ⚠️  Destination exists, files may be overwritten");
             } else {
-                fs::create_dir_all(&dest)
-                    .with_context(|| format!("Failed to create destination directory: {:?}", dest))?;
+                fs::create_dir_all(&dest).with_context(|| {
+                    format!("Failed to create destination directory: {:?}", dest)
+                })?;
             }
 
             let file = File::open(&backup)
@@ -734,7 +754,7 @@ fn main() -> Result<()> {
             println!("   Total size: {:.2} MB", total_bytes as f64 / 1_048_576.0);
             println!("   Time: {:.2}s", elapsed.as_secs_f64());
             println!("   Restored to: {:?}", dest);
-        }
+        },
 
         Commands::Optimize { dir, rebuild } => {
             let mut store = VecStore::open(&dir)?;
@@ -751,7 +771,7 @@ fn main() -> Result<()> {
 
             let elapsed = start.elapsed();
             println!("✓ Optimization complete in {:.2}s", elapsed.as_secs_f64());
-        }
+        },
 
         Commands::Benchmark { dir, queries, k } => {
             let store = VecStore::open(&dir)?;
@@ -793,7 +813,7 @@ fn main() -> Result<()> {
                 "   Throughput: {:.0} queries/sec",
                 queries as f64 / total_time
             );
-        }
+        },
 
         Commands::Health { dir } => {
             let store = VecStore::open(&dir)?;
@@ -808,7 +828,7 @@ fn main() -> Result<()> {
             if store.count() == 0 {
                 println!("⚠️  Warning: Store is empty");
             }
-        }
+        },
 
         Commands::Collection(cmd) => match cmd {
             CollectionCommands::List { dir } => {
@@ -820,7 +840,7 @@ fn main() -> Result<()> {
                 for name in collections {
                     println!("  - {}", name);
                 }
-            }
+            },
 
             CollectionCommands::Create {
                 dir,
@@ -831,14 +851,14 @@ fn main() -> Result<()> {
                 db.create_collection(&name)?;
 
                 println!("✓ Created collection '{}'", name);
-            }
+            },
 
             CollectionCommands::Drop { dir, name } => {
                 let mut db = VecDatabase::open(&dir)?;
                 db.delete_collection(&name)?;
 
                 println!("✓ Dropped collection '{}'", name);
-            }
+            },
 
             CollectionCommands::Info { dir, name } => {
                 let db = VecDatabase::open(&dir)?;
@@ -853,7 +873,7 @@ fn main() -> Result<()> {
                 } else {
                     println!("Collection '{}' not found", name);
                 }
-            }
+            },
         },
 
         Commands::Delete { dir, id, filter } => {
@@ -871,7 +891,7 @@ fn main() -> Result<()> {
                 eprintln!("Error: Must specify either --id or --filter");
                 std::process::exit(1);
             }
-        }
+        },
 
         Commands::Compact { dir } => {
             let mut store = VecStore::open(&dir)?;
@@ -890,7 +910,7 @@ fn main() -> Result<()> {
                 "  Removed: {} deleted vectors",
                 before.saturating_sub(after)
             );
-        }
+        },
     }
 
     Ok(())

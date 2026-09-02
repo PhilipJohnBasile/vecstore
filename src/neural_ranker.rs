@@ -408,10 +408,14 @@ impl NeuralRanker {
             max_length: self.config.max_seq_length,
         };
 
-        *self.model.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire model write lock".into()))? = Some(model);
-        *self.tokenizer.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire tokenizer write lock".into()))? = Some(tokenizer);
+        *self
+            .model
+            .write()
+            .map_err(|_| VecStoreError::LockError("Failed to acquire model write lock".into()))? =
+            Some(model);
+        *self.tokenizer.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire tokenizer write lock".into())
+        })? = Some(tokenizer);
 
         Ok(())
     }
@@ -499,10 +503,13 @@ impl NeuralRanker {
     pub fn rerank(&self, query: &str, candidates: Vec<RerankCandidate>) -> Result<RerankResponse> {
         let start = Instant::now();
         self.stats.total_reranks.fetch_add(1, Ordering::Relaxed);
-        self.stats.total_candidates.fetch_add(candidates.len() as u64, Ordering::Relaxed);
+        self.stats
+            .total_candidates
+            .fetch_add(candidates.len() as u64, Ordering::Relaxed);
 
         // Limit candidates
-        let top_candidates: Vec<_> = candidates.into_iter()
+        let top_candidates: Vec<_> = candidates
+            .into_iter()
             .take(self.config.rerank_top_k)
             .collect();
 
@@ -517,8 +524,9 @@ impl NeuralRanker {
 
             // Check cache
             let neural_score = {
-                let cache = self.cache.read()
-                    .map_err(|_| VecStoreError::LockError("Failed to acquire cache read lock".into()))?;
+                let cache = self.cache.read().map_err(|_| {
+                    VecStoreError::LockError("Failed to acquire cache read lock".into())
+                })?;
                 if let Some(entry) = cache.entries.get(&cache_key) {
                     cache_hit = true;
                     self.stats.cache_hits.fetch_add(1, Ordering::Relaxed);
@@ -531,14 +539,18 @@ impl NeuralRanker {
                     let score = self.compute_score(query, &candidate.text)?;
 
                     // Cache result
-                    let mut cache = self.cache.write()
-                        .map_err(|_| VecStoreError::LockError("Failed to acquire cache write lock".into()))?;
+                    let mut cache = self.cache.write().map_err(|_| {
+                        VecStoreError::LockError("Failed to acquire cache write lock".into())
+                    })?;
                     if cache.entries.len() < cache.max_size {
-                        cache.entries.insert(cache_key, CacheEntry {
-                            embedding: vec![score],
-                            created_at: Instant::now(),
-                            access_count: 1,
-                        });
+                        cache.entries.insert(
+                            cache_key,
+                            CacheEntry {
+                                embedding: vec![score],
+                                created_at: Instant::now(),
+                                access_count: 1,
+                            },
+                        );
                     }
 
                     score
@@ -624,7 +636,9 @@ impl NeuralRanker {
 
         // Use token ID and position to seed the embedding
         // This creates consistent, position-aware embeddings
-        let mut seed = (token_id as u64).wrapping_mul(31).wrapping_add(position as u64);
+        let mut seed = (token_id as u64)
+            .wrapping_mul(31)
+            .wrapping_add(position as u64);
 
         for (i, emb_val) in embedding.iter_mut().enumerate().take(dim) {
             // LCG for deterministic pseudo-random values
@@ -738,14 +752,22 @@ impl NeuralRanker {
 
     /// Tokenize text
     fn tokenize(&self, text: &str) -> Result<Vec<u32>> {
-        let tokenizer = self.tokenizer.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire tokenizer read lock".into()))?;
-        let tokenizer = tokenizer.as_ref()
+        let tokenizer = self.tokenizer.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire tokenizer read lock".into())
+        })?;
+        let tokenizer = tokenizer
+            .as_ref()
             .ok_or(VecStoreError::IndexNotInitialized)?;
 
         let words: Vec<&str> = text.split_whitespace().collect();
-        let tokens: Vec<u32> = words.iter()
-            .map(|w| *tokenizer.vocab.get(*w).unwrap_or(&tokenizer.special_tokens.unk_token))
+        let tokens: Vec<u32> = words
+            .iter()
+            .map(|w| {
+                *tokenizer
+                    .vocab
+                    .get(*w)
+                    .unwrap_or(&tokenizer.special_tokens.unk_token)
+            })
             .take(tokenizer.max_length)
             .collect();
 
@@ -778,7 +800,9 @@ impl NeuralRanker {
 
     /// Update running average latency
     fn update_latency(&self, latency_ms: f64) {
-        let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
+        let Ok(mut avg) = self.stats.avg_latency_ms.write() else {
+            return;
+        };
         let count = self.stats.total_reranks.load(Ordering::Relaxed) as f64;
         *avg = (*avg * (count - 1.0) + latency_ms) / count;
     }
@@ -793,7 +817,11 @@ impl NeuralRanker {
             cache_hit_rate: {
                 let hits = self.stats.cache_hits.load(Ordering::Relaxed) as f64;
                 let misses = self.stats.cache_misses.load(Ordering::Relaxed) as f64;
-                if hits + misses > 0.0 { hits / (hits + misses) } else { 0.0 }
+                if hits + misses > 0.0 {
+                    hits / (hits + misses)
+                } else {
+                    0.0
+                }
             },
             avg_latency_ms: self.stats.avg_latency_ms.read().map(|g| *g).unwrap_or(0.0),
             gpu_inferences: self.stats.gpu_inferences.load(Ordering::Relaxed),
@@ -803,7 +831,9 @@ impl NeuralRanker {
 
     /// Clear embedding cache
     pub fn clear_cache(&self) {
-        let Ok(mut cache) = self.cache.write() else { return; };
+        let Ok(mut cache) = self.cache.write() else {
+            return;
+        };
         cache.entries.clear();
         cache.hits = 0;
         cache.misses = 0;
@@ -877,9 +907,7 @@ impl CrossEncoder {
 
     /// Batch score multiple pairs
     pub fn batch_score(&self, pairs: &[(String, String)]) -> Result<Vec<f32>> {
-        pairs.iter()
-            .map(|(q, d)| self.score(q, d))
-            .collect()
+        pairs.iter().map(|(q, d)| self.score(q, d)).collect()
     }
 }
 
@@ -896,24 +924,28 @@ impl LateInteractionModel {
 
     /// Encode a query
     pub fn encode_query(&self, query: &str) -> Result<Vec<Vec<f32>>> {
-        let tokens: Vec<&str> = query.split_whitespace()
+        let tokens: Vec<&str> = query
+            .split_whitespace()
             .take(self.config.query_max_tokens)
             .collect();
 
         // Generate embeddings per token
-        Ok(tokens.iter()
+        Ok(tokens
+            .iter()
             .map(|_| vec![0.0; self.config.embedding_dim])
             .collect())
     }
 
     /// Encode a document
     pub fn encode_document(&self, doc: &str) -> Result<Vec<Vec<f32>>> {
-        let tokens: Vec<&str> = doc.split_whitespace()
+        let tokens: Vec<&str> = doc
+            .split_whitespace()
             .take(self.config.doc_max_tokens)
             .collect();
 
         // Generate embeddings per token
-        let embeddings: Vec<Vec<f32>> = tokens.iter()
+        let embeddings: Vec<Vec<f32>> = tokens
+            .iter()
             .map(|_| vec![0.0; self.config.embedding_dim])
             .collect();
 
@@ -944,7 +976,8 @@ impl LateInteractionModel {
     fn max_sim(&self, query: &[Vec<f32>], doc: &[Vec<f32>]) -> f32 {
         let mut total = 0.0;
         for q in query {
-            let max = doc.iter()
+            let max = doc
+                .iter()
                 .map(|d| cosine_similarity(q, d))
                 .fold(f32::MIN, f32::max);
             total += max;
@@ -957,21 +990,19 @@ impl LateInteractionModel {
     }
 
     fn avg_max(&self, query: &[Vec<f32>], doc: &[Vec<f32>]) -> f32 {
-        if query.is_empty() { return 0.0; }
+        if query.is_empty() {
+            return 0.0;
+        }
         self.max_sim(query, doc) / query.len() as f32
     }
 
     fn soft_max(&self, query: &[Vec<f32>], doc: &[Vec<f32>]) -> f32 {
         let mut total = 0.0;
         for q in query {
-            let sims: Vec<f32> = doc.iter()
-                .map(|d| cosine_similarity(q, d))
-                .collect();
+            let sims: Vec<f32> = doc.iter().map(|d| cosine_similarity(q, d)).collect();
             let max = sims.iter().fold(f32::MIN, |a, &b| a.max(b));
             let exp_sum: f32 = sims.iter().map(|&s| (s - max).exp()).sum();
-            let softmax_weighted: f32 = sims.iter()
-                .map(|&s| s * (s - max).exp() / exp_sum)
-                .sum();
+            let softmax_weighted: f32 = sims.iter().map(|&s| s * (s - max).exp() / exp_sum).sum();
             total += softmax_weighted;
         }
         total
@@ -979,17 +1010,21 @@ impl LateInteractionModel {
 
     /// Index document embeddings
     pub fn index_document(&self, doc_id: &str, embeddings: Vec<Vec<f32>>) {
-        let Ok(mut doc_emb) = self.doc_embeddings.write() else { return; };
+        let Ok(mut doc_emb) = self.doc_embeddings.write() else {
+            return;
+        };
         doc_emb.insert(doc_id.to_string(), embeddings);
     }
 
     /// Retrieve and score against indexed documents
     pub fn retrieve(&self, query: &str, top_k: usize) -> Result<Vec<(String, f32)>> {
         let query_embeddings = self.encode_query(query)?;
-        let docs = self.doc_embeddings.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire doc_embeddings read lock".into()))?;
+        let docs = self.doc_embeddings.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire doc_embeddings read lock".into())
+        })?;
 
-        let mut scores: Vec<(String, f32)> = docs.iter()
+        let mut scores: Vec<(String, f32)> = docs
+            .iter()
             .map(|(id, emb)| (id.clone(), self.score(&query_embeddings, emb)))
             .collect();
 
@@ -1013,7 +1048,9 @@ impl LearnedSparseModel {
     /// Encode text to sparse representation
     pub fn encode(&self, text: &str) -> Result<SparseRepresentation> {
         let tokens: Vec<&str> = text.split_whitespace().collect();
-        let vocab = self.vocab.read()
+        let vocab = self
+            .vocab
+            .read()
             .map_err(|_| VecStoreError::LockError("Failed to acquire vocab read lock".into()))?;
 
         let mut term_ids = Vec::new();
@@ -1132,7 +1169,9 @@ impl EnsembleRanker {
 
     /// Score using ensemble
     pub fn score(&self, query: &str, document: &str) -> Result<f32> {
-        let scores: Vec<f32> = self.rankers.iter()
+        let scores: Vec<f32> = self
+            .rankers
+            .iter()
             .filter_map(|(r, _)| r.score(query, document).ok())
             .collect();
 
@@ -1143,34 +1182,30 @@ impl EnsembleRanker {
         match &self.config.combination {
             CombinationMethod::WeightedSum => {
                 let total_weight: f32 = self.rankers.iter().map(|(_, w)| w).sum();
-                let weighted_sum: f32 = scores.iter()
+                let weighted_sum: f32 = scores
+                    .iter()
                     .zip(self.rankers.iter())
                     .map(|(s, (_, w))| s * w)
                     .sum();
                 Ok(weighted_sum / total_weight)
-            }
-            CombinationMethod::Max => {
-                Ok(scores.iter().fold(f32::MIN, |a, &b| a.max(b)))
-            }
-            CombinationMethod::Min => {
-                Ok(scores.iter().fold(f32::MAX, |a, &b| a.min(b)))
-            }
-            CombinationMethod::Average => {
-                Ok(scores.iter().sum::<f32>() / scores.len() as f32)
-            }
+            },
+            CombinationMethod::Max => Ok(scores.iter().fold(f32::MIN, |a, &b| a.max(b))),
+            CombinationMethod::Min => Ok(scores.iter().fold(f32::MAX, |a, &b| a.min(b))),
+            CombinationMethod::Average => Ok(scores.iter().sum::<f32>() / scores.len() as f32),
             CombinationMethod::RRF(k) => {
                 // Reciprocal rank fusion
-                let rrf: f32 = scores.iter()
+                let rrf: f32 = scores
+                    .iter()
                     .enumerate()
                     .map(|(rank, _)| 1.0 / (k + rank as f32 + 1.0))
                     .sum();
                 Ok(rrf)
-            }
+            },
             CombinationMethod::CombMNZ => {
                 let non_zero = scores.iter().filter(|&&s| s > 0.0).count() as f32;
                 let sum: f32 = scores.iter().sum();
                 Ok(sum * non_zero)
-            }
+            },
         }
     }
 }

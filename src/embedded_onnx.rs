@@ -30,13 +30,13 @@
 //! let results = store.search_text("greeting", 10)?;
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::RwLock;
 #[cfg(feature = "embeddings")]
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
+use std::sync::RwLock;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // MODEL CONFIGURATION
@@ -115,7 +115,9 @@ impl ModelType {
     /// Get the default query prefix for this model
     pub fn default_query_prefix(&self) -> Option<&str> {
         match self {
-            ModelType::BgeSmallEnV15 | ModelType::BgeBaseEnV15 => Some("Represent this sentence for searching relevant passages: "),
+            ModelType::BgeSmallEnV15 | ModelType::BgeBaseEnV15 => {
+                Some("Represent this sentence for searching relevant passages: ")
+            },
             ModelType::E5SmallV2 | ModelType::E5BaseV2 => Some("query: "),
             _ => None,
         }
@@ -301,8 +303,6 @@ impl EmbeddingModel {
 
     /// Load with configuration
     pub fn with_config(config: ModelConfig) -> Result<Self> {
-        
-
         let dimension = config.model_type.dimension();
 
         // Get model directory
@@ -393,11 +393,11 @@ impl EmbeddingModel {
 
         // Set optimization level based on quantization
         if config.quantize {
-            session_builder = session_builder
-                .with_optimization_level(GraphOptimizationLevel::Level3)?;
+            session_builder =
+                session_builder.with_optimization_level(GraphOptimizationLevel::Level3)?;
         } else {
-            session_builder = session_builder
-                .with_optimization_level(GraphOptimizationLevel::Level2)?;
+            session_builder =
+                session_builder.with_optimization_level(GraphOptimizationLevel::Level2)?;
         }
 
         // Set number of threads
@@ -406,9 +406,8 @@ impl EmbeddingModel {
         // Add execution providers
         #[cfg(feature = "cuda")]
         if config.use_gpu {
-            session_builder = session_builder.with_execution_providers([
-                ort::CUDAExecutionProvider::default().build(),
-            ])?;
+            session_builder = session_builder
+                .with_execution_providers([ort::CUDAExecutionProvider::default().build()])?;
         }
 
         // Load model
@@ -427,19 +426,13 @@ impl EmbeddingModel {
         let cache_dir = home.home_dir().join(".vecstore").join("models");
         let model_dir = cache_dir.join(model_type.huggingface_id().replace('/', "_"));
 
-        std::fs::create_dir_all(&model_dir)
-            .map_err(|e| VecStoreError::Io(e))?;
+        std::fs::create_dir_all(&model_dir).map_err(|e| VecStoreError::Io(e))?;
 
         Ok(model_dir)
     }
 
     /// Download model files from HuggingFace
-    fn download_model(
-        model_type: &ModelType,
-        model_dir: &std::path::Path,
-    ) -> Result<()> {
-        
-
+    fn download_model(model_type: &ModelType, model_dir: &std::path::Path) -> Result<()> {
         let base_url = format!(
             "https://huggingface.co/{}/resolve/main",
             model_type.huggingface_id()
@@ -457,16 +450,14 @@ impl EmbeddingModel {
 
             tracing::info!("Downloading {}...", remote_name);
 
-            let response = ureq::get(&url)
-                .call()
-                .map_err(|e| VecStoreError::Internal(format!("Failed to download {}: {}", url, e)))?;
+            let response = ureq::get(&url).call().map_err(|e| {
+                VecStoreError::Internal(format!("Failed to download {}: {}", url, e))
+            })?;
 
             let mut reader = response.into_body().into_reader();
-            let mut file = std::fs::File::create(&dest)
-                .map_err(|e| VecStoreError::Io(e))?;
+            let mut file = std::fs::File::create(&dest).map_err(|e| VecStoreError::Io(e))?;
 
-            std::io::copy(&mut reader, &mut file)
-                .map_err(|e| VecStoreError::Io(e))?;
+            std::io::copy(&mut reader, &mut file).map_err(|e| VecStoreError::Io(e))?;
 
             tracing::info!("Downloaded {} successfully", remote_name);
         }
@@ -499,7 +490,9 @@ impl EmbeddingModel {
     /// Embed a single text
     pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.embed_batch(&[text.to_string()])?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| VecStoreError::InvalidInput("No embedding returned".to_string()))
     }
 
@@ -607,16 +600,20 @@ impl EmbeddingModel {
             .map_err(|e| VecStoreError::Internal(format!("Array shape error: {}", e)))?;
 
         // Create ONNX input tensors using ort 2.0 API
-        let input_ids_tensor = Tensor::from_array(input_ids_array)
-            .map_err(|e| VecStoreError::OnnxRuntime(format!("Failed to create input_ids tensor: {}", e)))?;
-        let attention_mask_tensor = Tensor::from_array(attention_mask_array)
-            .map_err(|e| VecStoreError::OnnxRuntime(format!("Failed to create attention_mask tensor: {}", e)))?;
-        let token_type_ids_tensor = Tensor::from_array(token_type_ids_array)
-            .map_err(|e| VecStoreError::OnnxRuntime(format!("Failed to create token_type_ids tensor: {}", e)))?;
+        let input_ids_tensor = Tensor::from_array(input_ids_array).map_err(|e| {
+            VecStoreError::OnnxRuntime(format!("Failed to create input_ids tensor: {}", e))
+        })?;
+        let attention_mask_tensor = Tensor::from_array(attention_mask_array).map_err(|e| {
+            VecStoreError::OnnxRuntime(format!("Failed to create attention_mask tensor: {}", e))
+        })?;
+        let token_type_ids_tensor = Tensor::from_array(token_type_ids_array).map_err(|e| {
+            VecStoreError::OnnxRuntime(format!("Failed to create token_type_ids tensor: {}", e))
+        })?;
 
         // Get mutable access to session for inference
-        let mut session = self.session.write()
-            .map_err(|e| VecStoreError::LockError(format!("Failed to acquire session lock: {}", e)))?;
+        let mut session = self.session.write().map_err(|e| {
+            VecStoreError::LockError(format!("Failed to acquire session lock: {}", e))
+        })?;
 
         // Run inference using ort::inputs! macro
         let outputs = session
@@ -642,13 +639,15 @@ impl EmbeddingModel {
             ndarray::ArrayD::from_shape_vec(
                 shape.to_vec(),
                 embeddings_view.iter().copied().collect(),
-            ).map_err(|e| VecStoreError::Internal(format!("Array conversion error: {}", e)))?
+            )
+            .map_err(|e| VecStoreError::Internal(format!("Array conversion error: {}", e)))?
         } else if shape.len() == 2 {
             // Shape is (batch_size, hidden_size) - already pooled by model
             ndarray::ArrayD::from_shape_vec(
                 shape.to_vec(),
                 embeddings_view.iter().copied().collect(),
-            ).map_err(|e| VecStoreError::Internal(format!("Array conversion error: {}", e)))?
+            )
+            .map_err(|e| VecStoreError::Internal(format!("Array conversion error: {}", e)))?
         } else {
             return Err(VecStoreError::OnnxRuntime(format!(
                 "Unexpected output shape: {:?}",
@@ -751,7 +750,11 @@ impl EmbeddingModel {
 
     /// Get statistics
     pub fn stats(&self) -> ModelStats {
-        self.stats.read().ok().map(|g| g.clone()).unwrap_or_default()
+        self.stats
+            .read()
+            .ok()
+            .map(|g| g.clone())
+            .unwrap_or_default()
     }
 }
 
@@ -789,15 +792,64 @@ impl EmbeddingModel {
     fn build_simple_vocab() -> HashMap<String, usize> {
         // Fallback vocabulary - enable `embeddings` feature for real BPE/WordPiece tokenization
         let words = [
-            "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
-            "have", "has", "had", "do", "does", "did", "will", "would", "could",
-            "should", "may", "might", "must", "can", "this", "that", "these",
-            "those", "i", "you", "he", "she", "it", "we", "they", "what", "which",
-            "who", "whom", "where", "when", "why", "how", "hello", "world", "test",
-            "document", "search", "query", "vector", "embedding", "model", "text",
+            "the",
+            "a",
+            "an",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "must",
+            "can",
+            "this",
+            "that",
+            "these",
+            "those",
+            "i",
+            "you",
+            "he",
+            "she",
+            "it",
+            "we",
+            "they",
+            "what",
+            "which",
+            "who",
+            "whom",
+            "where",
+            "when",
+            "why",
+            "how",
+            "hello",
+            "world",
+            "test",
+            "document",
+            "search",
+            "query",
+            "vector",
+            "embedding",
+            "model",
+            "text",
         ];
 
-        words.iter().enumerate()
+        words
+            .iter()
+            .enumerate()
             .map(|(i, &w)| (w.to_string(), i))
             .collect()
     }
@@ -810,7 +862,9 @@ impl EmbeddingModel {
     /// Embed a single text
     pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.embed_batch(&[text.to_string()])?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| VecStoreError::InvalidInput("No embedding returned".to_string()))
     }
 
@@ -818,9 +872,7 @@ impl EmbeddingModel {
     pub fn embed_batch(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         let start = std::time::Instant::now();
 
-        let embeddings: Vec<Vec<f32>> = texts.iter()
-            .map(|text| self.embed_text(text))
-            .collect();
+        let embeddings: Vec<Vec<f32>> = texts.iter().map(|text| self.embed_text(text)).collect();
 
         // Update stats
         {
@@ -870,12 +922,11 @@ impl EmbeddingModel {
             .split_whitespace()
             .map(|word| {
                 // Clean word
-                let clean: String = word.chars()
-                    .filter(|c| c.is_alphanumeric())
-                    .collect();
+                let clean: String = word.chars().filter(|c| c.is_alphanumeric()).collect();
 
                 // Look up in vocabulary or use hash
-                self.vocab.get(&clean)
+                self.vocab
+                    .get(&clean)
                     .copied()
                     .unwrap_or_else(|| self.hash_word(&clean))
             })
@@ -894,7 +945,9 @@ impl EmbeddingModel {
 
     /// Get statistics
     pub fn stats(&self) -> ModelStats {
-        let Ok(guard) = self.stats.read() else { return ModelStats::default(); };
+        let Ok(guard) = self.stats.read() else {
+            return ModelStats::default();
+        };
         guard.clone()
     }
 }
@@ -980,7 +1033,7 @@ impl EmbeddedStore {
                     stats.cache_hits += 1;
                 }
                 e
-            }
+            },
             None => {
                 #[cfg(feature = "embeddings")]
                 let e = self.model.embed_document(text)?;
@@ -997,7 +1050,7 @@ impl EmbeddedStore {
                 }
 
                 e
-            }
+            },
         };
 
         // Store vector
@@ -1086,7 +1139,9 @@ impl EmbeddedStore {
 
     /// Delete by ID
     pub fn delete(&self, id: &str) -> bool {
-        let Ok(mut vectors) = self.vectors.write() else { return false; };
+        let Ok(mut vectors) = self.vectors.write() else {
+            return false;
+        };
         let removed = vectors.remove(id).is_some();
         drop(vectors);
 
@@ -1123,7 +1178,8 @@ impl EmbeddedStore {
         let texts = self.texts.read()?;
         let metadata = self.metadata.read()?;
 
-        let mut results: Vec<_> = vectors.iter()
+        let mut results: Vec<_> = vectors
+            .iter()
             .map(|(id, vec)| {
                 let score = cosine_similarity(query, vec);
                 SearchResult {
@@ -1143,7 +1199,9 @@ impl EmbeddedStore {
 
     /// Get by ID
     pub fn get(&self, id: &str) -> Option<(Vec<f32>, Option<String>, Option<serde_json::Value>)> {
-        let Ok(vectors) = self.vectors.read() else { return None; };
+        let Ok(vectors) = self.vectors.read() else {
+            return None;
+        };
         vectors.get(id).map(|v| {
             let text = self.texts.read().ok().and_then(|t| t.get(id).cloned());
             let meta = self.metadata.read().ok().and_then(|m| m.get(id).cloned());
@@ -1158,13 +1216,17 @@ impl EmbeddedStore {
 
     /// Get count
     pub fn len(&self) -> usize {
-        let Ok(guard) = self.vectors.read() else { return 0; };
+        let Ok(guard) = self.vectors.read() else {
+            return 0;
+        };
         guard.len()
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> bool {
-        let Ok(guard) = self.vectors.read() else { return true; };
+        let Ok(guard) = self.vectors.read() else {
+            return true;
+        };
         guard.is_empty()
     }
 
@@ -1230,7 +1292,9 @@ pub trait EmbeddingFunction: Send + Sync {
     /// Embed a single text
     fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.embed(&[text.to_string()])?;
-        embeddings.into_iter().next()
+        embeddings
+            .into_iter()
+            .next()
             .ok_or_else(|| VecStoreError::InvalidInput("No embedding returned".to_string()))
     }
 

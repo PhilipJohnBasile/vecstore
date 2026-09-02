@@ -97,7 +97,7 @@ fn test_wal_replay_single_entry() {
         LogEntry::Insert { id, vector } => {
             assert_eq!(id, "doc1");
             assert_eq!(vector, &vec![1.0, 2.0, 3.0]);
-        }
+        },
         _ => panic!("Expected Insert entry"),
     }
 }
@@ -283,7 +283,7 @@ fn test_wal_durability_after_crash() {
             LogEntry::Insert { id, vector } => {
                 assert_eq!(id, &format!("doc{}", i));
                 assert_eq!(vector, &vec![i as f32, (i * 2) as f32]);
-            }
+            },
             _ => panic!("Expected Insert entry"),
         }
     }
@@ -309,7 +309,7 @@ fn test_wal_large_vectors() {
         LogEntry::Insert { vector, .. } => {
             assert_eq!(vector.len(), 1536);
             assert_eq!(vector, &large_vector);
-        }
+        },
         _ => panic!("Expected Insert entry"),
     }
 }
@@ -341,7 +341,7 @@ fn test_wal_sequence_ordering() {
             LogEntry::Insert { id, vector } => {
                 assert_eq!(id, &format!("doc{:03}", i));
                 assert_eq!(vector, &vec![i as f32]);
-            }
+            },
             _ => panic!("Expected Insert entry"),
         }
     }
@@ -488,8 +488,8 @@ fn test_wal_checkpoint_marker() {
             match &entries[0] {
                 LogEntry::Checkpoint { sequence } => {
                     assert_eq!(*sequence, 100);
-                }
-                _ => {} // Other entry types are also valid
+                },
+                _ => {}, // Other entry types are also valid
             }
         }
     }

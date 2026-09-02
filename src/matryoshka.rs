@@ -44,7 +44,7 @@
 //! let results = store.search(&query, 10)?;
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -174,10 +174,11 @@ impl MatryoshkaEmbedding {
 
         // Try to get from full embedding
         if let Some(ref full) = self.full
-            && dim <= full.len() {
-                // Would need to compute truncated - return None for now
-                return None;
-            }
+            && dim <= full.len()
+        {
+            // Would need to compute truncated - return None for now
+            return None;
+        }
 
         // Return closest smaller dimension
         self.truncated
@@ -314,9 +315,10 @@ impl MatryoshkaStore {
             // Re-score candidates at higher dimension
             for (id, score) in &mut candidates {
                 if let Some(emb) = self.embeddings.get(id)
-                    && let Some(v) = emb.at_dimension(dim) {
-                        *score = self.cosine_similarity(&refined_query, v);
-                    }
+                    && let Some(v) = emb.at_dimension(dim)
+                {
+                    *score = self.cosine_similarity(&refined_query, v);
+                }
             }
 
             // Re-sort after refinement
@@ -755,7 +757,8 @@ impl AdaptiveSearch {
     fn estimate_optimal_dimension(&self, query: &[f32]) -> usize {
         // Simple heuristic: use query variance to estimate complexity
         let mean: f32 = query.iter().sum::<f32>() / query.len() as f32;
-        let variance: f32 = query.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / query.len() as f32;
+        let variance: f32 =
+            query.iter().map(|x| (x - mean).powi(2)).sum::<f32>() / query.len() as f32;
 
         // Higher variance queries need more dimensions
         if variance > 0.5 {

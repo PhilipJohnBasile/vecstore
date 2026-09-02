@@ -7,7 +7,7 @@
 // Note: This uses an in-memory store since file I/O works differently in browsers.
 
 use crate::store::{
-    hybrid::TextIndex, parse_filter, FilterExpr, Metadata, Query, Record, VectorBackend,
+    FilterExpr, Metadata, Query, Record, VectorBackend, hybrid::TextIndex, parse_filter,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

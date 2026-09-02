@@ -1,9 +1,9 @@
 // Query Analytics Dashboard - Comprehensive analytics for vector search operations
 // Query patterns, performance insights, and usage analytics
 
-use std::collections::{HashMap, VecDeque, BTreeMap};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -37,9 +37,9 @@ impl Default for AnalyticsConfig {
             max_events: 100000,
             realtime_streaming: false,
             aggregation_intervals: vec![
-                Duration::from_secs(60),      // 1 minute
-                Duration::from_secs(3600),    // 1 hour
-                Duration::from_secs(86400),   // 1 day
+                Duration::from_secs(60),    // 1 minute
+                Duration::from_secs(3600),  // 1 hour
+                Duration::from_secs(86400), // 1 day
             ],
             log_queries: true,
             privacy_mode: false,
@@ -317,33 +317,40 @@ impl QueryAnalytics {
         match event.event_type {
             EventType::Search | EventType::BatchSearch => {
                 self.stats.search_events.fetch_add(1, Ordering::Relaxed);
-            }
+            },
             EventType::Insert | EventType::BatchInsert => {
                 self.stats.insert_events.fetch_add(1, Ordering::Relaxed);
-            }
+            },
             EventType::Update => {
                 self.stats.update_events.fetch_add(1, Ordering::Relaxed);
-            }
+            },
             EventType::Delete => {
                 self.stats.delete_events.fetch_add(1, Ordering::Relaxed);
-            }
-            _ => {}
+            },
+            _ => {},
         }
 
         // Update running average latency
         {
-            let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
+            let Ok(mut avg) = self.stats.avg_latency_ms.write() else {
+                return;
+            };
             let count = self.stats.total_events.load(Ordering::Relaxed) as f64;
             *avg = (*avg * (count - 1.0) + event.latency_ms) / count;
         }
 
         // Store event
         {
-            let Ok(mut events) = self.events.write() else { return; };
+            let Ok(mut events) = self.events.write() else {
+                return;
+            };
             if events.len() >= self.config.max_events {
                 events.pop_front();
             }
-            events.push_back(QueryEvent { id: event_id, ..event.clone() });
+            events.push_back(QueryEvent {
+                id: event_id,
+                ..event.clone()
+            });
         }
 
         // Update aggregates
@@ -364,18 +371,21 @@ impl QueryAnalytics {
             return false;
         }
 
-        use std::hash::{Hash, Hasher};
         use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
         let mut hasher = DefaultHasher::new();
         Instant::now().hash(&mut hasher);
         (hasher.finish() as f64 / u64::MAX as f64) < self.config.sample_rate
     }
 
     fn update_aggregates(&self, event: &QueryEvent) {
-        let Ok(mut aggregates) = self.aggregates.write() else { return; };
+        let Ok(mut aggregates) = self.aggregates.write() else {
+            return;
+        };
 
         // Overall aggregate
-        let overall = aggregates.entry("overall".to_string())
+        let overall = aggregates
+            .entry("overall".to_string())
             .or_insert_with(|| AggregateStats {
                 min_latency_ms: f64::INFINITY,
                 ..Default::default()
@@ -394,7 +404,8 @@ impl QueryAnalytics {
         overall.cache_hit_rate = overall.cache_hits as f64 / overall.count as f64;
 
         // Per-collection aggregate
-        let collection = aggregates.entry(format!("collection:{}", event.collection))
+        let collection = aggregates
+            .entry(format!("collection:{}", event.collection))
             .or_insert_with(|| AggregateStats {
                 min_latency_ms: f64::INFINITY,
                 ..Default::default()
@@ -414,38 +425,41 @@ impl QueryAnalytics {
     }
 
     fn update_patterns(&self, event: &QueryEvent) {
-        let Ok(mut patterns) = self.patterns.write() else { return; };
+        let Ok(mut patterns) = self.patterns.write() else {
+            return;
+        };
 
         // Track dimension distribution
-        *patterns.dimension_distribution
+        *patterns
+            .dimension_distribution
             .entry(event.dimensions)
             .or_insert(0) += 1;
 
         // Track k distribution
-        *patterns.k_distribution
-            .entry(event.top_k)
-            .or_insert(0) += 1;
+        *patterns.k_distribution.entry(event.top_k).or_insert(0) += 1;
 
         // Track query patterns (collection + filter count)
         let pattern_key = format!("{}:filters={}", event.collection, event.filter_count);
-        *patterns.frequent_patterns
-            .entry(pattern_key)
-            .or_insert(0) += 1;
+        *patterns.frequent_patterns.entry(pattern_key).or_insert(0) += 1;
 
         // Track temporal patterns (hourly)
         let hour = event.timestamp / 3600;
-        patterns.temporal_patterns
+        patterns
+            .temporal_patterns
             .entry(hour)
             .or_insert_with(Vec::new)
             .push(event.collection.clone());
     }
 
     fn update_timeseries(&self, event: &QueryEvent) {
-        let Ok(mut ts) = self.timeseries.write() else { return; };
+        let Ok(mut ts) = self.timeseries.write() else {
+            return;
+        };
         let bucket = event.timestamp / 60; // Minute buckets
 
         // Latency series
-        let latency_series = ts.series
+        let latency_series = ts
+            .series
             .entry("latency".to_string())
             .or_insert_with(Vec::new);
 
@@ -471,7 +485,8 @@ impl QueryAnalytics {
         }
 
         // Throughput series
-        let throughput_series = ts.series
+        let throughput_series = ts
+            .series
             .entry("throughput".to_string())
             .or_insert_with(Vec::new);
 
@@ -513,7 +528,8 @@ impl QueryAnalytics {
         let overall = aggregates.get("overall").cloned().unwrap_or_default();
 
         let uptime = self.stats.started_at.elapsed();
-        let qps = self.stats.total_events.load(Ordering::Relaxed) as f64 / uptime.as_secs_f64().max(1.0);
+        let qps =
+            self.stats.total_events.load(Ordering::Relaxed) as f64 / uptime.as_secs_f64().max(1.0);
 
         let summary = DashboardSummary {
             total_queries: overall.count,
@@ -522,13 +538,15 @@ impl QueryAnalytics {
             p99_latency_ms: overall.p99_latency_ms,
             cache_hit_rate: overall.cache_hit_rate,
             error_rate: overall.error_rate,
-            active_collections: aggregates.keys()
+            active_collections: aggregates
+                .keys()
                 .filter(|k| k.starts_with("collection:"))
                 .count(),
             uptime,
         };
 
-        let recent_queries: Vec<QuerySummary> = events.iter()
+        let recent_queries: Vec<QuerySummary> = events
+            .iter()
             .rev()
             .take(20)
             .map(|e| QuerySummary {
@@ -542,7 +560,8 @@ impl QueryAnalytics {
 
         let performance_trends = self.get_performance_trends();
 
-        let mut top_collections: Vec<CollectionStats> = aggregates.iter()
+        let mut top_collections: Vec<CollectionStats> = aggregates
+            .iter()
             .filter(|(k, _)| k.starts_with("collection:"))
             .map(|(k, stats)| CollectionStats {
                 name: k.replace("collection:", ""),
@@ -597,7 +616,9 @@ impl QueryAnalytics {
     }
 
     fn get_performance_trends(&self) -> Vec<TrendData> {
-        let Ok(ts) = self.timeseries.read() else { return vec![]; };
+        let Ok(ts) = self.timeseries.read() else {
+            return vec![];
+        };
         let mut trends = Vec::new();
 
         for (metric_name, points) in &ts.series {
@@ -681,18 +702,24 @@ impl QueryAnalytics {
 
     /// Get aggregate statistics
     pub fn get_aggregates(&self) -> HashMap<String, AggregateStats> {
-        let Ok(aggregates) = self.aggregates.read() else { return HashMap::new(); };
+        let Ok(aggregates) = self.aggregates.read() else {
+            return HashMap::new();
+        };
         aggregates.clone()
     }
 
     /// Get time series data
     pub fn get_timeseries(&self, metric: &str, last_n_minutes: usize) -> Vec<TimeSeriesPoint> {
-        let Ok(ts) = self.timeseries.read() else { return vec![]; };
+        let Ok(ts) = self.timeseries.read() else {
+            return vec![];
+        };
         let cutoff = current_timestamp() / 60 - last_n_minutes as u64;
 
-        ts.series.get(metric)
+        ts.series
+            .get(metric)
             .map(|points| {
-                points.iter()
+                points
+                    .iter()
                     .filter(|p| p.timestamp >= cutoff)
                     .cloned()
                     .collect()
@@ -702,20 +729,26 @@ impl QueryAnalytics {
 
     /// Generate a report
     pub fn generate_report(&self, config: &ReportConfig) -> Result<String> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
 
-        let filtered: Vec<_> = events.iter()
-            .filter(|e| e.timestamp >= config.time_range.start && e.timestamp <= config.time_range.end)
+        let filtered: Vec<_> = events
+            .iter()
+            .filter(|e| {
+                e.timestamp >= config.time_range.start && e.timestamp <= config.time_range.end
+            })
             .collect();
 
         match config.format {
             ReportFormat::Json => {
                 let summary: HashMap<String, serde_json::Value> = HashMap::new();
                 Ok(serde_json::to_string_pretty(&summary).unwrap_or_default())
-            }
+            },
             ReportFormat::Csv => {
-                let mut csv = String::from("timestamp,collection,latency_ms,result_count,event_type\n");
+                let mut csv =
+                    String::from("timestamp,collection,latency_ms,result_count,event_type\n");
                 for e in filtered {
                     csv.push_str(&format!(
                         "{},{},{},{},{:?}\n",
@@ -723,7 +756,7 @@ impl QueryAnalytics {
                     ));
                 }
                 Ok(csv)
-            }
+            },
             ReportFormat::Html => {
                 let html = format!(
                     r#"<!DOCTYPE html>
@@ -740,9 +773,11 @@ impl QueryAnalytics {
                     filtered.len()
                 );
                 Ok(html)
-            }
+            },
             ReportFormat::Prometheus => {
-                let aggregates = self.aggregates.read()
+                let aggregates = self
+                    .aggregates
+                    .read()
                     .map_err(|_| VecStoreError::LockError("aggregates lock poisoned".into()))?;
                 let mut output = String::new();
 
@@ -757,14 +792,12 @@ impl QueryAnalytics {
                          # HELP vecstore_cache_hit_rate Cache hit rate\n\
                          # TYPE vecstore_cache_hit_rate gauge\n\
                          vecstore_cache_hit_rate {:.4}\n",
-                        overall.count,
-                        overall.avg_latency_ms,
-                        overall.cache_hit_rate
+                        overall.count, overall.avg_latency_ms, overall.cache_hit_rate
                     ));
                 }
 
                 Ok(output)
-            }
+            },
         }
     }
 
@@ -778,18 +811,24 @@ impl QueryAnalytics {
             };
         };
 
-        let mut frequent: Vec<(String, u64)> = patterns.frequent_patterns.iter()
+        let mut frequent: Vec<(String, u64)> = patterns
+            .frequent_patterns
+            .iter()
             .map(|(k, v)| (k.clone(), *v))
             .collect();
         frequent.sort_by(|a, b| b.1.cmp(&a.1));
         frequent.truncate(10);
 
-        let mut dimensions: Vec<(usize, u64)> = patterns.dimension_distribution.iter()
+        let mut dimensions: Vec<(usize, u64)> = patterns
+            .dimension_distribution
+            .iter()
             .map(|(k, v)| (*k, *v))
             .collect();
         dimensions.sort_by(|a, b| b.1.cmp(&a.1));
 
-        let mut k_values: Vec<(usize, u64)> = patterns.k_distribution.iter()
+        let mut k_values: Vec<(usize, u64)> = patterns
+            .k_distribution
+            .iter()
             .map(|(k, v)| (*k, *v))
             .collect();
         k_values.sort_by(|a, b| b.1.cmp(&a.1));
@@ -827,22 +866,32 @@ impl QueryAnalytics {
             error_rate: overall.error_rate,
             queries_per_second: {
                 let uptime = self.stats.started_at.elapsed().as_secs_f64();
-                if uptime > 0.0 { overall.count as f64 / uptime } else { 0.0 }
+                if uptime > 0.0 {
+                    overall.count as f64 / uptime
+                } else {
+                    0.0
+                }
             },
         }
     }
 
     /// Reset analytics
     pub fn reset(&self) {
-        let Ok(mut events) = self.events.write() else { return; };
+        let Ok(mut events) = self.events.write() else {
+            return;
+        };
         events.clear();
         drop(events);
 
-        let Ok(mut aggregates) = self.aggregates.write() else { return; };
+        let Ok(mut aggregates) = self.aggregates.write() else {
+            return;
+        };
         aggregates.clear();
         drop(aggregates);
 
-        let Ok(mut patterns) = self.patterns.write() else { return; };
+        let Ok(mut patterns) = self.patterns.write() else {
+            return;
+        };
         *patterns = PatternAnalyzer {
             frequent_patterns: HashMap::new(),
             temporal_patterns: BTreeMap::new(),
@@ -857,7 +906,9 @@ impl QueryAnalytics {
         self.stats.update_events.store(0, Ordering::Relaxed);
         self.stats.delete_events.store(0, Ordering::Relaxed);
 
-        let Ok(mut avg) = self.stats.avg_latency_ms.write() else { return; };
+        let Ok(mut avg) = self.stats.avg_latency_ms.write() else {
+            return;
+        };
         *avg = 0.0;
     }
 }
@@ -892,9 +943,7 @@ pub struct LatencyHistogram {
 
 impl LatencyHistogram {
     pub fn new(bucket_boundaries: &[f64]) -> Self {
-        let buckets = bucket_boundaries.iter()
-            .map(|&b| (b, 0))
-            .collect();
+        let buckets = bucket_boundaries.iter().map(|&b| (b, 0)).collect();
 
         Self {
             buckets,
@@ -970,7 +1019,8 @@ impl QueryRecommender {
             recommendations.push(Recommendation {
                 category: RecommendationCategory::Performance,
                 title: "High Average Latency".to_string(),
-                description: "Consider optimizing index parameters or adding more replicas".to_string(),
+                description: "Consider optimizing index parameters or adding more replicas"
+                    .to_string(),
                 impact: Impact::High,
                 effort: Impact::Medium,
             });
@@ -978,33 +1028,35 @@ impl QueryRecommender {
 
         // Check dimension distribution for index optimization
         if let Some((most_common_dim, _)) = patterns.dimension_distribution.first()
-            && *most_common_dim > 512 {
-                recommendations.push(Recommendation {
-                    category: RecommendationCategory::IndexOptimization,
-                    title: "High Dimensional Vectors".to_string(),
-                    description: format!(
-                        "Most queries use {}-dimensional vectors. Consider PQ or dimension reduction.",
-                        most_common_dim
-                    ),
-                    impact: Impact::Medium,
-                    effort: Impact::High,
-                });
-            }
+            && *most_common_dim > 512
+        {
+            recommendations.push(Recommendation {
+                category: RecommendationCategory::IndexOptimization,
+                title: "High Dimensional Vectors".to_string(),
+                description: format!(
+                    "Most queries use {}-dimensional vectors. Consider PQ or dimension reduction.",
+                    most_common_dim
+                ),
+                impact: Impact::Medium,
+                effort: Impact::High,
+            });
+        }
 
         // Check k distribution
         if let Some((most_common_k, _)) = patterns.k_distribution.first()
-            && *most_common_k > 100 {
-                recommendations.push(Recommendation {
-                    category: RecommendationCategory::QueryOptimization,
-                    title: "Large Top-K Values".to_string(),
-                    description: format!(
-                        "Many queries request top-{}. Consider pagination instead.",
-                        most_common_k
-                    ),
-                    impact: Impact::Medium,
-                    effort: Impact::Low,
-                });
-            }
+            && *most_common_k > 100
+        {
+            recommendations.push(Recommendation {
+                category: RecommendationCategory::QueryOptimization,
+                title: "Large Top-K Values".to_string(),
+                description: format!(
+                    "Many queries request top-{}. Consider pagination instead.",
+                    most_common_k
+                ),
+                impact: Impact::Medium,
+                effort: Impact::Low,
+            });
+        }
 
         recommendations
     }
@@ -1099,9 +1151,7 @@ mod tests {
 
     #[test]
     fn test_analytics_creation() {
-        let analytics = QueryAnalyticsBuilder::new()
-            .sample_rate(1.0)
-            .build();
+        let analytics = QueryAnalyticsBuilder::new().sample_rate(1.0).build();
 
         let dashboard = analytics.get_dashboard();
         assert_eq!(dashboard.summary.total_queries, 0);
@@ -1109,9 +1159,7 @@ mod tests {
 
     #[test]
     fn test_record_event() {
-        let analytics = QueryAnalyticsBuilder::new()
-            .sample_rate(1.0)
-            .build();
+        let analytics = QueryAnalyticsBuilder::new().sample_rate(1.0).build();
 
         let event = QueryEvent {
             id: 0,
@@ -1137,9 +1185,7 @@ mod tests {
 
     #[test]
     fn test_timeseries() {
-        let analytics = QueryAnalyticsBuilder::new()
-            .sample_rate(1.0)
-            .build();
+        let analytics = QueryAnalyticsBuilder::new().sample_rate(1.0).build();
 
         for i in 0..10 {
             let event = QueryEvent {
@@ -1166,9 +1212,7 @@ mod tests {
 
     #[test]
     fn test_report_generation() {
-        let analytics = QueryAnalyticsBuilder::new()
-            .sample_rate(1.0)
-            .build();
+        let analytics = QueryAnalyticsBuilder::new().sample_rate(1.0).build();
 
         let config = ReportConfig {
             time_range: TimeRange {

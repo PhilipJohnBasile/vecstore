@@ -14,8 +14,8 @@
 //! Run with: cargo run --example sparse_vectors_demo
 
 use vecstore::{
-    bm25_score, hybrid_search_score, normalize_scores, BM25Config, BM25Stats, FusionStrategy,
-    HybridQueryV2, HybridSearchConfig, Vector,
+    BM25Config, BM25Stats, FusionStrategy, HybridQueryV2, HybridSearchConfig, Vector, bm25_score,
+    hybrid_search_score, normalize_scores,
 };
 
 fn main() -> anyhow::Result<()> {

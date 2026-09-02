@@ -2,11 +2,11 @@
 //!
 //! Exposes metrics at /metrics endpoint for Prometheus scraping.
 
-use std::sync::LazyLock;
 use prometheus::{
-    register_counter_vec, register_gauge, register_histogram_vec, CounterVec, Encoder, Gauge,
-    HistogramVec, TextEncoder,
+    CounterVec, Encoder, Gauge, HistogramVec, TextEncoder, register_counter_vec, register_gauge,
+    register_histogram_vec,
 };
+use std::sync::LazyLock;
 
 /// Total number of requests by endpoint
 pub static REQUEST_COUNTER: LazyLock<CounterVec> = LazyLock::new(|| {
@@ -24,7 +24,9 @@ pub static REQUEST_DURATION: LazyLock<HistogramVec> = LazyLock::new(|| {
         "vecstore_request_duration_seconds",
         "Request duration in seconds",
         &["endpoint", "method"],
-        vec![0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+        vec![
+            0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0
+        ]
     )
     .unwrap()
 });
@@ -90,20 +92,12 @@ pub static ACTIVE_VECTORS: LazyLock<Gauge> = LazyLock::new(|| {
 
 /// Deleted vectors
 pub static DELETED_VECTORS: LazyLock<Gauge> = LazyLock::new(|| {
-    register_gauge!(
-        "vecstore_vectors_deleted",
-        "Number of soft-deleted vectors"
-    )
-    .unwrap()
+    register_gauge!("vecstore_vectors_deleted", "Number of soft-deleted vectors").unwrap()
 });
 
 /// Database dimension
 pub static DIMENSION: LazyLock<Gauge> = LazyLock::new(|| {
-    register_gauge!(
-        "vecstore_dimension",
-        "Vector dimension of the database"
-    )
-    .unwrap()
+    register_gauge!("vecstore_dimension", "Vector dimension of the database").unwrap()
 });
 
 /// Errors by type

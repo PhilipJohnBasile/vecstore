@@ -46,29 +46,15 @@ use crate::error::{Result, VecStoreError};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum KMSProvider {
     /// AWS Key Management Service
-    AWSKMS {
-        key_arn: String,
-        region: String,
-    },
+    AWSKMS { key_arn: String, region: String },
     /// Google Cloud KMS
-    GCPKMS {
-        key_name: String,
-        project: String,
-    },
+    GCPKMS { key_name: String, project: String },
     /// Azure Key Vault
-    AzureKeyVault {
-        vault_url: String,
-        key_name: String,
-    },
+    AzureKeyVault { vault_url: String, key_name: String },
     /// HashiCorp Vault
-    HashiCorpVault {
-        address: String,
-        path: String,
-    },
+    HashiCorpVault { address: String, path: String },
     /// Local key (for development/testing)
-    Local {
-        key_path: PathBuf,
-    },
+    Local { key_path: PathBuf },
 }
 
 /// CMEK configuration
@@ -178,7 +164,9 @@ impl EncryptionManager {
     pub fn initialize(&self) -> Result<()> {
         let dek = self.generate_dek()?;
 
-        let mut current = self.current_dek.write()
+        let mut current = self
+            .current_dek
+            .write()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         *current = Some(dek);
 
@@ -200,7 +188,7 @@ impl EncryptionManager {
             ciphertext,
             key_id: dek.key_id.clone(),
             algorithm: "XOR".to_string(), // Use "AES-256-GCM" in production
-            nonce: vec![0u8; 12], // Would be random in production
+            nonce: vec![0u8; 12],         // Would be random in production
         })
     }
 
@@ -209,7 +197,8 @@ impl EncryptionManager {
         let dek = self.get_dek(&encrypted.key_id)?;
 
         // Simple XOR decryption
-        let plaintext: Vec<u8> = encrypted.ciphertext
+        let plaintext: Vec<u8> = encrypted
+            .ciphertext
             .iter()
             .enumerate()
             .map(|(i, &b)| b ^ dek.key[i % dek.key.len()])
@@ -220,21 +209,27 @@ impl EncryptionManager {
 
     /// Rotate encryption key
     pub fn rotate_key(&self) -> Result<KeyRotationResult> {
-        let old_dek = self.current_dek.read()
+        let old_dek = self
+            .current_dek
+            .read()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?
             .clone();
         let new_dek = self.generate_dek()?;
 
         // Store old key in cache for decryption
         if let Some(ref old) = old_dek {
-            let mut cache = self.dek_cache.write()
+            let mut cache = self
+                .dek_cache
+                .write()
                 .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             cache.insert(old.key_id.clone(), old.clone());
         }
 
         // Set new key as current
         {
-            let mut current = self.current_dek.write()
+            let mut current = self
+                .current_dek
+                .write()
                 .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             *current = Some(new_dek.clone());
         }
@@ -249,7 +244,9 @@ impl EncryptionManager {
     fn generate_dek(&self) -> Result<DataEncryptionKey> {
         // In production, this would call the KMS to generate a DEK
         let counter = self.key_counter.fetch_add(1, Ordering::Relaxed);
-        let key: Vec<u8> = (0..32).map(|i| ((i * 7 + 13 + counter as usize) % 256) as u8).collect();
+        let key: Vec<u8> = (0..32)
+            .map(|i| ((i * 7 + 13 + counter as usize) % 256) as u8)
+            .collect();
         let key_id = format!("dek_{}_{}", unix_timestamp(), counter);
 
         Ok(DataEncryptionKey {
@@ -266,26 +263,35 @@ impl EncryptionManager {
     }
 
     fn get_current_dek(&self) -> Result<DataEncryptionKey> {
-        let dek = self.current_dek.read()
+        let dek = self
+            .current_dek
+            .read()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
-        dek.clone().ok_or_else(|| VecStoreError::EncryptionError("DEK not initialized".to_string()))
+        dek.clone()
+            .ok_or_else(|| VecStoreError::EncryptionError("DEK not initialized".to_string()))
     }
 
     fn get_dek(&self, key_id: &str) -> Result<DataEncryptionKey> {
         // Check current key
         {
-            let current = self.current_dek.read()
+            let current = self
+                .current_dek
+                .read()
                 .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             if let Some(dek) = &*current
-                && dek.key_id == key_id {
-                    return Ok(dek.clone());
-                }
+                && dek.key_id == key_id
+            {
+                return Ok(dek.clone());
+            }
         }
 
         // Check cache
-        let cache = self.dek_cache.read()
+        let cache = self
+            .dek_cache
+            .read()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
-        cache.get(key_id)
+        cache
+            .get(key_id)
             .cloned()
             .ok_or_else(|| VecStoreError::EncryptionError(format!("DEK not found: {}", key_id)))
     }
@@ -438,7 +444,9 @@ impl BackupManager {
 
         // Store backup metadata
         {
-            let mut backups = self.backups.write()
+            let mut backups = self
+                .backups
+                .write()
                 .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
             backups.push(metadata.clone());
 
@@ -453,11 +461,14 @@ impl BackupManager {
 
     /// List backups
     pub fn list_backups(&self, collection: Option<&str>) -> Result<Vec<BackupMetadata>> {
-        let backups = self.backups.read()
+        let backups = self
+            .backups
+            .read()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
 
         if let Some(col) = collection {
-            Ok(backups.iter()
+            Ok(backups
+                .iter()
                 .filter(|b| b.collection == col)
                 .cloned()
                 .collect())
@@ -492,7 +503,9 @@ impl BackupManager {
 
     /// Delete backup
     pub fn delete_backup(&self, backup_id: &str) -> Result<bool> {
-        let mut backups = self.backups.write()
+        let mut backups = self
+            .backups
+            .write()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
         let len_before = backups.len();
         backups.retain(|b| b.backup_id != backup_id);
@@ -501,7 +514,9 @@ impl BackupManager {
 
     /// Get backup statistics
     pub fn stats(&self) -> Result<BackupStats> {
-        let backups = self.backups.read()
+        let backups = self
+            .backups
+            .read()
             .map_err(|_| VecStoreError::LockError("lock poisoned".into()))?;
 
         let total_size: u64 = backups.iter().map(|b| b.size_bytes).sum();
@@ -765,9 +780,21 @@ impl ComplianceChecker {
 
     /// Get compliance summary
     pub fn summary(&self) -> ComplianceSummary {
-        let passed = self.checks.iter().filter(|c| c.status == ComplianceStatus::Passed).count();
-        let failed = self.checks.iter().filter(|c| c.status == ComplianceStatus::Failed).count();
-        let warnings = self.checks.iter().filter(|c| c.status == ComplianceStatus::Warning).count();
+        let passed = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ComplianceStatus::Passed)
+            .count();
+        let failed = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ComplianceStatus::Failed)
+            .count();
+        let warnings = self
+            .checks
+            .iter()
+            .filter(|c| c.status == ComplianceStatus::Warning)
+            .count();
 
         ComplianceSummary {
             total_checks: self.checks.len(),
@@ -790,8 +817,7 @@ pub struct ComplianceSummary {
 }
 
 /// Enterprise configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct EnterpriseConfig {
     pub encryption_enabled: bool,
     pub audit_logging: bool,
@@ -799,7 +825,6 @@ pub struct EnterpriseConfig {
     pub backup_enabled: bool,
     pub retention_policy: Option<RetentionPolicy>,
 }
-
 
 fn unix_timestamp() -> i64 {
     SystemTime::now()
@@ -898,7 +923,10 @@ mod tests {
         let aws = CMEKConfig::aws_kms("arn:aws:kms:us-east-1:123456789:key/abc");
         assert!(matches!(aws.provider, KMSProvider::AWSKMS { .. }));
 
-        let gcp = CMEKConfig::gcp_kms("projects/my-project/locations/global/keyRings/my-ring/cryptoKeys/my-key", "my-project");
+        let gcp = CMEKConfig::gcp_kms(
+            "projects/my-project/locations/global/keyRings/my-ring/cryptoKeys/my-key",
+            "my-project",
+        );
         assert!(matches!(gcp.provider, KMSProvider::GCPKMS { .. }));
 
         let azure = CMEKConfig::azure_keyvault("https://myvault.vault.azure.net", "my-key");

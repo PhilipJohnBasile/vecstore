@@ -35,10 +35,10 @@
 //! println!("Transformations: {:?}", lineage.transformations);
 //! ```
 
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 use crate::error::VecStoreError;
 
@@ -207,26 +207,18 @@ pub enum TransformationType {
         to_dims: usize,
     },
     /// Vector was quantized
-    Quantized {
-        bits: u8,
-    },
+    Quantized { bits: u8 },
     /// Product quantization was applied
     ProductQuantized {
         num_subvectors: usize,
         bits_per_subvector: u8,
     },
     /// Vector was averaged with others
-    Averaged {
-        source_count: usize,
-    },
+    Averaged { source_count: usize },
     /// Vector was concatenated with others
-    Concatenated {
-        source_ids: Vec<String>,
-    },
+    Concatenated { source_ids: Vec<String> },
     /// Vector was updated/modified
-    Updated {
-        reason: String,
-    },
+    Updated { reason: String },
     /// Custom transformation
     Custom {
         name: String,
@@ -433,7 +425,11 @@ impl LineageTracker {
     }
 
     /// Register a new vector with its origin
-    pub fn register(&self, vector_id: impl Into<String>, origin: VectorOrigin) -> Result<(), VecStoreError> {
+    pub fn register(
+        &self,
+        vector_id: impl Into<String>,
+        origin: VectorOrigin,
+    ) -> Result<(), VecStoreError> {
         let id = vector_id.into();
         let lineage = VectorLineage {
             vector_id: id.clone(),
@@ -447,9 +443,10 @@ impl LineageTracker {
             access_log: Vec::new(),
         };
 
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         store.insert(id, lineage);
         Ok(())
@@ -464,9 +461,10 @@ impl LineageTracker {
     ) -> Result<(), VecStoreError> {
         let id = vector_id.into();
 
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         // Update parent's child_ids
         for parent_id in &parent_ids {
@@ -509,9 +507,10 @@ impl LineageTracker {
         before_hash: Option<u64>,
         after_hash: Option<u64>,
     ) -> Result<(), VecStoreError> {
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         let lineage = store.get_mut(vector_id).ok_or_else(|| {
             VecStoreError::NotFound(format!("Vector {} not found in lineage", vector_id))
@@ -550,9 +549,10 @@ impl LineageTracker {
             return Ok(());
         }
 
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         if let Some(lineage) = store.get_mut(vector_id) {
             lineage.access_log.push(AccessRecord {
@@ -568,9 +568,10 @@ impl LineageTracker {
 
     /// Get lineage for a vector
     pub fn get_lineage(&self, vector_id: &str) -> Result<VectorLineage, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
         store.get(vector_id).cloned().ok_or_else(|| {
             VecStoreError::NotFound(format!("Vector {} not found in lineage", vector_id))
@@ -579,9 +580,10 @@ impl LineageTracker {
 
     /// Get full lineage tree (including ancestors)
     pub fn get_lineage_tree(&self, vector_id: &str) -> Result<Vec<VectorLineage>, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
         let mut result = Vec::new();
         let mut to_visit = vec![vector_id.to_string()];
@@ -612,9 +614,10 @@ impl LineageTracker {
         vector_id: &str,
         tags: Vec<String>,
     ) -> Result<(), VecStoreError> {
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         let lineage = store.get_mut(vector_id).ok_or_else(|| {
             VecStoreError::NotFound(format!("Vector {} not found in lineage", vector_id))
@@ -634,9 +637,10 @@ impl LineageTracker {
 
     /// Check retention and get vectors that need action
     pub fn check_retention(&self) -> Result<Vec<RetentionRecord>, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
         let now = Utc::now();
         let mut records = Vec::new();
@@ -645,7 +649,10 @@ impl LineageTracker {
             for (policy_name, policy) in &self.retention_policies {
                 // Check if policy applies to this vector
                 let applies = policy.applies_to_tags.is_empty()
-                    || lineage.compliance_tags.iter().any(|t| policy.applies_to_tags.contains(t));
+                    || lineage
+                        .compliance_tags
+                        .iter()
+                        .any(|t| policy.applies_to_tags.contains(t));
 
                 if !applies {
                     continue;
@@ -681,9 +688,10 @@ impl LineageTracker {
         period_start: DateTime<Utc>,
         period_end: DateTime<Utc>,
     ) -> Result<ComplianceReport, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
         let mut by_source_type: HashMap<String, usize> = HashMap::new();
         let mut by_model: HashMap<String, usize> = HashMap::new();
@@ -734,7 +742,8 @@ impl LineageTracker {
         let mut issues = Vec::new();
 
         // Check for expired vectors
-        let expired: Vec<_> = retention_status.iter()
+        let expired: Vec<_> = retention_status
+            .iter()
             .filter(|r| r.is_expired)
             .map(|r| r.vector_id.clone())
             .collect();
@@ -743,14 +752,18 @@ impl LineageTracker {
             issues.push(ComplianceIssue {
                 severity: IssueSeverity::Warning,
                 category: "Retention".to_string(),
-                description: format!("{} vectors have exceeded their retention period", expired.len()),
+                description: format!(
+                    "{} vectors have exceeded their retention period",
+                    expired.len()
+                ),
                 affected_vectors: expired,
                 recommendation: "Review and apply retention policies".to_string(),
             });
         }
 
         // Check for vectors without model info
-        let missing_model: Vec<_> = store.iter()
+        let missing_model: Vec<_> = store
+            .iter()
             .filter(|(_, l)| l.origin.embedding_model.is_none())
             .map(|(id, _)| id.clone())
             .collect();
@@ -759,7 +772,10 @@ impl LineageTracker {
             issues.push(ComplianceIssue {
                 severity: IssueSeverity::Info,
                 category: "Provenance".to_string(),
-                description: format!("{} vectors are missing model attribution", missing_model.len()),
+                description: format!(
+                    "{} vectors are missing model attribution",
+                    missing_model.len()
+                ),
                 affected_vectors: missing_model,
                 recommendation: "Update vectors with embedding model information".to_string(),
             });
@@ -786,11 +802,13 @@ impl LineageTracker {
 
     /// Find vectors by source
     pub fn find_by_source(&self, source_id: &str) -> Result<Vec<String>, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
-        let results: Vec<String> = store.iter()
+        let results: Vec<String> = store
+            .iter()
             .filter(|(_, lineage)| lineage.origin.source_id == source_id)
             .map(|(id, _)| id.clone())
             .collect();
@@ -800,13 +818,18 @@ impl LineageTracker {
 
     /// Find vectors by model
     pub fn find_by_model(&self, model_name: &str) -> Result<Vec<String>, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
-        let results: Vec<String> = store.iter()
+        let results: Vec<String> = store
+            .iter()
             .filter(|(_, lineage)| {
-                lineage.origin.embedding_model.as_ref()
+                lineage
+                    .origin
+                    .embedding_model
+                    .as_ref()
                     .map(|m| m.name == model_name)
                     .unwrap_or(false)
             })
@@ -818,11 +841,13 @@ impl LineageTracker {
 
     /// Get vectors with specific compliance tag
     pub fn find_by_tag(&self, tag: &str) -> Result<Vec<String>, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
-        let results: Vec<String> = store.iter()
+        let results: Vec<String> = store
+            .iter()
             .filter(|(_, lineage)| lineage.compliance_tags.contains(&tag.to_string()))
             .map(|(id, _)| id.clone())
             .collect();
@@ -833,22 +858,21 @@ impl LineageTracker {
     /// Export lineage data for a vector
     pub fn export_lineage(&self, vector_id: &str) -> Result<String, VecStoreError> {
         let lineage = self.get_lineage(vector_id)?;
-        serde_json::to_string_pretty(&lineage).map_err(|e| {
-            VecStoreError::Serialization(e.to_string())
-        })
+        serde_json::to_string_pretty(&lineage)
+            .map_err(|e| VecStoreError::Serialization(e.to_string()))
     }
 
     /// Import lineage data
     pub fn import_lineage(&self, json: &str) -> Result<String, VecStoreError> {
-        let lineage: VectorLineage = serde_json::from_str(json).map_err(|e| {
-            VecStoreError::Serialization(e.to_string())
-        })?;
+        let lineage: VectorLineage =
+            serde_json::from_str(json).map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
         let id = lineage.vector_id.clone();
 
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         store.insert(id.clone(), lineage);
         Ok(id)
@@ -856,9 +880,10 @@ impl LineageTracker {
 
     /// Delete lineage for a vector
     pub fn delete(&self, vector_id: &str) -> Result<(), VecStoreError> {
-        let mut store = self.lineage.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire write lock".into())
-        })?;
+        let mut store = self
+            .lineage
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire write lock".into()))?;
 
         store.remove(vector_id);
         Ok(())
@@ -866,9 +891,10 @@ impl LineageTracker {
 
     /// Get total count of tracked vectors
     pub fn count(&self) -> Result<usize, VecStoreError> {
-        let store = self.lineage.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire read lock".into())
-        })?;
+        let store = self
+            .lineage
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire read lock".into()))?;
 
         Ok(store.len())
     }
@@ -903,8 +929,7 @@ mod tests {
     fn test_register_and_get_lineage() {
         let tracker = LineageTracker::new();
 
-        let origin = VectorOrigin::new("doc1")
-            .from_model("test-model");
+        let origin = VectorOrigin::new("doc1").from_model("test-model");
 
         tracker.register("vec1", origin).unwrap();
 
@@ -921,8 +946,12 @@ mod tests {
         let origin = VectorOrigin::new("doc1");
         tracker.register("vec1", origin).unwrap();
 
-        tracker.add_transformation("vec1", TransformationType::Normalized).unwrap();
-        tracker.add_transformation("vec1", TransformationType::Quantized { bits: 8 }).unwrap();
+        tracker
+            .add_transformation("vec1", TransformationType::Normalized)
+            .unwrap();
+        tracker
+            .add_transformation("vec1", TransformationType::Quantized { bits: 8 })
+            .unwrap();
 
         let lineage = tracker.get_lineage("vec1").unwrap();
         assert_eq!(lineage.transformations.len(), 2);
@@ -934,16 +963,22 @@ mod tests {
         let tracker = LineageTracker::new();
 
         // Register parent vectors
-        tracker.register("parent1", VectorOrigin::new("doc1")).unwrap();
-        tracker.register("parent2", VectorOrigin::new("doc2")).unwrap();
+        tracker
+            .register("parent1", VectorOrigin::new("doc1"))
+            .unwrap();
+        tracker
+            .register("parent2", VectorOrigin::new("doc2"))
+            .unwrap();
 
         // Register derived vector
         let origin = VectorOrigin::new("derived_source");
-        tracker.register_derived(
-            "child1",
-            origin,
-            vec!["parent1".to_string(), "parent2".to_string()],
-        ).unwrap();
+        tracker
+            .register_derived(
+                "child1",
+                origin,
+                vec!["parent1".to_string(), "parent2".to_string()],
+            )
+            .unwrap();
 
         // Check child
         let child_lineage = tracker.get_lineage("child1").unwrap();
@@ -961,12 +996,14 @@ mod tests {
         let origin = VectorOrigin::new("doc1");
         tracker.register("vec1", origin).unwrap();
 
-        tracker.log_access(
-            "vec1",
-            AccessType::SearchResult,
-            Some("user123".to_string()),
-            Some("query456".to_string()),
-        ).unwrap();
+        tracker
+            .log_access(
+                "vec1",
+                AccessType::SearchResult,
+                Some("user123".to_string()),
+                Some("query456".to_string()),
+            )
+            .unwrap();
 
         let lineage = tracker.get_lineage("vec1").unwrap();
         assert_eq!(lineage.access_log.len(), 1);
@@ -980,10 +1017,9 @@ mod tests {
         let origin = VectorOrigin::new("doc1");
         tracker.register("vec1", origin).unwrap();
 
-        tracker.add_compliance_tags("vec1", vec![
-            "GDPR".to_string(),
-            "PII".to_string(),
-        ]).unwrap();
+        tracker
+            .add_compliance_tags("vec1", vec!["GDPR".to_string(), "PII".to_string()])
+            .unwrap();
 
         let lineage = tracker.get_lineage("vec1").unwrap();
         assert!(lineage.compliance_tags.contains(&"GDPR".to_string()));
@@ -1006,9 +1042,15 @@ mod tests {
     fn test_find_by_model() {
         let tracker = LineageTracker::new();
 
-        tracker.register("vec1", VectorOrigin::new("doc1").from_model("model-a")).unwrap();
-        tracker.register("vec2", VectorOrigin::new("doc2").from_model("model-a")).unwrap();
-        tracker.register("vec3", VectorOrigin::new("doc3").from_model("model-b")).unwrap();
+        tracker
+            .register("vec1", VectorOrigin::new("doc1").from_model("model-a"))
+            .unwrap();
+        tracker
+            .register("vec2", VectorOrigin::new("doc2").from_model("model-a"))
+            .unwrap();
+        tracker
+            .register("vec3", VectorOrigin::new("doc3").from_model("model-b"))
+            .unwrap();
 
         let results = tracker.find_by_model("model-a").unwrap();
         assert_eq!(results.len(), 2);
@@ -1019,9 +1061,23 @@ mod tests {
         let tracker = LineageTracker::new();
 
         // Build a tree: grandparent -> parent -> child
-        tracker.register("gp", VectorOrigin::new("gp_source")).unwrap();
-        tracker.register_derived("parent", VectorOrigin::new("parent_source"), vec!["gp".to_string()]).unwrap();
-        tracker.register_derived("child", VectorOrigin::new("child_source"), vec!["parent".to_string()]).unwrap();
+        tracker
+            .register("gp", VectorOrigin::new("gp_source"))
+            .unwrap();
+        tracker
+            .register_derived(
+                "parent",
+                VectorOrigin::new("parent_source"),
+                vec!["gp".to_string()],
+            )
+            .unwrap();
+        tracker
+            .register_derived(
+                "child",
+                VectorOrigin::new("child_source"),
+                vec!["parent".to_string()],
+            )
+            .unwrap();
 
         let tree = tracker.get_lineage_tree("child").unwrap();
         assert_eq!(tree.len(), 3);
@@ -1035,7 +1091,9 @@ mod tests {
             .from_model("test-model")
             .with_type(SourceType::Document);
         tracker.register("vec1", origin).unwrap();
-        tracker.add_transformation("vec1", TransformationType::Normalized).unwrap();
+        tracker
+            .add_transformation("vec1", TransformationType::Normalized)
+            .unwrap();
 
         // Export
         let json = tracker.export_lineage("vec1").unwrap();
@@ -1054,12 +1112,25 @@ mod tests {
     fn test_compliance_report() {
         let tracker = LineageTracker::new();
 
-        tracker.register("vec1", VectorOrigin::new("doc1").from_model("model-a")).unwrap();
-        tracker.register("vec2", VectorOrigin::new("doc2").from_model("model-b")).unwrap();
+        tracker
+            .register("vec1", VectorOrigin::new("doc1").from_model("model-a"))
+            .unwrap();
+        tracker
+            .register("vec2", VectorOrigin::new("doc2").from_model("model-b"))
+            .unwrap();
         tracker.register("vec3", VectorOrigin::new("doc3")).unwrap(); // No model
 
-        tracker.log_access("vec1", AccessType::Read, Some("user1".to_string()), None).unwrap();
-        tracker.log_access("vec1", AccessType::SearchResult, Some("user2".to_string()), None).unwrap();
+        tracker
+            .log_access("vec1", AccessType::Read, Some("user1".to_string()), None)
+            .unwrap();
+        tracker
+            .log_access(
+                "vec1",
+                AccessType::SearchResult,
+                Some("user2".to_string()),
+                None,
+            )
+            .unwrap();
 
         let start = Utc::now() - chrono::Duration::hours(1);
         let end = Utc::now() + chrono::Duration::hours(1);

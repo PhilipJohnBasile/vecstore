@@ -116,38 +116,40 @@ unsafe fn euclidean_distance_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut sum = _mm_setzero_ps();
-    let mut i = 0;
+unsafe fn euclidean_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut sum = _mm_setzero_ps();
+        let mut i = 0;
 
-    // Process 4 floats at a time
-    while i + 4 <= len {
-        let va = _mm_loadu_ps(a.as_ptr().add(i));
-        let vb = _mm_loadu_ps(b.as_ptr().add(i));
-        let diff = _mm_sub_ps(va, vb);
-        let squared = _mm_mul_ps(diff, diff);
-        sum = _mm_add_ps(sum, squared);
-        i += 4;
+        // Process 4 floats at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            let diff = _mm_sub_ps(va, vb);
+            let squared = _mm_mul_ps(diff, diff);
+            sum = _mm_add_ps(sum, squared);
+            i += 4;
+        }
+
+        // Horizontal sum
+        // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+        let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
+        let sums = _mm_add_ps(sum, sum_shuf);
+        let sums_shuf = _mm_movehl_ps(sums, sums);
+        let result_ss = _mm_add_ss(sums, sums_shuf);
+        let mut result = _mm_cvtss_f32(result_ss);
+
+        // Handle remaining elements
+        while i < len {
+            let diff = a[i] - b[i];
+            result += diff * diff;
+            i += 1;
+        }
+
+        result.sqrt()
     }
-
-    // Horizontal sum
-    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
-    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
-    let sums = _mm_add_ps(sum, sum_shuf);
-    let sums_shuf = _mm_movehl_ps(sums, sums);
-    let result_ss = _mm_add_ss(sums, sums_shuf);
-    let mut result = _mm_cvtss_f32(result_ss);
-
-    // Handle remaining elements
-    while i < len {
-        let diff = a[i] - b[i];
-        result += diff * diff;
-        i += 1;
-    }
-
-    result.sqrt()
-}}
+}
 
 /// ARM NEON implementation (processes 4 floats at once)
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
@@ -265,33 +267,35 @@ unsafe fn dot_product_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut sum = _mm_setzero_ps();
-    let mut i = 0;
+unsafe fn dot_product_sse2(a: &[f32], b: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut sum = _mm_setzero_ps();
+        let mut i = 0;
 
-    while i + 4 <= len {
-        let va = _mm_loadu_ps(a.as_ptr().add(i));
-        let vb = _mm_loadu_ps(b.as_ptr().add(i));
-        let prod = _mm_mul_ps(va, vb);
-        sum = _mm_add_ps(sum, prod);
-        i += 4;
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            let prod = _mm_mul_ps(va, vb);
+            sum = _mm_add_ps(sum, prod);
+            i += 4;
+        }
+
+        // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+        let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
+        let sums = _mm_add_ps(sum, sum_shuf);
+        let sums_shuf = _mm_movehl_ps(sums, sums);
+        let result_ss = _mm_add_ss(sums, sums_shuf);
+        let mut result = _mm_cvtss_f32(result_ss);
+
+        while i < len {
+            result += a[i] * b[i];
+            i += 1;
+        }
+
+        result
     }
-
-    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
-    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
-    let sums = _mm_add_ps(sum, sum_shuf);
-    let sums_shuf = _mm_movehl_ps(sums, sums);
-    let result_ss = _mm_add_ss(sums, sums_shuf);
-    let mut result = _mm_cvtss_f32(result_ss);
-
-    while i < len {
-        result += a[i] * b[i];
-        i += 1;
-    }
-
-    result
-}}
+}
 
 /// Calculate vector magnitude (L2 norm) using SIMD
 #[inline]
@@ -395,40 +399,42 @@ unsafe fn manhattan_distance_avx2(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2"))]
 #[inline]
 #[target_feature(enable = "sse2")]
-unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 { unsafe {
-    let len = a.len();
-    let mut sum = _mm_setzero_ps();
-    let mut i = 0;
+unsafe fn manhattan_distance_sse2(a: &[f32], b: &[f32]) -> f32 {
+    unsafe {
+        let len = a.len();
+        let mut sum = _mm_setzero_ps();
+        let mut i = 0;
 
-    // Sign bit mask for abs()
-    let sign_mask = _mm_set1_ps(f32::from_bits(0x7FFF_FFFF));
+        // Sign bit mask for abs()
+        let sign_mask = _mm_set1_ps(f32::from_bits(0x7FFF_FFFF));
 
-    // Process 4 floats at a time
-    while i + 4 <= len {
-        let va = _mm_loadu_ps(a.as_ptr().add(i));
-        let vb = _mm_loadu_ps(b.as_ptr().add(i));
-        let diff = _mm_sub_ps(va, vb);
-        let abs_diff = _mm_and_ps(diff, sign_mask);
-        sum = _mm_add_ps(sum, abs_diff);
-        i += 4;
+        // Process 4 floats at a time
+        while i + 4 <= len {
+            let va = _mm_loadu_ps(a.as_ptr().add(i));
+            let vb = _mm_loadu_ps(b.as_ptr().add(i));
+            let diff = _mm_sub_ps(va, vb);
+            let abs_diff = _mm_and_ps(diff, sign_mask);
+            sum = _mm_add_ps(sum, abs_diff);
+            i += 4;
+        }
+
+        // Horizontal sum
+        // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
+        let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
+        let sums = _mm_add_ps(sum, sum_shuf);
+        let sums_shuf = _mm_movehl_ps(sums, sums);
+        let result_ss = _mm_add_ss(sums, sums_shuf);
+        let mut result = _mm_cvtss_f32(result_ss);
+
+        // Handle remaining elements
+        while i < len {
+            result += (a[i] - b[i]).abs();
+            i += 1;
+        }
+
+        result
     }
-
-    // Horizontal sum
-    // _MM_SHUFFLE(2, 3, 0, 1) = 0b10110001 = 177
-    let sum_shuf = _mm_shuffle_ps(sum, sum, 0b10110001);
-    let sums = _mm_add_ps(sum, sum_shuf);
-    let sums_shuf = _mm_movehl_ps(sums, sums);
-    let result_ss = _mm_add_ss(sums, sums_shuf);
-    let mut result = _mm_cvtss_f32(result_ss);
-
-    // Handle remaining elements
-    while i < len {
-        result += (a[i] - b[i]).abs();
-        i += 1;
-    }
-
-    result
-}}
+}
 
 /// ARM NEON implementation for Manhattan distance (processes 4 floats at once)
 #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]

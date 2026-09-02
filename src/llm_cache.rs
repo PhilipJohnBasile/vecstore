@@ -37,9 +37,9 @@
 //! assert_eq!(response1, response2); // Same response from cache
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
-use serde::{Deserialize, Serialize};
 
 use crate::error::{Result, VecStoreError};
 
@@ -72,11 +72,17 @@ pub const DEFAULT_SIMILARITY_THRESHOLD: f32 = 0.95;
 pub const DEFAULT_MAX_SIZE: usize = 10000;
 
 #[inline]
-const fn default_similarity_threshold() -> f32 { DEFAULT_SIMILARITY_THRESHOLD }
+const fn default_similarity_threshold() -> f32 {
+    DEFAULT_SIMILARITY_THRESHOLD
+}
 #[inline]
-const fn default_max_size() -> usize { DEFAULT_MAX_SIZE }
+const fn default_max_size() -> usize {
+    DEFAULT_MAX_SIZE
+}
 #[inline]
-const fn default_true() -> bool { true }
+const fn default_true() -> bool {
+    true
+}
 
 impl Default for CacheConfig {
     fn default() -> Self {
@@ -255,7 +261,9 @@ impl SemanticCache {
 
     /// Find a similar cached query
     fn find_similar(&self, _query: &str, embedding: &[f32]) -> Result<Option<CacheHit>> {
-        let entries = self.entries.read()
+        let entries = self
+            .entries
+            .read()
             .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
         let ttl = Duration::from_secs(self.config.ttl_seconds);
 
@@ -271,9 +279,10 @@ impl SemanticCache {
             let similarity = Self::cosine_similarity(embedding, &entry.embedding);
 
             if similarity >= self.config.similarity_threshold
-                && (best_match.is_none() || similarity > best_match.unwrap().1) {
-                    best_match = Some((i, similarity));
-                }
+                && (best_match.is_none() || similarity > best_match.unwrap().1)
+            {
+                best_match = Some((i, similarity));
+            }
         }
 
         if let Some((idx, similarity)) = best_match {
@@ -296,13 +305,16 @@ impl SemanticCache {
         response: &str,
         metadata: Option<serde_json::Value>,
     ) -> Result<()> {
-        let mut entries = self.entries.write()
+        let mut entries = self
+            .entries
+            .write()
             .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
 
         // Evict if at capacity
         while entries.len() >= self.config.max_size {
             // Remove least recently accessed
-            if let Some(idx) = entries.iter()
+            if let Some(idx) = entries
+                .iter()
                 .enumerate()
                 .min_by_key(|(_, e)| e.last_accessed)
                 .map(|(i, _)| i)
@@ -330,7 +342,9 @@ impl SemanticCache {
             return Ok(());
         }
 
-        let mut analytics = self.analytics.write()
+        let mut analytics = self
+            .analytics
+            .write()
             .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?;
         analytics.total_queries += 1;
         analytics.cache_hits += 1;
@@ -345,8 +359,11 @@ impl SemanticCache {
         analytics.avg_hit_similarity =
             (analytics.avg_hit_similarity * (n - 1.0) + hit.similarity) / n;
 
-        analytics.cache_size = self.entries.read()
-            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len();
+        analytics.cache_size = self
+            .entries
+            .read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .len();
         Ok(())
     }
 
@@ -356,31 +373,43 @@ impl SemanticCache {
             return Ok(());
         }
 
-        let mut analytics = self.analytics.write()
+        let mut analytics = self
+            .analytics
+            .write()
             .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?;
         analytics.total_queries += 1;
         analytics.cache_misses += 1;
-        analytics.cache_size = self.entries.read()
-            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len();
+        analytics.cache_size = self
+            .entries
+            .read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .len();
         Ok(())
     }
 
     /// Get cache analytics
     pub fn analytics(&self) -> Result<CacheAnalytics> {
-        Ok(self.analytics.read()
-            .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?.clone())
+        Ok(self
+            .analytics
+            .read()
+            .map_err(|_| VecStoreError::LockError("analytics lock poisoned".into()))?
+            .clone())
     }
 
     /// Clear the cache
     pub fn clear(&self) -> Result<()> {
-        self.entries.write()
-            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.clear();
+        self.entries
+            .write()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .clear();
         Ok(())
     }
 
     /// Invalidate expired entries
     pub fn cleanup(&self) -> Result<usize> {
-        let mut entries = self.entries.write()
+        let mut entries = self
+            .entries
+            .write()
             .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
         let ttl = Duration::from_secs(self.config.ttl_seconds);
 
@@ -404,14 +433,20 @@ impl SemanticCache {
 
     /// Get cache size
     pub fn len(&self) -> Result<usize> {
-        Ok(self.entries.read()
-            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.len())
+        Ok(self
+            .entries
+            .read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .len())
     }
 
     /// Check if empty
     pub fn is_empty(&self) -> Result<bool> {
-        Ok(self.entries.read()
-            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?.is_empty())
+        Ok(self
+            .entries
+            .read()
+            .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
+            .is_empty())
     }
 }
 
@@ -514,20 +549,20 @@ mod tests {
 
         // First query - miss
         let embedding1 = vec![0.1f32; 64];
-        let result1 = cache.get_or_generate(
-            "What is AI?",
-            &embedding1,
-            || Ok("AI is artificial intelligence.".to_string()),
-        ).unwrap();
+        let result1 = cache
+            .get_or_generate("What is AI?", &embedding1, || {
+                Ok("AI is artificial intelligence.".to_string())
+            })
+            .unwrap();
 
         assert!(!result1.cache_hit);
 
         // Same query - hit
-        let result2 = cache.get_or_generate(
-            "What is AI?",
-            &embedding1,
-            || Ok("Should not be called".to_string()),
-        ).unwrap();
+        let result2 = cache
+            .get_or_generate("What is AI?", &embedding1, || {
+                Ok("Should not be called".to_string())
+            })
+            .unwrap();
 
         assert!(result2.cache_hit);
         assert_eq!(result1.response, result2.response);
@@ -541,10 +576,14 @@ mod tests {
         let embedding = vec![0.1f32; 64];
 
         // Miss
-        cache.get_or_generate("Query 1", &embedding, || Ok("Response 1".to_string())).unwrap();
+        cache
+            .get_or_generate("Query 1", &embedding, || Ok("Response 1".to_string()))
+            .unwrap();
 
         // Hit
-        cache.get_or_generate("Query 1", &embedding, || Ok("Response 2".to_string())).unwrap();
+        cache
+            .get_or_generate("Query 1", &embedding, || Ok("Response 2".to_string()))
+            .unwrap();
 
         let analytics = cache.analytics().unwrap();
         assert_eq!(analytics.total_queries, 2);

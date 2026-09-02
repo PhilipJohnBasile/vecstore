@@ -42,8 +42,8 @@
 //! let metrics_text = prom.encode()?;
 //! ```
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 /// Configuration for metrics collection
@@ -556,7 +556,9 @@ struct EmbeddedMetricsInner {
 impl EmbeddedMetrics {
     /// Create a new embedded metrics registry
     pub fn new() -> Self {
-        Self::with_buckets(vec![1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0])
+        Self::with_buckets(vec![
+            1.0, 5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 5000.0,
+        ])
     }
 
     /// Create with custom latency buckets (in milliseconds)
@@ -608,18 +610,24 @@ impl EmbeddedMetrics {
 
     /// Set the estimated memory usage
     pub fn set_memory_bytes(&self, bytes: u64) {
-        self.inner.estimated_memory_bytes.store(bytes, Ordering::Relaxed);
+        self.inner
+            .estimated_memory_bytes
+            .store(bytes, Ordering::Relaxed);
     }
 
     /// Set HNSW index stats
     pub fn set_hnsw_stats(&self, layers: u64, connections_per_layer: u64) {
         self.inner.hnsw_layers.store(layers, Ordering::Relaxed);
-        self.inner.hnsw_connections_per_layer.store(connections_per_layer, Ordering::Relaxed);
+        self.inner
+            .hnsw_connections_per_layer
+            .store(connections_per_layer, Ordering::Relaxed);
     }
 
     /// Set quantization stats
     pub fn set_quantization_stats(&self, quantized_count: u64, bits: u64) {
-        self.inner.quantized_vectors.store(quantized_count, Ordering::Relaxed);
+        self.inner
+            .quantized_vectors
+            .store(quantized_count, Ordering::Relaxed);
         self.inner.quantization_bits.store(bits, Ordering::Relaxed);
     }
 
@@ -649,9 +657,8 @@ impl EmbeddedMetrics {
             if l.is_empty() {
                 String::new()
             } else {
-                let pairs: Vec<String> = l.iter()
-                    .map(|(k, v)| format!("{}=\"{}\"", k, v))
-                    .collect();
+                let pairs: Vec<String> =
+                    l.iter().map(|(k, v)| format!("{}=\"{}\"", k, v)).collect();
                 format!("{{{}}}", pairs.join(","))
             }
         } else {
@@ -727,7 +734,8 @@ impl EmbeddedMetrics {
         ));
         output.push_str(&format!(
             "vecstore_query_latency_ms_sum{} {:.2}\n",
-            label_str, snapshot.avg_query_latency_micros * snapshot.total_queries as f64 / 1000.0
+            label_str,
+            snapshot.avg_query_latency_micros * snapshot.total_queries as f64 / 1000.0
         ));
         output.push_str(&format!(
             "vecstore_query_latency_ms_count{} {}\n\n",
@@ -780,7 +788,10 @@ impl EmbeddedMetrics {
         ));
 
         let layers = self.inner.hnsw_layers.load(Ordering::Relaxed);
-        let conns = self.inner.hnsw_connections_per_layer.load(Ordering::Relaxed);
+        let conns = self
+            .inner
+            .hnsw_connections_per_layer
+            .load(Ordering::Relaxed);
         output.push_str(&format!(
             "# HELP vecstore_hnsw_layers Number of HNSW layers\n\
              # TYPE vecstore_hnsw_layers gauge\n\

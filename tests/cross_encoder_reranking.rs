@@ -6,10 +6,10 @@
 #[cfg(feature = "embeddings")]
 mod cross_encoder_tests {
     use std::collections::HashMap;
-    use vecstore::reranking::cross_encoder::{CrossEncoderModel, CrossEncoderReranker};
-    use vecstore::reranking::Reranker;
-    use vecstore::store::Neighbor;
     use vecstore::Metadata;
+    use vecstore::reranking::Reranker;
+    use vecstore::reranking::cross_encoder::{CrossEncoderModel, CrossEncoderReranker};
+    use vecstore::store::Neighbor;
 
     fn make_neighbor(id: &str, score: f32, text: &str) -> Neighbor {
         let mut metadata = Metadata {
@@ -67,7 +67,7 @@ mod cross_encoder_tests {
         match result {
             Ok(_) => {
                 // Model was already downloaded, which is fine
-            }
+            },
             Err(e) => {
                 // Model not downloaded, error should contain helpful message
                 let err_msg = e.to_string();
@@ -76,7 +76,7 @@ mod cross_encoder_tests {
                         || err_msg.contains("not found")
                         || err_msg.contains("huggingface.co")
                 );
-            }
+            },
         }
     }
 

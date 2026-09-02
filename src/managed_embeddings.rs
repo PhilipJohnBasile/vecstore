@@ -401,16 +401,20 @@ impl EmbeddingCache {
             self.evict_oldest();
         }
 
-        self.entries.insert(key, CacheEntry {
-            embedding,
-            model: model.to_string(),
-            cached_at: Instant::now(),
-            hits: 0,
-        });
+        self.entries.insert(
+            key,
+            CacheEntry {
+                embedding,
+                model: model.to_string(),
+                cached_at: Instant::now(),
+                hits: 0,
+            },
+        );
     }
 
     fn evict_oldest(&mut self) {
-        let oldest = self.entries
+        let oldest = self
+            .entries
             .iter()
             .min_by_key(|(_, e)| e.cached_at)
             .map(|(k, _)| k.clone());
@@ -508,29 +512,43 @@ impl UsageTracker {
         }
     }
 
-    fn record(&mut self, provider: &str, model: &str, tokens: usize, embeddings: usize, cost: f64, latency_ms: u64) {
+    fn record(
+        &mut self,
+        provider: &str,
+        model: &str,
+        tokens: usize,
+        embeddings: usize,
+        cost: f64,
+        latency_ms: u64,
+    ) {
         self.total_tokens += tokens as u64;
         self.total_requests += 1;
         self.total_embeddings += embeddings as u64;
         self.total_latency_ms += latency_ms;
 
         // By provider
-        let provider_usage = self.by_provider.entry(provider.to_string()).or_insert(ProviderUsage {
-            tokens: 0,
-            requests: 0,
-            errors: 0,
-            cost: 0.0,
-        });
+        let provider_usage =
+            self.by_provider
+                .entry(provider.to_string())
+                .or_insert(ProviderUsage {
+                    tokens: 0,
+                    requests: 0,
+                    errors: 0,
+                    cost: 0.0,
+                });
         provider_usage.tokens += tokens as u64;
         provider_usage.requests += 1;
         provider_usage.cost += cost;
 
         // By model
-        let model_usage = self.by_model.entry(model.to_string()).or_insert(ModelUsage {
-            tokens: 0,
-            embeddings: 0,
-            cost: 0.0,
-        });
+        let model_usage = self
+            .by_model
+            .entry(model.to_string())
+            .or_insert(ModelUsage {
+                tokens: 0,
+                embeddings: 0,
+                cost: 0.0,
+            });
         model_usage.tokens += tokens as u64;
         model_usage.embeddings += embeddings as u64;
         model_usage.cost += cost;
@@ -545,12 +563,15 @@ impl UsageTracker {
     }
 
     fn record_error(&mut self, provider: &str) {
-        let provider_usage = self.by_provider.entry(provider.to_string()).or_insert(ProviderUsage {
-            tokens: 0,
-            requests: 0,
-            errors: 0,
-            cost: 0.0,
-        });
+        let provider_usage =
+            self.by_provider
+                .entry(provider.to_string())
+                .or_insert(ProviderUsage {
+                    tokens: 0,
+                    requests: 0,
+                    errors: 0,
+                    cost: 0.0,
+                });
         provider_usage.errors += 1;
     }
 
@@ -608,7 +629,10 @@ impl EmbeddingService {
     /// Embed texts
     pub fn embed(&self, request: EmbeddingRequest) -> Result<EmbeddingResponse> {
         let start = Instant::now();
-        let model = request.model_override.as_ref().unwrap_or(&self.config.primary_model);
+        let model = request
+            .model_override
+            .as_ref()
+            .unwrap_or(&self.config.primary_model);
 
         let mut embeddings = Vec::with_capacity(request.texts.len());
         let mut cache_hits = 0;
@@ -616,7 +640,9 @@ impl EmbeddingService {
 
         // Check cache for each text
         if self.config.enable_cache && !request.skip_cache {
-            let mut cache = self.cache.write()
+            let mut cache = self
+                .cache
+                .write()
                 .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
 
             for (i, text) in request.texts.iter().enumerate() {
@@ -625,18 +651,25 @@ impl EmbeddingService {
                 if let Some(cached) = cache.get(&cache_key) {
                     embeddings.push((i, cached));
                     cache_hits += 1;
-                    self.usage.write()
+                    self.usage
+                        .write()
                         .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
                         .record_cache_hit();
                 } else {
                     texts_to_embed.push((i, text.clone()));
-                    self.usage.write()
+                    self.usage
+                        .write()
                         .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
                         .record_cache_miss();
                 }
             }
         } else {
-            texts_to_embed = request.texts.iter().enumerate().map(|(i, t)| (i, t.clone())).collect();
+            texts_to_embed = request
+                .texts
+                .iter()
+                .enumerate()
+                .map(|(i, t)| (i, t.clone()))
+                .collect();
         }
 
         // Embed remaining texts
@@ -644,7 +677,9 @@ impl EmbeddingService {
         if !texts_to_embed.is_empty() {
             // Rate limiting
             {
-                let mut limiter = self.rate_limiter.write()
+                let mut limiter = self
+                    .rate_limiter
+                    .write()
                     .map_err(|_| VecStoreError::LockError("rate_limiter lock poisoned".into()))?;
                 if !limiter.acquire(1.0) {
                     // Would need to wait in real async implementation
@@ -653,12 +688,15 @@ impl EmbeddingService {
 
             // Call embedding provider
             let texts: Vec<&str> = texts_to_embed.iter().map(|(_, t)| t.as_str()).collect();
-            let (new_embeddings, tokens) = self.call_provider(&texts, model, request.task_type.as_ref())?;
+            let (new_embeddings, tokens) =
+                self.call_provider(&texts, model, request.task_type.as_ref())?;
             total_tokens = tokens;
 
             // Store in cache
             if self.config.enable_cache && !request.skip_cache {
-                let mut cache = self.cache.write()
+                let mut cache = self
+                    .cache
+                    .write()
                     .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
                 for ((i, text), emb) in texts_to_embed.iter().zip(&new_embeddings) {
                     let cache_key = self.cache_key(text, &model.model, request.task_type.as_ref());
@@ -678,13 +716,10 @@ impl EmbeddingService {
 
         // Apply dimension override if specified
         let final_embeddings = if let Some(dim) = request.dimension_override {
-            final_embeddings.into_iter().map(|e| {
-                if e.len() > dim {
-                    e[..dim].to_vec()
-                } else {
-                    e
-                }
-            }).collect()
+            final_embeddings
+                .into_iter()
+                .map(|e| if e.len() > dim { e[..dim].to_vec() } else { e })
+                .collect()
         } else {
             final_embeddings
         };
@@ -695,7 +730,8 @@ impl EmbeddingService {
         // Record usage
         if self.config.track_usage && total_tokens > 0 {
             let provider_name = format!("{:?}", model.provider);
-            self.usage.write()
+            self.usage
+                .write()
                 .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?
                 .record(
                     &provider_name,
@@ -721,39 +757,45 @@ impl EmbeddingService {
     pub fn embed_one(&self, text: &str) -> Result<Vec<f32>> {
         let request = EmbeddingRequest::new(vec![text.to_string()]);
         let response = self.embed(request)?;
-        response.embeddings.into_iter().next().ok_or_else(|| {
-            VecStoreError::EmbeddingError("No embedding returned".to_string())
-        })
+        response
+            .embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| VecStoreError::EmbeddingError("No embedding returned".to_string()))
     }
 
     /// Embed for query (uses query task type)
     pub fn embed_query(&self, text: &str) -> Result<Vec<f32>> {
-        let request = EmbeddingRequest::new(vec![text.to_string()])
-            .with_task_type(TaskType::Query);
+        let request = EmbeddingRequest::new(vec![text.to_string()]).with_task_type(TaskType::Query);
         let response = self.embed(request)?;
-        response.embeddings.into_iter().next().ok_or_else(|| {
-            VecStoreError::EmbeddingError("No embedding returned".to_string())
-        })
+        response
+            .embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| VecStoreError::EmbeddingError("No embedding returned".to_string()))
     }
 
     /// Embed for documents (uses document task type)
     pub fn embed_documents(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>> {
-        let request = EmbeddingRequest::new(texts)
-            .with_task_type(TaskType::Document);
+        let request = EmbeddingRequest::new(texts).with_task_type(TaskType::Document);
         let response = self.embed(request)?;
         Ok(response.embeddings)
     }
 
     /// Get usage statistics
     pub fn usage(&self) -> Result<UsageStats> {
-        let usage = self.usage.read()
+        let usage = self
+            .usage
+            .read()
             .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?;
         Ok(usage.stats())
     }
 
     /// Reset usage tracking
     pub fn reset_usage(&self) -> Result<()> {
-        let mut usage = self.usage.write()
+        let mut usage = self
+            .usage
+            .write()
             .map_err(|_| VecStoreError::LockError("usage lock poisoned".into()))?;
         *usage = UsageTracker::new();
         Ok(())
@@ -771,7 +813,9 @@ impl EmbeddingService {
 
     /// Clear embedding cache
     pub fn clear_cache(&self) -> Result<()> {
-        let mut cache = self.cache.write()
+        let mut cache = self
+            .cache
+            .write()
             .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
         *cache = EmbeddingCache::new(self.config.max_cache_entries, self.config.cache_ttl_seconds);
         Ok(())
@@ -779,7 +823,9 @@ impl EmbeddingService {
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> Result<(usize, u64)> {
-        let cache = self.cache.read()
+        let cache = self
+            .cache
+            .read()
             .map_err(|_| VecStoreError::LockError("cache lock poisoned".into()))?;
         let stats = cache.stats();
         Ok((stats.entries, stats.total_hits))
@@ -800,7 +846,12 @@ impl EmbeddingService {
         format!("{:x}", hasher.finish())
     }
 
-    fn call_provider(&self, texts: &[&str], model: &ModelConfig, task_type: Option<&TaskType>) -> Result<(Vec<Vec<f32>>, usize)> {
+    fn call_provider(
+        &self,
+        texts: &[&str],
+        model: &ModelConfig,
+        task_type: Option<&TaskType>,
+    ) -> Result<(Vec<Vec<f32>>, usize)> {
         // Simulated embedding - in production would call actual APIs
         match &model.provider {
             EmbeddingProvider::OpenAI => self.embed_openai(texts, model),
@@ -819,19 +870,34 @@ impl EmbeddingService {
         Ok((embeddings, total_tokens))
     }
 
-    fn embed_cohere(&self, texts: &[&str], model: &ModelConfig, _task_type: Option<&TaskType>) -> Result<(Vec<Vec<f32>>, usize)> {
+    fn embed_cohere(
+        &self,
+        texts: &[&str],
+        model: &ModelConfig,
+        _task_type: Option<&TaskType>,
+    ) -> Result<(Vec<Vec<f32>>, usize)> {
         let total_tokens: usize = texts.iter().map(|t| t.split_whitespace().count()).sum();
         let embeddings = self.generate_embeddings(texts, model.dimension);
         Ok((embeddings, total_tokens))
     }
 
-    fn embed_voyage(&self, texts: &[&str], model: &ModelConfig, _task_type: Option<&TaskType>) -> Result<(Vec<Vec<f32>>, usize)> {
+    fn embed_voyage(
+        &self,
+        texts: &[&str],
+        model: &ModelConfig,
+        _task_type: Option<&TaskType>,
+    ) -> Result<(Vec<Vec<f32>>, usize)> {
         let total_tokens: usize = texts.iter().map(|t| t.split_whitespace().count()).sum();
         let embeddings = self.generate_embeddings(texts, model.dimension);
         Ok((embeddings, total_tokens))
     }
 
-    fn embed_jina(&self, texts: &[&str], model: &ModelConfig, _task_type: Option<&TaskType>) -> Result<(Vec<Vec<f32>>, usize)> {
+    fn embed_jina(
+        &self,
+        texts: &[&str],
+        model: &ModelConfig,
+        _task_type: Option<&TaskType>,
+    ) -> Result<(Vec<Vec<f32>>, usize)> {
         let total_tokens: usize = texts.iter().map(|t| t.split_whitespace().count()).sum();
         let embeddings = self.generate_embeddings(texts, model.dimension);
         Ok((embeddings, total_tokens))
@@ -847,8 +913,14 @@ impl EmbeddingService {
     ///
     /// Generates deterministic hash-based embeddings for testing and development.
     /// Production deployments should use supported providers (OpenAI, Cohere, Voyage, Jina, LocalONNX).
-    fn embed_simulated(&self, texts: &[&str], model: &ModelConfig) -> Result<(Vec<Vec<f32>>, usize)> {
-        tracing::warn!("Using simulated embeddings for unsupported provider - not suitable for production");
+    fn embed_simulated(
+        &self,
+        texts: &[&str],
+        model: &ModelConfig,
+    ) -> Result<(Vec<Vec<f32>>, usize)> {
+        tracing::warn!(
+            "Using simulated embeddings for unsupported provider - not suitable for production"
+        );
         let total_tokens: usize = texts.iter().map(|t| t.split_whitespace().count()).sum();
         let embeddings = self.generate_embeddings(texts, model.dimension);
         Ok((embeddings, total_tokens))
@@ -856,26 +928,31 @@ impl EmbeddingService {
 
     fn generate_embeddings(&self, texts: &[&str], dimension: usize) -> Vec<Vec<f32>> {
         // Generate deterministic embeddings based on text hash for testing/fallback
-        texts.iter().map(|text| {
-            let mut embedding = vec![0.0f32; dimension];
-            let bytes = text.as_bytes();
+        texts
+            .iter()
+            .map(|text| {
+                let mut embedding = vec![0.0f32; dimension];
+                let bytes = text.as_bytes();
 
-            for (i, chunk) in bytes.chunks(4).enumerate() {
-                let idx = i % dimension;
-                let val: u32 = chunk.iter().fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
-                embedding[idx] = ((val as f32) / 255.0 - 0.5) * 2.0;
-            }
-
-            // Normalize
-            let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
-            if norm > 0.0 {
-                for x in &mut embedding {
-                    *x /= norm;
+                for (i, chunk) in bytes.chunks(4).enumerate() {
+                    let idx = i % dimension;
+                    let val: u32 = chunk
+                        .iter()
+                        .fold(0u32, |acc, &b| acc.wrapping_add(b as u32));
+                    embedding[idx] = ((val as f32) / 255.0 - 0.5) * 2.0;
                 }
-            }
 
-            embedding
-        }).collect()
+                // Normalize
+                let norm: f32 = embedding.iter().map(|x| x * x).sum::<f32>().sqrt();
+                if norm > 0.0 {
+                    for x in &mut embedding {
+                        *x /= norm;
+                    }
+                }
+
+                embedding
+            })
+            .collect()
     }
 }
 
@@ -897,14 +974,23 @@ impl EmbeddingCollection {
     }
 
     /// Add document with automatic embedding
-    pub fn add(&self, id: &str, text: &str, metadata: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn add(
+        &self,
+        id: &str,
+        text: &str,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let embedding = self.service.embed_one(text)?;
 
-        let mut vectors = self.vectors.write()
+        let mut vectors = self
+            .vectors
+            .write()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
         vectors.insert(id.to_string(), (embedding, metadata));
 
-        let mut texts = self.texts.write()
+        let mut texts = self
+            .texts
+            .write()
             .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
         texts.insert(id.to_string(), text.to_string());
 
@@ -912,13 +998,20 @@ impl EmbeddingCollection {
     }
 
     /// Add multiple documents
-    pub fn add_batch(&self, documents: Vec<(String, String, HashMap<String, serde_json::Value>)>) -> Result<usize> {
+    pub fn add_batch(
+        &self,
+        documents: Vec<(String, String, HashMap<String, serde_json::Value>)>,
+    ) -> Result<usize> {
         let texts: Vec<String> = documents.iter().map(|(_, t, _)| t.clone()).collect();
         let embeddings = self.service.embed_documents(texts.clone())?;
 
-        let mut vectors = self.vectors.write()
+        let mut vectors = self
+            .vectors
+            .write()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
-        let mut text_store = self.texts.write()
+        let mut text_store = self
+            .texts
+            .write()
             .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
 
         for ((id, text, metadata), embedding) in documents.into_iter().zip(embeddings) {
@@ -933,9 +1026,13 @@ impl EmbeddingCollection {
     pub fn query(&self, text: &str, top_k: usize) -> Result<Vec<QueryResult>> {
         let query_embedding = self.service.embed_query(text)?;
 
-        let vectors = self.vectors.read()
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
-        let texts = self.texts.read()
+        let texts = self
+            .texts
+            .read()
             .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
 
         let mut results: Vec<QueryResult> = vectors
@@ -959,16 +1056,22 @@ impl EmbeddingCollection {
 
     /// Get vector by ID
     pub fn get(&self, id: &str) -> Result<Option<Vec<f32>>> {
-        let vectors = self.vectors.read()
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
         Ok(vectors.get(id).map(|(v, _)| v.clone()))
     }
 
     /// Delete by ID
     pub fn delete(&self, id: &str) -> Result<bool> {
-        let mut vectors = self.vectors.write()
+        let mut vectors = self
+            .vectors
+            .write()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
-        let mut texts = self.texts.write()
+        let mut texts = self
+            .texts
+            .write()
             .map_err(|_| VecStoreError::LockError("texts lock poisoned".into()))?;
         texts.remove(id);
         Ok(vectors.remove(id).is_some())
@@ -976,7 +1079,9 @@ impl EmbeddingCollection {
 
     /// Count documents
     pub fn count(&self) -> Result<usize> {
-        let vectors = self.vectors.read()
+        let vectors = self
+            .vectors
+            .read()
             .map_err(|_| VecStoreError::LockError("vectors lock poisoned".into()))?;
         Ok(vectors.len())
     }
@@ -1020,10 +1125,12 @@ mod tests {
         let config = EmbeddingServiceConfig::default();
         let service = EmbeddingService::new(config);
 
-        let response = service.embed(EmbeddingRequest::new(vec![
-            "Hello world".to_string(),
-            "Machine learning".to_string(),
-        ])).unwrap();
+        let response = service
+            .embed(EmbeddingRequest::new(vec![
+                "Hello world".to_string(),
+                "Machine learning".to_string(),
+            ]))
+            .unwrap();
 
         assert_eq!(response.embeddings.len(), 2);
         assert_eq!(response.embeddings[0].len(), 1536); // OpenAI small dimension
@@ -1035,10 +1142,14 @@ mod tests {
         let service = EmbeddingService::new(config);
 
         // First request
-        let response1 = service.embed(EmbeddingRequest::new(vec!["Hello".to_string()])).unwrap();
+        let response1 = service
+            .embed(EmbeddingRequest::new(vec!["Hello".to_string()]))
+            .unwrap();
 
         // Second request (should be cached)
-        let response2 = service.embed(EmbeddingRequest::new(vec!["Hello".to_string()])).unwrap();
+        let response2 = service
+            .embed(EmbeddingRequest::new(vec!["Hello".to_string()]))
+            .unwrap();
 
         assert_eq!(response2.cache_hits, 1);
         assert_eq!(response1.embeddings[0], response2.embeddings[0]);
@@ -1049,7 +1160,9 @@ mod tests {
         let config = EmbeddingServiceConfig::default();
         let service = EmbeddingService::new(config);
 
-        service.embed(EmbeddingRequest::new(vec!["Test".to_string()])).unwrap();
+        service
+            .embed(EmbeddingRequest::new(vec!["Test".to_string()]))
+            .unwrap();
 
         let usage = service.usage().unwrap();
         assert!(usage.total_requests > 0);
@@ -1061,8 +1174,12 @@ mod tests {
         let service = Arc::new(EmbeddingService::new(config));
         let collection = EmbeddingCollection::new(service);
 
-        collection.add("doc1", "Hello world", HashMap::new()).unwrap();
-        collection.add("doc2", "Machine learning tutorial", HashMap::new()).unwrap();
+        collection
+            .add("doc1", "Hello world", HashMap::new())
+            .unwrap();
+        collection
+            .add("doc2", "Machine learning tutorial", HashMap::new())
+            .unwrap();
 
         let results = collection.query("Hello", 10).unwrap();
         assert!(!results.is_empty());
@@ -1089,15 +1206,19 @@ mod tests {
         };
         let service = EmbeddingService::new(config);
 
-        let doc_embedding = service.embed(
-            EmbeddingRequest::new(vec!["Document text".to_string()])
-                .with_task_type(TaskType::Document)
-        ).unwrap();
+        let doc_embedding = service
+            .embed(
+                EmbeddingRequest::new(vec!["Document text".to_string()])
+                    .with_task_type(TaskType::Document),
+            )
+            .unwrap();
 
-        let query_embedding = service.embed(
-            EmbeddingRequest::new(vec!["Query text".to_string()])
-                .with_task_type(TaskType::Query)
-        ).unwrap();
+        let query_embedding = service
+            .embed(
+                EmbeddingRequest::new(vec!["Query text".to_string()])
+                    .with_task_type(TaskType::Query),
+            )
+            .unwrap();
 
         assert_eq!(doc_embedding.embeddings[0].len(), 1024);
         assert_eq!(query_embedding.embeddings[0].len(), 1024);

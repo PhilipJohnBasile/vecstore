@@ -31,7 +31,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -191,10 +191,7 @@ impl GeoIndex {
         let cell_id = location.s2_cell_id(self.s2_level);
 
         // Add to cell index
-        self.cell_index
-            .entry(cell_id)
-            .or_default()
-            .push(id.clone());
+        self.cell_index.entry(cell_id).or_default().push(id.clone());
 
         // Add document
         let doc = GeoDocument {

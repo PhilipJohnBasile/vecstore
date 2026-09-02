@@ -57,7 +57,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -213,10 +213,7 @@ impl MultiVectorIndex {
                 let token_vec = &self.token_vectors[token_id];
                 let sim = cosine_similarity(query_vec, token_vec);
 
-                doc_scores
-                    .entry(doc_id.clone())
-                    .or_default()
-                    .push(sim);
+                doc_scores.entry(doc_id.clone()).or_default().push(sim);
             }
         }
 
@@ -227,7 +224,7 @@ impl MultiVectorIndex {
                 let score = match self.aggregation {
                     AggregationMethod::MaxSim => {
                         sims.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-                    }
+                    },
                     AggregationMethod::AvgSim => sims.iter().sum::<f32>() / sims.len() as f32,
                     AggregationMethod::SumSim => sims.iter().sum(),
                     AggregationMethod::FirstToken => sims.first().copied().unwrap_or(0.0),
@@ -607,7 +604,7 @@ impl OptimizedMultiVectorIndex {
                 let score = match self.aggregation {
                     AggregationMethod::MaxSim => {
                         sims.iter().copied().fold(f32::NEG_INFINITY, f32::max)
-                    }
+                    },
                     AggregationMethod::AvgSim => sims.iter().sum::<f32>() / sims.len() as f32,
                     AggregationMethod::SumSim => sims.iter().sum(),
                     AggregationMethod::FirstToken => sims.first().copied().unwrap_or(0.0),
@@ -729,7 +726,7 @@ impl LateInteractionScorer {
             ScoreMode::SumMaxSim => maxsim_per_query.iter().sum(),
             ScoreMode::AvgMaxSim => {
                 maxsim_per_query.iter().sum::<f32>() / maxsim_per_query.len() as f32
-            }
+            },
             ScoreMode::MaxMaxSim => maxsim_per_query
                 .iter()
                 .copied()

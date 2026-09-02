@@ -2,14 +2,14 @@
 
 use crate::store::VecStore;
 use axum::{
+    Json, Router,
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
         Path, State,
+        ws::{Message, WebSocket, WebSocketUpgrade},
     },
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -435,7 +435,7 @@ async fn batch_execute(
                     id,
                     metadata: crate::store::Metadata { fields: metadata },
                 }
-            }
+            },
         })
         .collect();
 
@@ -834,7 +834,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
             Err(e) => {
                 tracing::error!("WebSocket error: {}", e);
                 break;
-            }
+            },
         };
 
         match msg {
@@ -860,7 +860,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                         break;
                                     }
                                     continue;
-                                }
+                                },
                             }
                         } else {
                             None
@@ -893,7 +893,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                         Err(e) => {
                                             tracing::error!("Failed to serialize result: {}", e);
                                             break;
-                                        }
+                                        },
                                     };
 
                                     if socket
@@ -921,7 +921,7 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                 {
                                     break;
                                 }
-                            }
+                            },
                             Err(e) => {
                                 let error_msg = serde_json::json!({
                                     "error": format!("Query failed: {}", e)
@@ -933,9 +933,9 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                                 {
                                     break;
                                 }
-                            }
+                            },
                         }
-                    }
+                    },
                     Err(e) => {
                         let error_msg = serde_json::json!({
                             "error": format!("Invalid query request: {}", e)
@@ -947,15 +947,15 @@ async fn handle_query_stream(mut socket: WebSocket, server: VecStoreHttpServer) 
                         {
                             break;
                         }
-                    }
+                    },
                 }
-            }
+            },
             Message::Close(_) => {
                 break;
-            }
+            },
             _ => {
                 // Ignore other message types (binary, ping, pong)
-            }
+            },
         }
     }
 }

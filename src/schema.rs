@@ -130,52 +130,56 @@ impl FieldSchema {
     pub fn validate(&self, value: &Value) -> Result<(), ValidationError> {
         // Type validation
         match (&self.field_type, value) {
-            (FieldType::String, Value::String(_)) => {}
-            (FieldType::Number, Value::Number(_)) => {}
-            (FieldType::Integer, Value::Number(n)) if n.is_i64() || n.is_u64() => {}
-            (FieldType::Boolean, Value::Bool(_)) => {}
-            (FieldType::Array, Value::Array(_)) => {}
-            (FieldType::Object, Value::Object(_)) => {}
-            (FieldType::Null, Value::Null) => {}
+            (FieldType::String, Value::String(_)) => {},
+            (FieldType::Number, Value::Number(_)) => {},
+            (FieldType::Integer, Value::Number(n)) if n.is_i64() || n.is_u64() => {},
+            (FieldType::Boolean, Value::Bool(_)) => {},
+            (FieldType::Array, Value::Array(_)) => {},
+            (FieldType::Object, Value::Object(_)) => {},
+            (FieldType::Null, Value::Null) => {},
             _ => {
                 return Err(ValidationError::TypeError {
                     expected: format!("{:?}", self.field_type),
                     actual: value.clone(),
                     message: self.error_message.clone(),
                 });
-            }
+            },
         }
 
         // Range validation for numbers
         if let Value::Number(n) = value
-            && let Some(n_f64) = n.as_f64() {
-                if let Some(min) = self.min
-                    && n_f64 < min {
-                        return Err(ValidationError::RangeError {
-                            value: n_f64,
-                            min: Some(min),
-                            max: None,
-                        });
-                    }
-
-                if let Some(max) = self.max
-                    && n_f64 > max {
-                        return Err(ValidationError::RangeError {
-                            value: n_f64,
-                            min: None,
-                            max: Some(max),
-                        });
-                    }
+            && let Some(n_f64) = n.as_f64()
+        {
+            if let Some(min) = self.min
+                && n_f64 < min
+            {
+                return Err(ValidationError::RangeError {
+                    value: n_f64,
+                    min: Some(min),
+                    max: None,
+                });
             }
+
+            if let Some(max) = self.max
+                && n_f64 > max
+            {
+                return Err(ValidationError::RangeError {
+                    value: n_f64,
+                    min: None,
+                    max: Some(max),
+                });
+            }
+        }
 
         // Allowed values validation
         if let Some(ref allowed) = self.allowed_values
-            && !allowed.contains(value) {
-                return Err(ValidationError::EnumError {
-                    value: value.clone(),
-                    allowed: allowed.clone(),
-                });
-            }
+            && !allowed.contains(value)
+        {
+            return Err(ValidationError::EnumError {
+                value: value.clone(),
+                allowed: allowed.clone(),
+            });
+        }
 
         // Pattern validation for strings
         if let (Some(pattern), Value::String(s)) = (&self.pattern, value) {
@@ -230,8 +234,8 @@ impl Schema {
             None => {
                 return Err(ValidationError::NotAnObject {
                     actual: metadata.clone(),
-                })
-            }
+                });
+            },
         };
 
         // Check required fields
@@ -328,7 +332,7 @@ impl std::fmt::Display for ValidationError {
                 } else {
                     write!(f, "Type error: expected {}, got {:?}", expected, actual)
                 }
-            }
+            },
             Self::RangeError { value, min, max } => {
                 if let (Some(min), Some(max)) = (min, max) {
                     write!(f, "Value {} out of range [{}, {}]", value, min, max)
@@ -339,25 +343,25 @@ impl std::fmt::Display for ValidationError {
                 } else {
                     write!(f, "Range error for value {}", value)
                 }
-            }
+            },
             Self::EnumError { value, allowed } => {
                 write!(f, "Value {:?} not in allowed values: {:?}", value, allowed)
-            }
+            },
             Self::PatternError { value, pattern } => {
                 write!(f, "Value '{}' does not match pattern '{}'", value, pattern)
-            }
+            },
             Self::MissingField { field } => {
                 write!(f, "Required field '{}' is missing", field)
-            }
+            },
             Self::UnexpectedField { field } => {
                 write!(f, "Unexpected field '{}'", field)
-            }
+            },
             Self::FieldError { field, error } => {
                 write!(f, "Field '{}': {}", field, error)
-            }
+            },
             Self::NotAnObject { actual } => {
                 write!(f, "Metadata must be an object, got {:?}", actual)
-            }
+            },
         }
     }
 }

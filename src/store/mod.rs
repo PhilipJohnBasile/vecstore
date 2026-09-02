@@ -33,7 +33,7 @@ pub mod hybrid;
 pub mod quantization;
 mod types;
 
-pub use filter_parser::{parse_filter, ParseError as FilterParseError};
+pub use filter_parser::{ParseError as FilterParseError, parse_filter};
 pub use hybrid::{HybridQuery, TextIndex};
 pub use quantization::{PQConfig, PQVectorStore, ProductQuantizer};
 pub use types::*;
@@ -289,7 +289,9 @@ impl VecStore {
                                 let record = Record {
                                     id: id.clone(),
                                     vector: vector.clone(),
-                                    metadata: Metadata { fields: HashMap::new() },
+                                    metadata: Metadata {
+                                        fields: HashMap::new(),
+                                    },
                                     created_at: Utc::now().timestamp(),
                                     deleted: false,
                                     deleted_at: None,
@@ -297,12 +299,12 @@ impl VecStore {
                                 };
                                 records.insert(id.clone(), record);
                                 backend.insert(id, &vector)?;
-                            }
+                            },
                             LogEntry::Delete { id } => {
                                 records.remove(&id);
                                 let _ = backend.remove(&id);
-                            }
-                            _ => {} // Ignore transaction markers for now
+                            },
+                            _ => {}, // Ignore transaction markers for now
                         }
                     }
                 }
@@ -429,7 +431,9 @@ impl VecStore {
         }
 
         if self.records.is_empty() {
-            return Err(anyhow::anyhow!("Cannot train quantizer: no vectors in store"));
+            return Err(anyhow::anyhow!(
+                "Cannot train quantizer: no vectors in store"
+            ));
         }
 
         // Collect training vectors
@@ -451,12 +455,12 @@ impl VecStore {
             QuantizationConfig::Scalar8 { .. } => {
                 let sq = ScalarQuantizer8::train(&training_vectors)?;
                 disk::QuantizerState::Scalar8(sq)
-            }
+            },
 
             QuantizationConfig::Scalar4 { .. } => {
                 let sq = ScalarQuantizer4::train(&training_vectors)?;
                 disk::QuantizerState::Scalar4(sq)
-            }
+            },
 
             QuantizationConfig::Binary { use_mean_threshold } => {
                 let bq = if *use_mean_threshold {
@@ -465,7 +469,7 @@ impl VecStore {
                     BinaryQuantizer::train_sign_based(self.dimension)
                 };
                 disk::QuantizerState::Binary(bq)
-            }
+            },
 
             QuantizationConfig::Product {
                 num_subvectors,
@@ -480,7 +484,7 @@ impl VecStore {
                 let mut pq = ProductQuantizer::new(self.dimension, pq_config)?;
                 pq.train(&training_vectors)?;
                 disk::QuantizerState::Product(pq)
-            }
+            },
         };
 
         self.quantizer = Some(quantizer);
@@ -493,8 +497,6 @@ impl VecStore {
 
     /// Rebuild quantized vector representations from records
     fn rebuild_quantized_vectors(&mut self) -> Result<()> {
-        
-
         let quantizer = match &self.quantizer {
             Some(q) => q,
             None => return Ok(()),
@@ -523,8 +525,6 @@ impl VecStore {
 
     /// Encode a single vector using the trained quantizer
     fn encode_vector(&self, vector: &[f32]) -> Option<Vec<u8>> {
-        
-
         match &self.quantizer {
             None => None,
             Some(disk::QuantizerState::None) => None,
@@ -582,13 +582,15 @@ impl VecStore {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn create_metadata_index(&mut self, name: &str, config: IndexConfig) -> Result<()> {
-        self.metadata_indexes.create_index(name, config)
+        self.metadata_indexes
+            .create_index(name, config)
             .map_err(|e| anyhow::anyhow!("Failed to create index: {}", e))
     }
 
     /// Drop a metadata index
     pub fn drop_metadata_index(&mut self, name: &str) -> Result<()> {
-        self.metadata_indexes.drop_index(name)
+        self.metadata_indexes
+            .drop_index(name)
             .map_err(|e| anyhow::anyhow!("Failed to drop index: {}", e))
     }
 
@@ -604,10 +606,9 @@ impl VecStore {
         let mut indexed = 0;
         for record in self.records.values() {
             if !record.deleted {
-                let _ = self.metadata_indexes.insert(
-                    &record.metadata.fields,
-                    record.id.clone(),
-                );
+                let _ = self
+                    .metadata_indexes
+                    .insert(&record.metadata.fields, record.id.clone());
                 indexed += 1;
             }
         }
@@ -633,7 +634,8 @@ impl VecStore {
                     ef_construction: self.config.hnsw_ef_construction,
                     max_elements: self.config.hnsw_max_elements,
                 };
-                self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
+                self.backend =
+                    VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -654,16 +656,24 @@ impl VecStore {
         if let Some(ref mut wal) = self.wal {
             let is_update = self.records.contains_key(&id);
             let entry = if is_update {
-                LogEntry::Update { id: id.clone(), vector: vector.clone() }
+                LogEntry::Update {
+                    id: id.clone(),
+                    vector: vector.clone(),
+                }
             } else {
-                LogEntry::Insert { id: id.clone(), vector: vector.clone() }
+                LogEntry::Insert {
+                    id: id.clone(),
+                    vector: vector.clone(),
+                }
             };
             wal.append(entry)?;
         }
 
         // Remove old entry from metadata indexes if updating
         if let Some(old_record) = self.records.get(&id) {
-            let _ = self.metadata_indexes.remove(&old_record.metadata.fields, &id);
+            let _ = self
+                .metadata_indexes
+                .remove(&old_record.metadata.fields, &id);
         }
 
         let record = Record {
@@ -764,28 +774,30 @@ impl VecStore {
 
         // Set dimension from first record if needed
         if self.dimension == 0
-            && let Some(first) = items.first() {
-                // Validate first vector is non-empty (Major Issue #21 fix)
-                if first.vector.is_empty() {
-                    return Err(anyhow::anyhow!(
-                        "Cannot insert zero-dimension vector. Vectors must have at least one dimension."
-                    ));
-                }
-                self.dimension = first.vector.len();
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    let hnsw_config = HnswConfig {
-                        m: self.config.hnsw_m,
-                        ef_construction: self.config.hnsw_ef_construction,
-                        max_elements: self.config.hnsw_max_elements,
-                    };
-                    self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
-                }
-                #[cfg(target_arch = "wasm32")]
-                {
-                    self.backend = VectorBackend::new(self.dimension);
-                }
+            && let Some(first) = items.first()
+        {
+            // Validate first vector is non-empty (Major Issue #21 fix)
+            if first.vector.is_empty() {
+                return Err(anyhow::anyhow!(
+                    "Cannot insert zero-dimension vector. Vectors must have at least one dimension."
+                ));
             }
+            self.dimension = first.vector.len();
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let hnsw_config = HnswConfig {
+                    m: self.config.hnsw_m,
+                    ef_construction: self.config.hnsw_ef_construction,
+                    max_elements: self.config.hnsw_max_elements,
+                };
+                self.backend =
+                    VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
+            }
+            #[cfg(target_arch = "wasm32")]
+            {
+                self.backend = VectorBackend::new(self.dimension);
+            }
+        }
 
         // Validate all vectors in parallel (Major Issue #21 fix)
         items.par_iter().try_for_each(|record| {
@@ -890,9 +902,10 @@ impl VecStore {
 
                 // Apply filter if present
                 if let Some(ref filter) = q.filter
-                    && !filters::evaluate_filter(filter, &record.metadata) {
-                        continue;
-                    }
+                    && !filters::evaluate_filter(filter, &record.metadata)
+                {
+                    continue;
+                }
 
                 results.push(Neighbor {
                     id: id.clone(),
@@ -993,7 +1006,12 @@ impl VecStore {
                 let explanation_text = if has_filter {
                     format!(
                         "Ranked #{} with score {:.4} ({}). Passed filters. {} candidates evaluated, {} filtered out, {} deleted.",
-                        rank, score, distance_metric, total_candidates, filtered_out_count, deleted_count
+                        rank,
+                        score,
+                        distance_metric,
+                        total_candidates,
+                        filtered_out_count,
+                        deleted_count
                     )
                 } else {
                     format!(
@@ -1150,9 +1168,7 @@ impl VecStore {
     ///
     /// Returns records that exist and are not soft-deleted.
     pub fn get_many(&self, ids: &[&str]) -> Vec<&Record> {
-        ids.iter()
-            .filter_map(|id| self.get(id))
-            .collect()
+        ids.iter().filter_map(|id| self.get(id)).collect()
     }
 
     /// Create a named snapshot of the current store state
@@ -1454,9 +1470,10 @@ impl VecStore {
 
                 // Apply filter if present
                 if let Some(ref filter) = query.filter
-                    && !filters::evaluate_filter(filter, &record.metadata) {
-                        continue;
-                    }
+                    && !filters::evaluate_filter(filter, &record.metadata)
+                {
+                    continue;
+                }
 
                 results.push(Neighbor {
                     id: id.clone(),
@@ -1503,17 +1520,18 @@ impl VecStore {
     /// * `Ok(false)` if record doesn't exist or was already deleted
     pub fn soft_delete(&mut self, id: &str) -> Result<bool> {
         if let Some(record) = self.records.get_mut(id)
-            && !record.deleted {
-                // Log to WAL before applying (for crash recovery)
-                #[cfg(not(target_arch = "wasm32"))]
-                if let Some(ref mut wal) = self.wal {
-                    wal.append(LogEntry::SoftDelete { id: id.to_string() })?;
-                }
-
-                record.deleted = true;
-                record.deleted_at = Some(Utc::now().timestamp());
-                return Ok(true);
+            && !record.deleted
+        {
+            // Log to WAL before applying (for crash recovery)
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(ref mut wal) = self.wal {
+                wal.append(LogEntry::SoftDelete { id: id.to_string() })?;
             }
+
+            record.deleted = true;
+            record.deleted_at = Some(Utc::now().timestamp());
+            return Ok(true);
+        }
         Ok(false)
     }
 
@@ -1527,17 +1545,18 @@ impl VecStore {
     /// * `Ok(false)` if record doesn't exist or wasn't deleted
     pub fn restore(&mut self, id: &str) -> Result<bool> {
         if let Some(record) = self.records.get_mut(id)
-            && record.deleted {
-                // Log to WAL before applying (for crash recovery)
-                #[cfg(not(target_arch = "wasm32"))]
-                if let Some(ref mut wal) = self.wal {
-                    wal.append(LogEntry::Restore { id: id.to_string() })?;
-                }
-
-                record.deleted = false;
-                record.deleted_at = None;
-                return Ok(true);
+            && record.deleted
+        {
+            // Log to WAL before applying (for crash recovery)
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(ref mut wal) = self.wal {
+                wal.append(LogEntry::Restore { id: id.to_string() })?;
             }
+
+            record.deleted = false;
+            record.deleted_at = None;
+            return Ok(true);
+        }
         Ok(false)
     }
 
@@ -1645,7 +1664,7 @@ impl VecStore {
                     .map_err(|e| (format!("upsert({})", id), e)),
                 BatchOperation::Delete { id } => {
                     self.remove(id).map_err(|e| (format!("delete({})", id), e))
-                }
+                },
                 BatchOperation::SoftDelete { id } => self
                     .soft_delete(id)
                     .map(|_| ())
@@ -1664,7 +1683,7 @@ impl VecStore {
                             anyhow::anyhow!("Record not found: {}", id),
                         ))
                     }
-                }
+                },
             };
 
             match result {
@@ -1676,7 +1695,7 @@ impl VecStore {
                         operation,
                         error: error.to_string(),
                     });
-                }
+                },
             }
         }
 
@@ -1950,11 +1969,13 @@ impl VecStore {
 
         for record in self.records.values_mut() {
             if let Some(expires_at) = record.expires_at
-                && !record.deleted && now >= expires_at {
-                    record.deleted = true;
-                    record.deleted_at = Some(now);
-                    expired_count += 1;
-                }
+                && !record.deleted
+                && now >= expires_at
+            {
+                record.deleted = true;
+                record.deleted_at = Some(now);
+                expired_count += 1;
+            }
         }
 
         Ok(expired_count)
@@ -2003,7 +2024,8 @@ impl VecStore {
                     ef_construction: self.config.hnsw_ef_construction,
                     max_elements: self.config.hnsw_max_elements,
                 };
-                self.backend = VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
+                self.backend =
+                    VectorBackend::with_config(self.dimension, self.config.distance, hnsw_config)?;
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -2081,22 +2103,22 @@ impl VecStore {
             match first_stage {
                 QueryStage::VectorSearch { .. } | QueryStage::HybridSearch { .. } => {
                     // Valid first stage
-                }
+                },
                 QueryStage::Rerank { .. } => {
                     return Err(anyhow::anyhow!(
                         "First stage must be VectorSearch or HybridSearch, not Rerank. Rerank requires previous search results."
                     ));
-                }
+                },
                 QueryStage::MMR { .. } => {
                     return Err(anyhow::anyhow!(
                         "First stage must be VectorSearch or HybridSearch, not MMR. MMR requires previous search results."
                     ));
-                }
+                },
                 QueryStage::Filter { .. } => {
                     return Err(anyhow::anyhow!(
                         "First stage must be VectorSearch or HybridSearch, not Filter. Filter requires previous search results."
                     ));
-                }
+                },
             }
         }
 
@@ -2111,7 +2133,7 @@ impl VecStore {
                         k: *k,
                         filter: filter.clone(),
                     })?
-                }
+                },
 
                 QueryStage::HybridSearch {
                     vector,
@@ -2128,7 +2150,7 @@ impl VecStore {
                         alpha: *alpha,
                         filter: filter.clone(),
                     })?
-                }
+                },
 
                 QueryStage::Rerank { k, model: _ } => {
                     // Stage 2+: Rerank existing candidates
@@ -2148,7 +2170,7 @@ impl VecStore {
                     // This is a reasonable fallback when no cross-encoder is configured.
                     candidates.truncate(*k);
                     candidates
-                }
+                },
 
                 QueryStage::MMR { k, lambda } => {
                     // Stage 2+: Maximal Marginal Relevance for diversity
@@ -2160,7 +2182,7 @@ impl VecStore {
                     }
 
                     self.apply_mmr(&candidates, *k, *lambda)?
-                }
+                },
 
                 QueryStage::Filter { expr } => {
                     // Stage 2+: Additional filtering
@@ -2181,7 +2203,7 @@ impl VecStore {
                             }
                         })
                         .collect()
-                }
+                },
             };
         }
 
@@ -2365,9 +2387,9 @@ impl VecStore {
     ///     println!("  Step {}: {} (cost: {:.2})", step.step, step.description, step.cost);
     /// }
     ///
-/// for rec in plan.recommendations {
-///     println!("Hint: {}", rec);
-/// }
+    /// for rec in plan.recommendations {
+    ///     println!("Hint: {}", rec);
+    /// }
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn explain_query(&self, q: Query) -> Result<QueryPlan> {
@@ -2543,7 +2565,7 @@ impl VecStore {
                     .iter()
                     .map(|e| self.estimate_filter_selectivity(e))
                     .product()
-            }
+            },
             FilterExpr::Or(exprs) => {
                 // Or: add selectivities, capped at 1.0 (more records pass)
                 let sum: f32 = exprs
@@ -2551,24 +2573,24 @@ impl VecStore {
                     .map(|e| self.estimate_filter_selectivity(e))
                     .sum();
                 sum.min(1.0)
-            }
+            },
             FilterExpr::Not(expr) => {
                 // Not: invert selectivity
                 1.0 - self.estimate_filter_selectivity(expr)
-            }
+            },
             FilterExpr::Cmp { op, .. } => {
                 // Estimate based on operator type
                 match op {
-                    FilterOp::Eq => 0.05,        // 5% - exact match is selective
-                    FilterOp::Neq => 0.95,       // 95% - inequality is not selective
-                    FilterOp::Lt | FilterOp::Gt => 0.30, // 30% - typical range
+                    FilterOp::Eq => 0.05,                  // 5% - exact match is selective
+                    FilterOp::Neq => 0.95,                 // 95% - inequality is not selective
+                    FilterOp::Lt | FilterOp::Gt => 0.30,   // 30% - typical range
                     FilterOp::Lte | FilterOp::Gte => 0.35, // 35% - inclusive range
-                    FilterOp::Contains => 0.20,  // 20% - substring matching
-                    FilterOp::In => 0.15,        // 15% - depends on list size
-                    FilterOp::NotIn => 0.85,     // 85% - inverse of In
-                    FilterOp::StartsWith => 0.10, // 10% - prefix matching
+                    FilterOp::Contains => 0.20,            // 20% - substring matching
+                    FilterOp::In => 0.15,                  // 15% - depends on list size
+                    FilterOp::NotIn => 0.85,               // 85% - inverse of In
+                    FilterOp::StartsWith => 0.10,          // 10% - prefix matching
                 }
-            }
+            },
         }
     }
 
@@ -2737,6 +2759,25 @@ mod soft_delete_tests {
     }
 
     #[test]
+    fn test_full_query_survives_random_hnsw_layers_and_restores() {
+        for _ in 0..64 {
+            let (mut store, _temp_dir) = create_test_store();
+            let query = Query {
+                vector: vec![1.0, 2.0, 3.0],
+                k: 10,
+                filter: None,
+            };
+            assert_eq!(store.query(query.clone()).unwrap().len(), 3);
+            store.soft_delete("doc1").unwrap();
+            let results = store.query(query.clone()).unwrap();
+            assert_eq!(results.len(), 2);
+            assert!(results.iter().all(|n| n.id != "doc1"));
+            store.restore("doc1").unwrap();
+            assert_eq!(store.query(query).unwrap().len(), 3);
+        }
+    }
+
+    #[test]
     fn test_query_excludes_deleted() {
         let (mut store, _temp_dir) = create_test_store();
 
@@ -2850,9 +2891,15 @@ mod builder_tests {
             .unwrap();
 
         assert_eq!(store.distance_metric(), Distance::Manhattan);
-        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
-        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
-        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        store
+            .upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default())
+            .unwrap();
+        store
+            .upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default())
+            .unwrap();
+        let hits = store
+            .query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2))
+            .unwrap();
         assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 
@@ -2866,9 +2913,15 @@ mod builder_tests {
             .unwrap();
 
         assert_eq!(store.distance_metric(), Distance::Hamming);
-        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
-        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
-        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        store
+            .upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default())
+            .unwrap();
+        store
+            .upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default())
+            .unwrap();
+        let hits = store
+            .query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2))
+            .unwrap();
         assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 
@@ -2882,9 +2935,15 @@ mod builder_tests {
             .unwrap();
 
         assert_eq!(store.distance_metric(), Distance::Jaccard);
-        store.upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default()).unwrap();
-        store.upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default()).unwrap();
-        let hits = store.query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2)).unwrap();
+        store
+            .upsert("a".to_string(), vec![1.0, 0.0, 0.0], Metadata::default())
+            .unwrap();
+        store
+            .upsert("b".to_string(), vec![0.0, 1.0, 0.0], Metadata::default())
+            .unwrap();
+        let hits = store
+            .query(Query::new(vec![1.0, 0.0, 0.0]).with_limit(2))
+            .unwrap();
         assert_eq!(hits.first().map(|n| n.id.as_str()), Some("a"));
     }
 

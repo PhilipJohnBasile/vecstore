@@ -7,8 +7,8 @@
 
 #[cfg(feature = "openai-embeddings")]
 mod openai_tests {
-    use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
     use vecstore::embeddings::TextEmbedder;
+    use vecstore::embeddings::openai_backend::{OpenAIEmbedding, OpenAIModel};
 
     #[test]
     fn test_model_properties() {
@@ -247,7 +247,7 @@ mod openai_tests {
             Err(_) => {
                 println!("Skipping test: OPENAI_API_KEY not set");
                 return;
-            }
+            },
         };
 
         let embedder = OpenAIEmbedding::new(api_key, OpenAIModel::TextEmbedding3Small)
@@ -274,7 +274,7 @@ mod openai_tests {
             Err(_) => {
                 println!("Skipping test: OPENAI_API_KEY not set");
                 return;
-            }
+            },
         };
 
         let embedder = OpenAIEmbedding::new(api_key, OpenAIModel::TextEmbedding3Small)
@@ -305,7 +305,7 @@ mod openai_tests {
             Err(_) => {
                 println!("Skipping test: OPENAI_API_KEY not set");
                 return;
-            }
+            },
         };
 
         let embedder = OpenAIEmbedding::new(api_key, OpenAIModel::TextEmbedding3Large)

@@ -3,11 +3,11 @@
 use crate::namespace::{NamespaceQuotas, NamespaceStatus};
 use crate::namespace_manager::NamespaceManager;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{delete, get, post, put},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -256,8 +256,8 @@ async fn update_status(
             return Err(AppError::BadRequest(format!(
                 "Invalid status: {}",
                 req.status
-            )))
-        }
+            )));
+        },
     };
 
     let manager = server.manager.write().await;
@@ -318,7 +318,9 @@ async fn get_aggregate_stats(
 ) -> Result<Json<AggregateStatsDto>, AppError> {
     let manager = server.manager.read().await;
 
-    let stats = manager.get_aggregate_stats();
+    let stats = manager
+        .get_aggregate_stats()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
     Ok(Json(AggregateStatsDto {
         total_namespaces: stats.total_namespaces,
@@ -359,24 +361,32 @@ impl IntoResponse for AppError {
 // Health checks
 // ============================================================================
 
-async fn health_check(State(server): State<AdminHttpServer>) -> Json<serde_json::Value> {
+async fn health_check(
+    State(server): State<AdminHttpServer>,
+) -> Result<Json<serde_json::Value>, AppError> {
     let manager = server.manager.read().await;
-    let stats = manager.get_aggregate_stats();
+    let stats = manager
+        .get_aggregate_stats()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Json(serde_json::json!({
+    Ok(Json(serde_json::json!({
         "status": "healthy",
         "mode": "multi-tenant",
         "total_namespaces": stats.total_namespaces,
         "active_namespaces": stats.active_namespaces,
-    }))
+    })))
 }
 
-async fn ready_check(State(server): State<AdminHttpServer>) -> Json<serde_json::Value> {
+async fn ready_check(
+    State(server): State<AdminHttpServer>,
+) -> Result<Json<serde_json::Value>, AppError> {
     let manager = server.manager.read().await;
-    let stats = manager.get_aggregate_stats();
+    let stats = manager
+        .get_aggregate_stats()
+        .map_err(|e| AppError::Internal(e.to_string()))?;
 
-    Json(serde_json::json!({
+    Ok(Json(serde_json::json!({
         "ready": true,
         "total_namespaces": stats.total_namespaces,
-    }))
+    })))
 }

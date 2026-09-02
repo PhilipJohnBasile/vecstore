@@ -26,7 +26,7 @@ fn test_eq_selectivity() {
             assert_eq!(field, "category");
             assert_eq!(*op, FilterOp::Eq);
             assert_eq!(*value, json!("electronics"));
-        }
+        },
         _ => panic!("Expected Cmp filter"),
     }
 }
@@ -39,7 +39,7 @@ fn test_neq_selectivity() {
     match &filter {
         FilterExpr::Cmp { op, .. } => {
             assert_eq!(*op, FilterOp::Neq);
-        }
+        },
         _ => panic!("Expected Cmp filter"),
     }
 }
@@ -87,7 +87,7 @@ fn test_and_selectivity() {
     match &filter {
         FilterExpr::And(exprs) => {
             assert_eq!(exprs.len(), 2);
-        }
+        },
         _ => panic!("Expected And filter"),
     }
 }
@@ -103,7 +103,7 @@ fn test_or_selectivity() {
     match &filter {
         FilterExpr::Or(exprs) => {
             assert_eq!(exprs.len(), 2);
-        }
+        },
         _ => panic!("Expected Or filter"),
     }
 }
@@ -114,12 +114,10 @@ fn test_not_selectivity() {
     let filter = FilterExpr::Not(Box::new(cmp("status", FilterOp::Eq, json!("archived"))));
 
     match &filter {
-        FilterExpr::Not(inner) => {
-            match inner.as_ref() {
-                FilterExpr::Cmp { op, .. } => assert_eq!(*op, FilterOp::Eq),
-                _ => panic!("Expected inner Cmp filter"),
-            }
-        }
+        FilterExpr::Not(inner) => match inner.as_ref() {
+            FilterExpr::Cmp { op, .. } => assert_eq!(*op, FilterOp::Eq),
+            _ => panic!("Expected inner Cmp filter"),
+        },
         _ => panic!("Expected Not filter"),
     }
 }
@@ -144,7 +142,7 @@ fn test_in_filter() {
         FilterExpr::Cmp { op, value, .. } => {
             assert_eq!(*op, FilterOp::In);
             assert!(value.is_array());
-        }
+        },
         _ => panic!("Expected Cmp filter"),
     }
 }
@@ -158,7 +156,7 @@ fn test_not_in_filter() {
         FilterExpr::Cmp { op, value, .. } => {
             assert_eq!(*op, FilterOp::NotIn);
             assert!(value.is_array());
-        }
+        },
         _ => panic!("Expected Cmp filter"),
     }
 }
@@ -196,11 +194,11 @@ fn test_complex_nested_filter() {
                 match branch {
                     FilterExpr::And(conditions) => {
                         assert_eq!(conditions.len(), 2);
-                    }
+                    },
                     _ => panic!("Expected And filter in branch"),
                 }
             }
-        }
+        },
         _ => panic!("Expected Or filter"),
     }
 }
@@ -220,13 +218,13 @@ fn test_deeply_nested_not() {
             match inner.as_ref() {
                 FilterExpr::Not(innermost) => {
                     match innermost.as_ref() {
-                        FilterExpr::Cmp { .. } => {} // Expected
+                        FilterExpr::Cmp { .. } => {}, // Expected
                         _ => panic!("Expected innermost Cmp"),
                     }
-                }
+                },
                 _ => panic!("Expected inner Not"),
             }
-        }
+        },
         _ => panic!("Expected outer Not"),
     }
 }
@@ -239,7 +237,7 @@ fn test_empty_and() {
     match &filter {
         FilterExpr::And(exprs) => {
             assert!(exprs.is_empty());
-        }
+        },
         _ => panic!("Expected And filter"),
     }
 }
@@ -252,7 +250,7 @@ fn test_empty_or() {
     match &filter {
         FilterExpr::Or(exprs) => {
             assert!(exprs.is_empty());
-        }
+        },
         _ => panic!("Expected Or filter"),
     }
 }
@@ -303,7 +301,7 @@ fn test_filter_serialization() {
     match deserialized {
         FilterExpr::And(exprs) => {
             assert_eq!(exprs.len(), 2);
-        }
+        },
         _ => panic!("Expected And filter after deserialization"),
     }
 }

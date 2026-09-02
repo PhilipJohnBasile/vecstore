@@ -38,12 +38,12 @@
 //! let matching_ids = manager.query(&filter)?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BTreeMap};
-use std::sync::RwLock;
-use serde::{Deserialize, Serialize};
 use ordered_float::OrderedFloat;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::RwLock;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // INDEX TYPES
@@ -102,12 +102,13 @@ impl HashIndex {
     pub fn insert(&mut self, doc_id: &str, value: &str) {
         // Remove old value if exists
         if let Some(old_value) = self.reverse.remove(doc_id)
-            && let Some(docs) = self.index.get_mut(&old_value) {
-                docs.remove(doc_id);
-                if docs.is_empty() {
-                    self.index.remove(&old_value);
-                }
+            && let Some(docs) = self.index.get_mut(&old_value)
+        {
+            docs.remove(doc_id);
+            if docs.is_empty() {
+                self.index.remove(&old_value);
             }
+        }
 
         // Insert new value
         self.index
@@ -120,12 +121,13 @@ impl HashIndex {
     /// Remove a document
     pub fn remove(&mut self, doc_id: &str) {
         if let Some(value) = self.reverse.remove(doc_id)
-            && let Some(docs) = self.index.get_mut(&value) {
-                docs.remove(doc_id);
-                if docs.is_empty() {
-                    self.index.remove(&value);
-                }
+            && let Some(docs) = self.index.get_mut(&value)
+        {
+            docs.remove(doc_id);
+            if docs.is_empty() {
+                self.index.remove(&value);
             }
+        }
     }
 
     /// Get documents with exact value
@@ -186,12 +188,13 @@ impl BTreeIndex {
 
         // Remove old value if exists
         if let Some(old_value) = self.reverse.remove(doc_id)
-            && let Some(docs) = self.index.get_mut(&old_value) {
-                docs.remove(doc_id);
-                if docs.is_empty() {
-                    self.index.remove(&old_value);
-                }
+            && let Some(docs) = self.index.get_mut(&old_value)
+        {
+            docs.remove(doc_id);
+            if docs.is_empty() {
+                self.index.remove(&old_value);
             }
+        }
 
         // Insert new value
         self.index
@@ -204,12 +207,13 @@ impl BTreeIndex {
     /// Remove a document
     pub fn remove(&mut self, doc_id: &str) {
         if let Some(value) = self.reverse.remove(doc_id)
-            && let Some(docs) = self.index.get_mut(&value) {
-                docs.remove(doc_id);
-                if docs.is_empty() {
-                    self.index.remove(&value);
-                }
+            && let Some(docs) = self.index.get_mut(&value)
+        {
+            docs.remove(doc_id);
+            if docs.is_empty() {
+                self.index.remove(&value);
             }
+        }
     }
 
     /// Get documents in range [min, max]
@@ -291,8 +295,7 @@ impl GeoPoint {
         let dlat = (other.lat - self.lat).to_radians();
         let dlon = (other.lon - self.lon).to_radians();
 
-        let a = (dlat / 2.0).sin().powi(2)
-            + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
+        let a = (dlat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (dlon / 2.0).sin().powi(2);
         let c = 2.0 * a.sqrt().asin();
 
         r * c
@@ -411,12 +414,12 @@ impl GeoIndex {
                     for doc_id in docs {
                         if let Some(point) = self.points.get(doc_id)
                             && point.lat >= min_lat
-                                && point.lat <= max_lat
-                                && point.lon >= min_lon
-                                && point.lon <= max_lon
-                            {
-                                results.insert(doc_id.clone());
-                            }
+                            && point.lat <= max_lat
+                            && point.lon >= min_lon
+                            && point.lon <= max_lon
+                        {
+                            results.insert(doc_id.clone());
+                        }
                     }
                 }
             }
@@ -585,22 +588,22 @@ impl PayloadIndexManager {
                 self.hash_indexes
                     .write()?
                     .insert(field.to_string(), HashIndex::new(field));
-            }
+            },
             IndexType::BTree => {
                 self.btree_indexes
                     .write()?
                     .insert(field.to_string(), BTreeIndex::new(field));
-            }
+            },
             IndexType::Geo => {
                 self.geo_indexes
                     .write()?
                     .insert(field.to_string(), GeoIndex::new(field, 0.1));
-            }
+            },
             IndexType::FullText => {
                 self.fulltext_indexes
                     .write()?
                     .insert(field.to_string(), FullTextIndex::new(field));
-            }
+            },
         }
         Ok(())
     }
@@ -629,9 +632,10 @@ impl PayloadIndexManager {
             for (field, value) in map {
                 // Hash index
                 if let Some(idx) = self.hash_indexes.write()?.get_mut(field)
-                    && let Some(s) = value.as_str() {
-                        idx.insert(doc_id, s);
-                    }
+                    && let Some(s) = value.as_str()
+                {
+                    idx.insert(doc_id, s);
+                }
 
                 // B-tree index
                 if let Some(idx) = self.btree_indexes.write()?.get_mut(field) {
@@ -645,18 +649,20 @@ impl PayloadIndexManager {
                 // Geo index
                 if let Some(idx) = self.geo_indexes.write()?.get_mut(field)
                     && let serde_json::Value::Object(geo) = value
-                        && let (Some(lat), Some(lon)) = (
-                            geo.get("lat").and_then(|v| v.as_f64()),
-                            geo.get("lon").and_then(|v| v.as_f64()),
-                        ) {
-                            idx.insert(doc_id, GeoPoint::new(lat, lon));
-                        }
+                    && let (Some(lat), Some(lon)) = (
+                        geo.get("lat").and_then(|v| v.as_f64()),
+                        geo.get("lon").and_then(|v| v.as_f64()),
+                    )
+                {
+                    idx.insert(doc_id, GeoPoint::new(lat, lon));
+                }
 
                 // Full-text index
                 if let Some(idx) = self.fulltext_indexes.write()?.get_mut(field)
-                    && let Some(s) = value.as_str() {
-                        idx.insert(doc_id, s);
-                    }
+                    && let Some(s) = value.as_str()
+                {
+                    idx.insert(doc_id, s);
+                }
             }
         }
         Ok(())
@@ -703,7 +709,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::In { field, values } => {
                 let guard = self.hash_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
@@ -714,7 +720,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::Range { field, min, max } => {
                 let guard = self.btree_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
@@ -725,7 +731,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::Gt { field, value } => {
                 let guard = self.btree_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
@@ -736,7 +742,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::Lt { field, value } => {
                 let guard = self.btree_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
@@ -747,8 +753,12 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
-            Filter::GeoRadius { field, center, radius_km } => {
+            },
+            Filter::GeoRadius {
+                field,
+                center,
+                radius_km,
+            } => {
                 let guard = self.geo_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
                     let results = idx.within_radius(center, *radius_km);
@@ -759,7 +769,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::FullText { field, query } => {
                 let guard = self.fulltext_indexes.read()?;
                 if let Some(idx) = guard.get(field) {
@@ -770,7 +780,7 @@ impl PayloadIndexManager {
                         field
                     )))
                 }
-            }
+            },
             Filter::And(filters) => {
                 let mut result: Option<HashSet<String>> = None;
                 for f in filters {
@@ -781,21 +791,21 @@ impl PayloadIndexManager {
                     });
                 }
                 Ok(result.unwrap_or_default())
-            }
+            },
             Filter::Or(filters) => {
                 let mut result = HashSet::new();
                 for f in filters {
                     result.extend(self.evaluate_filter(f)?);
                 }
                 Ok(result)
-            }
+            },
             Filter::Not(_inner) => {
                 // Would need all document IDs to compute NOT
                 // For now, return empty (would need enhancement)
                 Err(VecStoreError::InvalidInput(
                     "NOT filter requires full document list".to_string(),
                 ))
-            }
+            },
         }
     }
 
@@ -852,7 +862,11 @@ pub enum Filter {
     /// Less than
     Lt { field: String, value: f64 },
     /// Geo radius query
-    GeoRadius { field: String, center: GeoPoint, radius_km: f64 },
+    GeoRadius {
+        field: String,
+        center: GeoPoint,
+        radius_km: f64,
+    },
     /// Full-text search
     FullText { field: String, query: String },
     /// AND of filters
@@ -996,10 +1010,15 @@ mod tests {
         manager.create_index("category", IndexType::Hash).unwrap();
         manager.create_index("price", IndexType::BTree).unwrap();
 
-        manager.index_payload("doc1", &serde_json::json!({
-            "category": "electronics",
-            "price": 299.99
-        })).unwrap();
+        manager
+            .index_payload(
+                "doc1",
+                &serde_json::json!({
+                    "category": "electronics",
+                    "price": 299.99
+                }),
+            )
+            .unwrap();
 
         let filter = Filter::and(vec![
             Filter::eq("category", "electronics"),

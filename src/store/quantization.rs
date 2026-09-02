@@ -10,7 +10,7 @@
 // 4. During search, use asymmetric distance computation with precomputed tables
 
 use super::types::Id;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use rand::seq::IndexedRandom;
 
 #[cfg(not(target_arch = "wasm32"))]

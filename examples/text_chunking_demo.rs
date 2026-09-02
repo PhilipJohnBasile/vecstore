@@ -14,8 +14,8 @@
 
 use std::collections::HashMap;
 use vecstore::{
-    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter, TokenTextSplitter},
     Metadata, Query, VecStore,
+    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter, TokenTextSplitter},
 };
 
 const SAMPLE_DOCUMENT: &str = r#"

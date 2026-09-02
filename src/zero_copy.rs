@@ -35,11 +35,11 @@
 //! store.merge("experiment")?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BTreeMap};
-use std::sync::{Arc, RwLock};
 use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::sync::{Arc, RwLock};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 // ============================================================================
 // TYPES
@@ -172,7 +172,9 @@ impl CowStorage {
         if self.deleted.contains(id) {
             return None;
         }
-        self.working.get(id).or_else(|| self.base.get(id).map(|arc| arc.as_ref()))
+        self.working
+            .get(id)
+            .or_else(|| self.base.get(id).map(|arc| arc.as_ref()))
     }
 
     /// Set a vector (copy-on-write)
@@ -277,15 +279,18 @@ impl VersionedStore {
 
         // Create initial commit
         let mut commits = BTreeMap::new();
-        commits.insert("initial".to_string(), Commit {
-            hash: "initial".to_string(),
-            parent: None,
-            message: "Initial commit".to_string(),
-            timestamp: unix_timestamp(),
-            author: None,
-            changed_ids: Vec::new(),
-            deleted_ids: Vec::new(),
-        });
+        commits.insert(
+            "initial".to_string(),
+            Commit {
+                hash: "initial".to_string(),
+                parent: None,
+                message: "Initial commit".to_string(),
+                timestamp: unix_timestamp(),
+                author: None,
+                changed_ids: Vec::new(),
+                deleted_ids: Vec::new(),
+            },
+        );
 
         Ok(Self {
             dimension,
@@ -299,7 +304,10 @@ impl VersionedStore {
 
     /// Get current branch name
     pub fn current_branch(&self) -> String {
-        self.current_branch.read().map(|b| b.clone()).unwrap_or_else(|_| "main".to_string())
+        self.current_branch
+            .read()
+            .map(|b| b.clone())
+            .unwrap_or_else(|_| "main".to_string())
     }
 
     /// Insert or update a vector
@@ -318,7 +326,8 @@ impl VersionedStore {
 
         let branch = self.current_branch.read()?.clone();
         let mut storages = self.storages.write()?;
-        let storage = storages.get_mut(&branch)
+        let storage = storages
+            .get_mut(&branch)
             .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", branch)))?;
 
         let now = unix_timestamp();
@@ -337,7 +346,8 @@ impl VersionedStore {
     pub fn delete(&self, id: &str) -> Result<bool> {
         let branch = self.current_branch.read()?.clone();
         let mut storages = self.storages.write()?;
-        let storage = storages.get_mut(&branch)
+        let storage = storages
+            .get_mut(&branch)
             .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", branch)))?;
 
         let existed = storage.get(id).is_some();
@@ -351,7 +361,9 @@ impl VersionedStore {
         let storages = self.storages.read().ok()?;
         let storage = storages.get(&branch)?;
 
-        storage.get(id).map(|d| (d.vector.clone(), d.metadata.clone()))
+        storage
+            .get(id)
+            .map(|d| (d.vector.clone(), d.metadata.clone()))
     }
 
     /// Create a commit
@@ -368,7 +380,8 @@ impl VersionedStore {
         // Commit storage changes
         let (changed, deleted) = {
             let mut storages = self.storages.write()?;
-            let storage = storages.get_mut(&branch_name)
+            let storage = storages
+                .get_mut(&branch_name)
                 .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", branch_name)))?;
             storage.commit()
         };
@@ -428,7 +441,8 @@ impl VersionedStore {
         // Get current branch head
         let head = {
             let branches = self.branches.read()?;
-            branches.get(&current)
+            branches
+                .get(&current)
                 .map(|b| b.head.clone())
                 .unwrap_or_else(|| "initial".to_string())
         };
@@ -436,7 +450,8 @@ impl VersionedStore {
         // Fork storage
         let new_storage = {
             let storages = self.storages.read()?;
-            storages.get(&current)
+            storages
+                .get(&current)
                 .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", current)))?
                 .fork()
         };
@@ -476,12 +491,13 @@ impl VersionedStore {
         {
             let current = self.current_branch.read()?.clone();
             let storages = self.storages.read()?;
-            if storages.get(&current)
+            if storages
+                .get(&current)
                 .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", current)))?
                 .is_dirty()
             {
                 return Err(VecStoreError::InvalidInput(
-                    "Uncommitted changes - commit or reset first".to_string()
+                    "Uncommitted changes - commit or reset first".to_string(),
                 ));
             }
         }
@@ -494,20 +510,25 @@ impl VersionedStore {
     pub fn reset(&self) {
         if let Ok(branch) = self.current_branch.read().map(|b| b.clone())
             && let Ok(mut storages) = self.storages.write()
-                && let Some(storage) = storages.get_mut(&branch) {
-                    storage.reset();
-                }
+            && let Some(storage) = storages.get_mut(&branch)
+        {
+            storage.reset();
+        }
     }
 
     /// Delete a branch
     pub fn delete_branch(&self, name: &str) -> Result<bool> {
         if name == "main" {
-            return Err(VecStoreError::InvalidInput("Cannot delete main branch".to_string()));
+            return Err(VecStoreError::InvalidInput(
+                "Cannot delete main branch".to_string(),
+            ));
         }
 
         let current = self.current_branch.read()?.clone();
         if current == name {
-            return Err(VecStoreError::InvalidInput("Cannot delete current branch".to_string()));
+            return Err(VecStoreError::InvalidInput(
+                "Cannot delete current branch".to_string(),
+            ));
         }
 
         let removed = {
@@ -526,9 +547,11 @@ impl VersionedStore {
     pub fn diff(&self, from: &str, to: &str) -> Result<Diff> {
         let commits = self.commits.read()?;
 
-        let from_commit = commits.get(from)
+        let from_commit = commits
+            .get(from)
             .ok_or_else(|| VecStoreError::NotFound(format!("Commit: {}", from)))?;
-        let to_commit = commits.get(to)
+        let to_commit = commits
+            .get(to)
             .ok_or_else(|| VecStoreError::NotFound(format!("Commit: {}", to)))?;
 
         // Collect changes between commits
@@ -536,8 +559,14 @@ impl VersionedStore {
         let from_changes: HashSet<_> = from_commit.changed_ids.iter().collect();
         let to_changes: HashSet<_> = to_commit.changed_ids.iter().collect();
 
-        let added: Vec<_> = to_changes.difference(&from_changes).map(|s| (*s).clone()).collect();
-        let modified: Vec<_> = to_changes.intersection(&from_changes).map(|s| (*s).clone()).collect();
+        let added: Vec<_> = to_changes
+            .difference(&from_changes)
+            .map(|s| (*s).clone())
+            .collect();
+        let modified: Vec<_> = to_changes
+            .intersection(&from_changes)
+            .map(|s| (*s).clone())
+            .collect();
         let deleted = to_commit.deleted_ids.clone();
 
         Ok(Diff {
@@ -560,14 +589,18 @@ impl VersionedStore {
         let current = self.current_branch.read()?.clone();
 
         if current == from_branch {
-            return Err(VecStoreError::InvalidInput("Cannot merge branch into itself".to_string()));
+            return Err(VecStoreError::InvalidInput(
+                "Cannot merge branch into itself".to_string(),
+            ));
         }
 
         // Get both storages
         let storages = self.storages.read()?;
-        let from_storage = storages.get(from_branch)
+        let from_storage = storages
+            .get(from_branch)
             .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", from_branch)))?;
-        let to_storage = storages.get(&current)
+        let to_storage = storages
+            .get(&current)
             .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", current)))?;
 
         // Find conflicts
@@ -580,14 +613,15 @@ impl VersionedStore {
             let to_data = to_storage.get(id);
 
             if let (Some(f), Some(t)) = (from_data, to_data)
-                && f.vector != t.vector {
-                    conflicts.push(MergeConflict {
-                        id: id.clone(),
-                        conflict_type: ConflictType::ModifyModify,
-                        ours: Some(t.vector.clone()),
-                        theirs: Some(f.vector.clone()),
-                    });
-                }
+                && f.vector != t.vector
+            {
+                conflicts.push(MergeConflict {
+                    id: id.clone(),
+                    conflict_type: ConflictType::ModifyModify,
+                    ours: Some(t.vector.clone()),
+                    theirs: Some(f.vector.clone()),
+                });
+            }
         }
 
         // Handle conflicts based on resolution strategy
@@ -605,15 +639,18 @@ impl VersionedStore {
 
         // First, collect data from source branch
         let items_to_copy: Vec<(String, VectorData)> = {
-            let from_storage = storages.get(from_branch)
+            let from_storage = storages
+                .get(from_branch)
                 .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", from_branch)))?;
-            from_ids.difference(&to_ids)
+            from_ids
+                .difference(&to_ids)
                 .filter_map(|id| from_storage.get(id).map(|data| (id.clone(), data.clone())))
                 .collect()
         };
 
         // Now apply to target branch
-        let to_storage = storages.get_mut(&current)
+        let to_storage = storages
+            .get_mut(&current)
             .ok_or_else(|| VecStoreError::NotFound(format!("Branch: {}", current)))?;
 
         // Copy new items from source
@@ -628,21 +665,29 @@ impl VersionedStore {
                 ConflictResolution::Theirs => conflict.theirs.clone(),
                 ConflictResolution::Average => {
                     if let (Some(ours), Some(theirs)) = (&conflict.ours, &conflict.theirs) {
-                        Some(ours.iter().zip(theirs).map(|(a, b)| (a + b) / 2.0).collect())
+                        Some(
+                            ours.iter()
+                                .zip(theirs)
+                                .map(|(a, b)| (a + b) / 2.0)
+                                .collect(),
+                        )
                     } else {
                         None
                     }
-                }
+                },
                 ConflictResolution::Abort => unreachable!(),
             };
 
             if let Some(vec) = resolved {
-                to_storage.set(&conflict.id, VectorData {
-                    vector: vec,
-                    metadata: None,
-                    created_at: unix_timestamp(),
-                    modified_at: unix_timestamp(),
-                });
+                to_storage.set(
+                    &conflict.id,
+                    VectorData {
+                        vector: vec,
+                        metadata: None,
+                        created_at: unix_timestamp(),
+                        modified_at: unix_timestamp(),
+                    },
+                );
             }
         }
 
@@ -660,7 +705,10 @@ impl VersionedStore {
 
     /// List all branches
     pub fn list_branches(&self) -> Vec<Branch> {
-        self.branches.read().map(|b| b.values().cloned().collect()).unwrap_or_default()
+        self.branches
+            .read()
+            .map(|b| b.values().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// List commits on current branch
@@ -696,7 +744,11 @@ impl VersionedStore {
 
     /// Get status (uncommitted changes)
     pub fn status(&self) -> StoreStatus {
-        let branch = self.current_branch.read().map(|b| b.clone()).unwrap_or_else(|_| "main".to_string());
+        let branch = self
+            .current_branch
+            .read()
+            .map(|b| b.clone())
+            .unwrap_or_else(|_| "main".to_string());
         let Ok(storages) = self.storages.read() else {
             return StoreStatus {
                 branch,
@@ -734,7 +786,9 @@ impl VersionedStore {
             return Vec::new();
         };
 
-        let mut results: Vec<_> = storage.all_ids().into_iter()
+        let mut results: Vec<_> = storage
+            .all_ids()
+            .into_iter()
             .filter_map(|id| {
                 storage.get(&id).map(|data| {
                     let score = cosine_similarity(query, &data.vector);
@@ -746,7 +800,8 @@ impl VersionedStore {
         results.sort_by(|a, b| b.1.total_cmp(&a.1));
         results.truncate(top_k);
 
-        results.into_iter()
+        results
+            .into_iter()
             .map(|(id, score)| SearchResult { id, score })
             .collect()
     }
@@ -799,7 +854,9 @@ mod tests {
     fn test_basic_operations() {
         let store = VersionedStore::new(4).unwrap();
 
-        store.upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None).unwrap();
+        store
+            .upsert("doc1", vec![1.0, 0.0, 0.0, 0.0], None)
+            .unwrap();
         let commit = store.commit("Add doc1").unwrap();
 
         assert!(!commit.hash.is_empty());
