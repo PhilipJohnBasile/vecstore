@@ -12,8 +12,8 @@
 
 use std::collections::HashMap;
 use vecstore::{
-    hamming_distance_simd, jaccard_distance_simd, manhattan_distance_simd, Distance, Metadata,
-    VecStore,
+    Distance, Metadata, VecStore, hamming_distance_simd, jaccard_distance_simd,
+    manhattan_distance_simd,
 };
 
 fn main() -> anyhow::Result<()> {

@@ -10,8 +10,8 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use vecstore::{
-    text_splitter::{CodeTextSplitter, TextSplitter},
     Metadata, Query, VecStore,
+    text_splitter::{CodeTextSplitter, TextSplitter},
 };
 
 fn main() -> Result<()> {

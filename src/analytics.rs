@@ -584,7 +584,8 @@ impl VectorAnalytics {
             let mut min_dist = f32::MAX;
             for (j, v) in vectors.iter().enumerate() {
                 if j != idx {
-                    let dist: f32 = point.iter()
+                    let dist: f32 = point
+                        .iter()
                         .zip(v.iter())
                         .map(|(a, b)| (a - b).powi(2))
                         .sum::<f32>()
@@ -606,7 +607,8 @@ impl VectorAnalytics {
             // Find nearest neighbor distance to data
             let mut min_dist = f32::MAX;
             for v in vectors {
-                let dist: f32 = random_point.iter()
+                let dist: f32 = random_point
+                    .iter()
                     .zip(v.iter())
                     .map(|(a, b)| (a - b).powi(2))
                     .sum::<f32>()

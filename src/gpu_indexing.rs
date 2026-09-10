@@ -31,7 +31,10 @@
 //! ```
 
 use std::collections::HashMap;
-use std::sync::{RwLock, atomic::{AtomicUsize, Ordering}};
+use std::sync::{
+    RwLock,
+    atomic::{AtomicUsize, Ordering},
+};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -229,8 +232,11 @@ impl MemoryPool {
     fn allocate(&self, size: usize) -> Result<usize> {
         // Try to reuse existing buffer
         {
-            let mut buffers = self.buffers.write()
-                .map_err(|_| VecStoreError::LockError("failed to acquire write lock on GPU memory pool buffers".into()))?;
+            let mut buffers = self.buffers.write().map_err(|_| {
+                VecStoreError::LockError(
+                    "failed to acquire write lock on GPU memory pool buffers".into(),
+                )
+            })?;
             for buffer in &mut *buffers {
                 if !buffer.in_use && buffer.size >= size {
                     buffer.in_use = true;
@@ -255,15 +261,20 @@ impl MemoryPool {
             in_use: true,
         };
 
-        let mut buffers = self.buffers.write()
-            .map_err(|_| VecStoreError::LockError("failed to acquire write lock on GPU memory pool buffers for allocation".into()))?;
+        let mut buffers = self.buffers.write().map_err(|_| {
+            VecStoreError::LockError(
+                "failed to acquire write lock on GPU memory pool buffers for allocation".into(),
+            )
+        })?;
         buffers.push(buffer);
 
         Ok(id)
     }
 
     fn free(&self, id: usize) {
-        let Ok(mut buffers) = self.buffers.write() else { return; };
+        let Ok(mut buffers) = self.buffers.write() else {
+            return;
+        };
         for buffer in &mut *buffers {
             if buffer.id == id {
                 buffer.in_use = false;
@@ -342,9 +353,15 @@ impl GpuHnswIndex {
         results
     }
 
-    fn search_layer(&self, query: &[f32], entry: usize, ef: usize, layer: usize) -> Vec<(usize, f32)> {
-        use std::collections::{BinaryHeap, HashSet};
+    fn search_layer(
+        &self,
+        query: &[f32],
+        entry: usize,
+        ef: usize,
+        layer: usize,
+    ) -> Vec<(usize, f32)> {
         use std::cmp::Ordering;
+        use std::collections::{BinaryHeap, HashSet};
 
         #[derive(Clone)]
         struct Candidate {
@@ -378,8 +395,14 @@ impl GpuHnswIndex {
         let mut results: BinaryHeap<Candidate> = BinaryHeap::new();
 
         let entry_dist = self.distance(query, entry);
-        candidates.push(Candidate { id: entry, distance: entry_dist });
-        results.push(Candidate { id: entry, distance: entry_dist });
+        candidates.push(Candidate {
+            id: entry,
+            distance: entry_dist,
+        });
+        results.push(Candidate {
+            id: entry,
+            distance: entry_dist,
+        });
         visited.insert(entry);
 
         while let Some(current) = candidates.pop() {
@@ -399,8 +422,14 @@ impl GpuHnswIndex {
                     let dist = self.distance(query, neighbor);
 
                     if dist < worst_result || results.len() < ef {
-                        candidates.push(Candidate { id: neighbor, distance: dist });
-                        results.push(Candidate { id: neighbor, distance: dist });
+                        candidates.push(Candidate {
+                            id: neighbor,
+                            distance: dist,
+                        });
+                        results.push(Candidate {
+                            id: neighbor,
+                            distance: dist,
+                        });
 
                         while results.len() > ef {
                             results.pop();
@@ -410,7 +439,8 @@ impl GpuHnswIndex {
             }
         }
 
-        results.into_sorted_vec()
+        results
+            .into_sorted_vec()
             .into_iter()
             .map(|c| (c.id, c.distance))
             .collect()
@@ -418,18 +448,10 @@ impl GpuHnswIndex {
 
     fn distance(&self, query: &[f32], idx: usize) -> f32 {
         match self.params.metric {
-            GpuDistanceMetric::Cosine => {
-                1.0 - cosine_similarity(query, &self.vectors[idx])
-            }
-            GpuDistanceMetric::Euclidean => {
-                euclidean_distance(query, &self.vectors[idx])
-            }
-            GpuDistanceMetric::DotProduct => {
-                -dot_product(query, &self.vectors[idx])
-            }
-            GpuDistanceMetric::Manhattan => {
-                manhattan_distance(query, &self.vectors[idx])
-            }
+            GpuDistanceMetric::Cosine => 1.0 - cosine_similarity(query, &self.vectors[idx]),
+            GpuDistanceMetric::Euclidean => euclidean_distance(query, &self.vectors[idx]),
+            GpuDistanceMetric::DotProduct => -dot_product(query, &self.vectors[idx]),
+            GpuDistanceMetric::Manhattan => manhattan_distance(query, &self.vectors[idx]),
         }
     }
 
@@ -440,7 +462,9 @@ impl GpuHnswIndex {
 
     /// Get index statistics
     pub fn stats(&self) -> GpuIndexStats {
-        let total_edges: usize = self.layers.iter()
+        let total_edges: usize = self
+            .layers
+            .iter()
             .flat_map(|l| l.values())
             .map(|neighbors| neighbors.len())
             .sum();
@@ -562,7 +586,8 @@ impl GpuIndexBuilder {
         }
 
         // Entry point is the node with the highest layer
-        let entry_point = node_layers.iter()
+        let entry_point = node_layers
+            .iter()
             .enumerate()
             .max_by_key(|(_, l)| **l)
             .map(|(i, _)| i);
@@ -576,9 +601,8 @@ impl GpuIndexBuilder {
             #[allow(clippy::needless_range_loop)]
             for layer in 0..=node_max_layer {
                 // Find neighbors at this layer
-                let nodes_at_layer: Vec<usize> = (0..i)
-                    .filter(|&j| node_layers[j] >= layer)
-                    .collect();
+                let nodes_at_layer: Vec<usize> =
+                    (0..i).filter(|&j| node_layers[j] >= layer).collect();
 
                 if nodes_at_layer.is_empty() {
                     continue;
@@ -589,10 +613,16 @@ impl GpuIndexBuilder {
                     .iter()
                     .map(|&j| {
                         let d = match params.metric {
-                            GpuDistanceMetric::Cosine => 1.0 - cosine_similarity(&vectors[i], &vectors[j]),
-                            GpuDistanceMetric::Euclidean => euclidean_distance(&vectors[i], &vectors[j]),
+                            GpuDistanceMetric::Cosine => {
+                                1.0 - cosine_similarity(&vectors[i], &vectors[j])
+                            },
+                            GpuDistanceMetric::Euclidean => {
+                                euclidean_distance(&vectors[i], &vectors[j])
+                            },
                             GpuDistanceMetric::DotProduct => -dot_product(&vectors[i], &vectors[j]),
-                            GpuDistanceMetric::Manhattan => manhattan_distance(&vectors[i], &vectors[j]),
+                            GpuDistanceMetric::Manhattan => {
+                                manhattan_distance(&vectors[i], &vectors[j])
+                            },
                         };
                         (j, d)
                     })
@@ -601,10 +631,8 @@ impl GpuIndexBuilder {
                 distances.sort_by(|a, b| a.1.total_cmp(&b.1));
 
                 // Keep M neighbors
-                let neighbors: Vec<usize> = distances.iter()
-                    .take(params.m)
-                    .map(|(j, _)| *j)
-                    .collect();
+                let neighbors: Vec<usize> =
+                    distances.iter().take(params.m).map(|(j, _)| *j).collect();
 
                 // Add bidirectional edges
                 layers[layer].insert(i, neighbors.clone());
@@ -650,18 +678,23 @@ impl GpuIndexBuilder {
     }
 
     /// Compute batch distances on GPU
-    pub fn batch_distances(&self, queries: &[Vec<f32>], database: &[Vec<f32>], metric: GpuDistanceMetric) -> Vec<Vec<f32>> {
+    pub fn batch_distances(
+        &self,
+        queries: &[Vec<f32>],
+        database: &[Vec<f32>],
+        metric: GpuDistanceMetric,
+    ) -> Vec<Vec<f32>> {
         // In production, this would run on GPU
-        queries.iter()
+        queries
+            .iter()
             .map(|query| {
-                database.iter()
-                    .map(|doc| {
-                        match metric {
-                            GpuDistanceMetric::Cosine => 1.0 - cosine_similarity(query, doc),
-                            GpuDistanceMetric::Euclidean => euclidean_distance(query, doc),
-                            GpuDistanceMetric::DotProduct => -dot_product(query, doc),
-                            GpuDistanceMetric::Manhattan => manhattan_distance(query, doc),
-                        }
+                database
+                    .iter()
+                    .map(|doc| match metric {
+                        GpuDistanceMetric::Cosine => 1.0 - cosine_similarity(query, doc),
+                        GpuDistanceMetric::Euclidean => euclidean_distance(query, doc),
+                        GpuDistanceMetric::DotProduct => -dot_product(query, doc),
+                        GpuDistanceMetric::Manhattan => manhattan_distance(query, doc),
                     })
                     .collect()
             })
@@ -676,18 +709,16 @@ impl GpuIndexBuilder {
     /// Get available GPU devices
     pub fn available_devices() -> Vec<GpuDeviceInfo> {
         // In production, would actually enumerate devices
-        vec![
-            GpuDeviceInfo {
-                index: 0,
-                name: "CPU (Fallback)".to_string(),
-                backend: GpuBackendType::CPU,
-                memory_bytes: 16 * 1024 * 1024 * 1024, // 16GB
-                available_memory_bytes: 8 * 1024 * 1024 * 1024,
-                compute_capability: None,
-                max_work_group_size: 1024,
-                max_shared_memory: 48 * 1024,
-            }
-        ]
+        vec![GpuDeviceInfo {
+            index: 0,
+            name: "CPU (Fallback)".to_string(),
+            backend: GpuBackendType::CPU,
+            memory_bytes: 16 * 1024 * 1024 * 1024, // 16GB
+            available_memory_bytes: 8 * 1024 * 1024 * 1024,
+            compute_capability: None,
+            max_work_group_size: 1024,
+            max_shared_memory: 48 * 1024,
+        }]
     }
 }
 
@@ -753,9 +784,7 @@ mod tests {
         let builder = GpuIndexBuilder::new(config);
 
         let vectors: Vec<Vec<f32>> = (0..100)
-            .map(|i| {
-                (0..64).map(|j| ((i + j) as f32) / 100.0).collect()
-            })
+            .map(|i| (0..64).map(|j| ((i + j) as f32) / 100.0).collect())
             .collect();
 
         let params = HnswParams {
@@ -777,11 +806,7 @@ mod tests {
         let config = GpuConfig::default();
         let builder = GpuIndexBuilder::new(config);
 
-        let vectors: Vec<Vec<f32>> = (0..50)
-            .map(|i| {
-                vec![i as f32 / 50.0; 32]
-            })
-            .collect();
+        let vectors: Vec<Vec<f32>> = (0..50).map(|i| vec![i as f32 / 50.0; 32]).collect();
 
         let params = HnswParams::default();
         let index = builder.build_hnsw(&vectors, params).unwrap();
@@ -799,10 +824,7 @@ mod tests {
         let config = GpuConfig::default();
         let builder = GpuIndexBuilder::new(config);
 
-        let queries = vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-        ];
+        let queries = vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]];
 
         let database = vec![
             vec![1.0, 0.0, 0.0],
@@ -831,9 +853,7 @@ mod tests {
         let config = GpuConfig::default();
         let builder = GpuIndexBuilder::new(config);
 
-        let vectors: Vec<Vec<f32>> = (0..20)
-            .map(|i| vec![i as f32; 16])
-            .collect();
+        let vectors: Vec<Vec<f32>> = (0..20).map(|i| vec![i as f32; 16]).collect();
 
         let index = builder.build_hnsw(&vectors, HnswParams::default()).unwrap();
         let stats = index.build_stats();

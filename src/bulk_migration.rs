@@ -139,18 +139,19 @@ impl PineconeMigration {
 
         for (i, vector_data) in vectors.iter().enumerate().skip(start_offset) {
             if i % self.config.batch_size == 0
-                && let Some(ref callback) = self.progress_callback {
-                    callback(migrated, total);
-                }
+                && let Some(ref callback) = self.progress_callback
+            {
+                callback(migrated, total);
+            }
 
             match self.import_vector(vector_data, store) {
                 Ok(size) => {
                     migrated += 1;
                     bytes += size;
-                }
+                },
                 Err(_) => {
                     errors += 1;
-                }
+                },
             }
         }
 
@@ -238,9 +239,10 @@ impl QdrantMigration {
 
         for (i, line) in reader.lines().enumerate() {
             if let Some(offset) = self.config.resume_from
-                && i < offset {
-                    continue;
-                }
+                && i < offset
+            {
+                continue;
+            }
 
             let line = line.map_err(|e| anyhow::anyhow!("Read error: {}", e))?;
 
@@ -248,10 +250,10 @@ impl QdrantMigration {
                 Ok(size) => {
                     migrated += 1;
                     bytes += size;
-                }
+                },
                 Err(_) => {
                     errors += 1;
-                }
+                },
             }
         }
 
@@ -371,10 +373,10 @@ impl ChromaDBMigration {
                 Ok(_) => {
                     migrated += 1;
                     bytes += (id.len() + embedding.len() * 4 + 100) as u64;
-                }
+                },
                 Err(_) => {
                     errors += 1;
-                }
+                },
             }
         }
 

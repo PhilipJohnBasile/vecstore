@@ -33,7 +33,10 @@
 //! ```
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -218,7 +221,9 @@ impl BackpressureController {
 
     /// Check if should accept more records
     pub fn should_accept(&self) -> bool {
-        let Ok(state_guard) = self.state.read() else { return false; };
+        let Ok(state_guard) = self.state.read() else {
+            return false;
+        };
         let state = *state_guard;
 
         match state {
@@ -227,11 +232,11 @@ impl BackpressureController {
                 // Only accept if below low watermark
                 let fill_ratio = self.buffer_fill_ratio();
                 fill_ratio < self.config.low_watermark
-            }
+            },
             _ => {
                 // Accept if rate limiter allows
                 self.rate_limiter.try_acquire()
-            }
+            },
         }
     }
 
@@ -292,7 +297,9 @@ impl BackpressureController {
 
     /// Commit checkpoint
     pub fn commit_checkpoint(&self, offsets: HashMap<u32, u64>) {
-        let Ok(mut checkpoint) = self.checkpoint.write() else { return; };
+        let Ok(mut checkpoint) = self.checkpoint.write() else {
+            return;
+        };
         checkpoint.offsets = offsets;
         checkpoint.timestamp = unix_timestamp();
         checkpoint.pending_txns.clear();
@@ -327,9 +334,11 @@ impl BackpressureController {
             f64::INFINITY
         };
 
-        let partition_lag = self.partition_offsets.read()
+        let partition_lag = self
+            .partition_offsets
+            .read()
             .map(|guard| guard.clone())
-            .unwrap_or_default();  // Safe: returns empty HashMap on lock failure
+            .unwrap_or_default(); // Safe: returns empty HashMap on lock failure
 
         LagMetrics {
             pending_records: pending,
@@ -342,13 +351,15 @@ impl BackpressureController {
 
     /// Get current state
     pub fn get_state(&self) -> BackpressureState {
-        let Ok(state) = self.state.read() else { return BackpressureState::Normal; };
+        let Ok(state) = self.state.read() else {
+            return BackpressureState::Normal;
+        };
         *state
     }
 
     /// Get statistics
     pub fn get_stats(&self) -> StreamStats {
-        let dlq_size = self.dlq.read().map(|guard| guard.len()).unwrap_or(0);  // Safe: returns 0 on lock failure
+        let dlq_size = self.dlq.read().map(|guard| guard.len()).unwrap_or(0); // Safe: returns 0 on lock failure
         StreamStats {
             received: self.received.load(Ordering::Relaxed),
             processed: self.processed.load(Ordering::Relaxed),
@@ -362,7 +373,9 @@ impl BackpressureController {
 
     /// Get DLQ records
     pub fn get_dlq_records(&self, limit: usize) -> Vec<DeadLetterRecord> {
-        let Ok(dlq) = self.dlq.read() else { return Vec::new(); };
+        let Ok(dlq) = self.dlq.read() else {
+            return Vec::new();
+        };
         dlq.iter().take(limit).cloned().collect()
     }
 
@@ -386,12 +399,16 @@ impl BackpressureController {
     }
 
     fn calculate_processing_rate(&self) -> f64 {
-        let Ok(starts) = self.processing_starts.read() else { return 0.0; };
+        let Ok(starts) = self.processing_starts.read() else {
+            return 0.0;
+        };
         if starts.len() < 2 {
             return 0.0;
         }
 
-        let Some(oldest) = starts.front() else { return 0.0; };
+        let Some(oldest) = starts.front() else {
+            return 0.0;
+        };
         let elapsed = oldest.elapsed().as_secs_f64();
 
         if elapsed > 0.0 {
@@ -402,7 +419,9 @@ impl BackpressureController {
     }
 
     fn update_state(&self) {
-        let Ok(mut state) = self.state.write() else { return; };
+        let Ok(mut state) = self.state.write() else {
+            return;
+        };
 
         // Check circuit breaker
         if self.circuit_breaker.is_open() {
@@ -421,27 +440,29 @@ impl BackpressureController {
                 if fill_ratio >= self.config.high_watermark {
                     *state = BackpressureState::Backpressure;
                 }
-            }
+            },
             BackpressureState::Backpressure => {
                 if fill_ratio < self.config.low_watermark {
                     *state = BackpressureState::Normal;
                 }
-            }
+            },
             BackpressureState::CircuitOpen => {
                 if self.circuit_breaker.should_allow_request() {
                     *state = BackpressureState::Recovering;
                 }
-            }
+            },
             BackpressureState::Recovering => {
                 if !self.circuit_breaker.is_open() {
                     *state = BackpressureState::Normal;
                 }
-            }
+            },
         }
     }
 
     fn add_to_dlq<T: Serialize>(&self, record: &StreamRecord<T>, error: &str) {
-        let Ok(mut dlq) = self.dlq.write() else { return; };
+        let Ok(mut dlq) = self.dlq.write() else {
+            return;
+        };
 
         // Evict oldest if full
         while dlq.len() >= self.config.dlq_max_size {
@@ -507,19 +528,20 @@ impl RateLimiter {
             if current == 0 {
                 return false;
             }
-            if self.tokens.compare_exchange(
-                current,
-                current - 1,
-                Ordering::Relaxed,
-                Ordering::Relaxed,
-            ).is_ok() {
+            if self
+                .tokens
+                .compare_exchange(current, current - 1, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
                 return true;
             }
         }
     }
 
     fn refill(&self) {
-        let Ok(mut last) = self.last_refill.write() else { return; };
+        let Ok(mut last) = self.last_refill.write() else {
+            return;
+        };
         let elapsed = last.elapsed();
 
         if elapsed >= Duration::from_millis(100) {
@@ -566,7 +588,9 @@ impl CircuitBreaker {
     fn record_success(&self) {
         self.success_count.fetch_add(1, Ordering::Relaxed);
 
-        let Ok(mut state) = self.state.write() else { return; };
+        let Ok(mut state) = self.state.write() else {
+            return;
+        };
         if *state == CircuitState::HalfOpen {
             // Reset on success in half-open
             *state = CircuitState::Closed;
@@ -581,36 +605,44 @@ impl CircuitBreaker {
         }
 
         if count >= self.failure_threshold
-            && let Ok(mut state) = self.state.write() {
-                *state = CircuitState::Open;
-            }
+            && let Ok(mut state) = self.state.write()
+        {
+            *state = CircuitState::Open;
+        }
     }
 
     fn is_open(&self) -> bool {
-        let Ok(state_guard) = self.state.read() else { return true; };  // Fail-safe: treat as open
+        let Ok(state_guard) = self.state.read() else {
+            return true;
+        }; // Fail-safe: treat as open
         let state = *state_guard;
         drop(state_guard);
 
         match state {
             CircuitState::Open => {
                 // Check if timeout has passed
-                let Ok(last_failure_guard) = self.last_failure.read() else { return true; };
+                let Ok(last_failure_guard) = self.last_failure.read() else {
+                    return true;
+                };
                 if let Some(last) = *last_failure_guard
-                    && last.elapsed() > Duration::from_secs(self.timeout_seconds) {
-                        drop(last_failure_guard);
-                        if let Ok(mut state) = self.state.write() {
-                            *state = CircuitState::HalfOpen;
-                        }
-                        return false;
+                    && last.elapsed() > Duration::from_secs(self.timeout_seconds)
+                {
+                    drop(last_failure_guard);
+                    if let Ok(mut state) = self.state.write() {
+                        *state = CircuitState::HalfOpen;
                     }
+                    return false;
+                }
                 true
-            }
+            },
             _ => false,
         }
     }
 
     fn should_allow_request(&self) -> bool {
-        let Ok(state) = self.state.read() else { return false; };  // Fail-safe: deny requests on lock failure
+        let Ok(state) = self.state.read() else {
+            return false;
+        }; // Fail-safe: deny requests on lock failure
         *state != CircuitState::Open
     }
 }
@@ -640,7 +672,9 @@ impl<T: Clone + Serialize> BatchProcessor<T> {
 
         self.controller.record_received();
 
-        let Ok(mut buffer) = self.buffer.write() else { return false; };
+        let Ok(mut buffer) = self.buffer.write() else {
+            return false;
+        };
         buffer.push(record);
 
         true
@@ -648,13 +682,17 @@ impl<T: Clone + Serialize> BatchProcessor<T> {
 
     /// Check if batch is ready
     pub fn is_batch_ready(&self) -> bool {
-        let Ok(buffer) = self.buffer.read() else { return false; };
+        let Ok(buffer) = self.buffer.read() else {
+            return false;
+        };
         buffer.len() >= self.batch_size
     }
 
     /// Get batch for processing
     pub fn take_batch(&self) -> Vec<StreamRecord<T>> {
-        let Ok(mut buffer) = self.buffer.write() else { return Vec::new(); };
+        let Ok(mut buffer) = self.buffer.write() else {
+            return Vec::new();
+        };
         let batch: Vec<_> = buffer.drain(..).collect();
         batch
     }

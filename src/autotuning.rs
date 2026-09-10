@@ -259,17 +259,17 @@ impl AutoTuner {
 
         // Adjust ef_construction and ef_search to meet recall constraints
         if let Some(recall) = params.estimated_recall
-            && recall < constraints.min_recall {
-                // Increase ef_search to improve recall
-                let recall_deficit = constraints.min_recall - recall;
-                let boost = 1.0 + recall_deficit * 2.0; // Heuristic
-                params.ef_search = (params.ef_search as f32 * boost) as usize;
-                params.ef_search = params.ef_search.min(500);
+            && recall < constraints.min_recall
+        {
+            // Increase ef_search to improve recall
+            let recall_deficit = constraints.min_recall - recall;
+            let boost = 1.0 + recall_deficit * 2.0; // Heuristic
+            params.ef_search = (params.ef_search as f32 * boost) as usize;
+            params.ef_search = params.ef_search.min(500);
 
-                // Update estimated recall
-                params.estimated_recall =
-                    Some(params.estimated_recall.unwrap() + recall_deficit * 0.5);
-            }
+            // Update estimated recall
+            params.estimated_recall = Some(params.estimated_recall.unwrap() + recall_deficit * 0.5);
+        }
 
         Ok(params)
     }

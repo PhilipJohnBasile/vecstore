@@ -35,7 +35,10 @@
 //! ```
 
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, RwLock, atomic::{AtomicU64, AtomicBool, Ordering}};
+use std::sync::{
+    Arc, RwLock,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
@@ -271,15 +274,17 @@ impl ChangeFilter {
     fn matches(&self, event: &ChangeEvent) -> bool {
         // Check operation
         if let Some(ops) = &self.operations
-            && !ops.contains(&event.operation) {
-                return false;
-            }
+            && !ops.contains(&event.operation)
+        {
+            return false;
+        }
 
         // Check document ID
         if let Some(ids) = &self.document_ids
-            && !ids.contains(&event.document_id) {
-                return false;
-            }
+            && !ids.contains(&event.document_id)
+        {
+            return false;
+        }
 
         // Check metadata
         if let Some(filter) = &self.metadata_filter {
@@ -322,12 +327,16 @@ impl Subscription {
 
     /// Get next event (non-blocking)
     pub fn try_next(&self) -> Result<Option<ChangeEvent>, VecStoreError> {
-        let mut events = self.events.write()
+        let mut events = self
+            .events
+            .write()
             .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
         let event = events.pop_front();
 
         if let Some(ref e) = event {
-            let mut token = self.last_token.write()
+            let mut token = self
+                .last_token
+                .write()
                 .map_err(|_| VecStoreError::LockError("last_token lock poisoned".into()))?;
             *token = Some(e.resume_token.clone());
         }
@@ -337,13 +346,17 @@ impl Subscription {
 
     /// Get batch of events
     pub fn try_batch(&self, max: usize) -> Result<Vec<ChangeEvent>, VecStoreError> {
-        let mut events = self.events.write()
+        let mut events = self
+            .events
+            .write()
             .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
         let count = max.min(events.len());
         let batch: Vec<ChangeEvent> = events.drain(..count).collect();
 
         if let Some(last) = batch.last() {
-            let mut token = self.last_token.write()
+            let mut token = self
+                .last_token
+                .write()
                 .map_err(|_| VecStoreError::LockError("last_token lock poisoned".into()))?;
             *token = Some(last.resume_token.clone());
         }
@@ -353,7 +366,9 @@ impl Subscription {
 
     /// Get last resume token
     pub fn resume_token(&self) -> Result<Option<ResumeToken>, VecStoreError> {
-        let token = self.last_token.read()
+        let token = self
+            .last_token
+            .read()
             .map_err(|_| VecStoreError::LockError("last_token lock poisoned".into()))?;
         Ok(token.clone())
     }
@@ -365,14 +380,18 @@ impl Subscription {
 
     /// Check if events are pending
     pub fn has_events(&self) -> Result<bool, VecStoreError> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
         Ok(!events.is_empty())
     }
 
     /// Get pending event count
     pub fn pending_count(&self) -> Result<usize, VecStoreError> {
-        let events = self.events.read()
+        let events = self
+            .events
+            .read()
             .map_err(|_| VecStoreError::LockError("events lock poisoned".into()))?;
         Ok(events.len())
     }
@@ -433,7 +452,9 @@ impl ChangeStream {
             last_token: Arc::new(RwLock::new(None)),
         });
 
-        let mut subs = self.subscriptions.write()
+        let mut subs = self
+            .subscriptions
+            .write()
             .map_err(|_| VecStoreError::LockError("subscriptions lock poisoned".into()))?;
         subs.insert(id, subscription.clone());
 
@@ -442,7 +463,9 @@ impl ChangeStream {
 
     /// Unwatch (close subscription)
     pub fn unwatch(&self, subscription_id: u64) -> Result<(), VecStoreError> {
-        let mut subs = self.subscriptions.write()
+        let mut subs = self
+            .subscriptions
+            .write()
             .map_err(|_| VecStoreError::LockError("subscriptions lock poisoned".into()))?;
         if let Some(sub) = subs.remove(&subscription_id) {
             sub.close();
@@ -451,7 +474,13 @@ impl ChangeStream {
     }
 
     /// Emit an event
-    pub fn emit(&self, operation: Operation, document_id: &str, before: Option<DocumentSnapshot>, after: Option<DocumentSnapshot>) -> Result<(), VecStoreError> {
+    pub fn emit(
+        &self,
+        operation: Operation,
+        document_id: &str,
+        before: Option<DocumentSnapshot>,
+        after: Option<DocumentSnapshot>,
+    ) -> Result<(), VecStoreError> {
         let event_id = self.event_counter.fetch_add(1, Ordering::Relaxed);
         let timestamp = unix_timestamp();
 
@@ -475,7 +504,9 @@ impl ChangeStream {
 
         // Add to log
         {
-            let mut log = self.event_log.write()
+            let mut log = self
+                .event_log
+                .write()
                 .map_err(|_| VecStoreError::LockError("event_log lock poisoned".into()))?;
             log.push_back(event.clone());
             while log.len() > self.max_log_size {
@@ -489,7 +520,12 @@ impl ChangeStream {
     }
 
     /// Emit insert event
-    pub fn emit_insert(&self, id: &str, vector: Vec<f32>, metadata: HashMap<String, serde_json::Value>) -> Result<(), VecStoreError> {
+    pub fn emit_insert(
+        &self,
+        id: &str,
+        vector: Vec<f32>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Result<(), VecStoreError> {
         let snapshot = DocumentSnapshot {
             id: id.to_string(),
             vector: Some(vector),
@@ -501,23 +537,35 @@ impl ChangeStream {
     }
 
     /// Emit update event
-    pub fn emit_update(&self, id: &str, before: Option<DocumentSnapshot>, after: DocumentSnapshot) -> Result<(), VecStoreError> {
+    pub fn emit_update(
+        &self,
+        id: &str,
+        before: Option<DocumentSnapshot>,
+        after: DocumentSnapshot,
+    ) -> Result<(), VecStoreError> {
         self.emit(Operation::Update, id, before, Some(after))
     }
 
     /// Emit delete event
-    pub fn emit_delete(&self, id: &str, before: Option<DocumentSnapshot>) -> Result<(), VecStoreError> {
+    pub fn emit_delete(
+        &self,
+        id: &str,
+        before: Option<DocumentSnapshot>,
+    ) -> Result<(), VecStoreError> {
         self.emit(Operation::Delete, id, before, None)
     }
 
     fn notify_subscriptions(&self, event: &ChangeEvent) -> Result<(), VecStoreError> {
-        let subs = self.subscriptions.read()
+        let subs = self
+            .subscriptions
+            .read()
             .map_err(|_| VecStoreError::LockError("subscriptions lock poisoned".into()))?;
 
         for sub in subs.values() {
             if sub.is_active() && sub.filter.matches(event) {
-                let mut events = sub.events.write()
-                    .map_err(|_| VecStoreError::LockError("subscription events lock poisoned".into()))?;
+                let mut events = sub.events.write().map_err(|_| {
+                    VecStoreError::LockError("subscription events lock poisoned".into())
+                })?;
 
                 // Apply backpressure
                 if events.len() < sub.filter.batch_size * 10 {
@@ -529,38 +577,49 @@ impl ChangeStream {
         Ok(())
     }
 
-    fn replay_from(&self, token: &ResumeToken, filter: &ChangeFilter) -> Result<VecDeque<ChangeEvent>, VecStoreError> {
-        let log = self.event_log.read()
+    fn replay_from(
+        &self,
+        token: &ResumeToken,
+        filter: &ChangeFilter,
+    ) -> Result<VecDeque<ChangeEvent>, VecStoreError> {
+        let log = self
+            .event_log
+            .read()
             .map_err(|_| VecStoreError::LockError("event_log lock poisoned".into()))?;
 
         // Find starting position
-        let start_id: u64 = token.token
+        let start_id: u64 = token
+            .token
             .split(':')
             .nth(1)
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
 
-        Ok(log.iter()
+        Ok(log
+            .iter()
             .filter(|e| e.id > start_id && filter.matches(e))
             .cloned()
             .collect())
     }
 
     fn replay_all(&self, filter: &ChangeFilter) -> Result<VecDeque<ChangeEvent>, VecStoreError> {
-        let log = self.event_log.read()
+        let log = self
+            .event_log
+            .read()
             .map_err(|_| VecStoreError::LockError("event_log lock poisoned".into()))?;
 
-        Ok(log.iter()
-            .filter(|e| filter.matches(e))
-            .cloned()
-            .collect())
+        Ok(log.iter().filter(|e| filter.matches(e)).cloned().collect())
     }
 
     /// Get statistics
     pub fn stats(&self) -> Result<ChangeStreamStats, VecStoreError> {
-        let subs = self.subscriptions.read()
+        let subs = self
+            .subscriptions
+            .read()
             .map_err(|_| VecStoreError::LockError("subscriptions lock poisoned".into()))?;
-        let log = self.event_log.read()
+        let log = self
+            .event_log
+            .read()
             .map_err(|_| VecStoreError::LockError("event_log lock poisoned".into()))?;
 
         Ok(ChangeStreamStats {
@@ -596,7 +655,9 @@ impl ChangeStreamManager {
 
     /// Get or create stream for collection
     pub fn stream(&self, collection: &str) -> Result<Arc<ChangeStream>, VecStoreError> {
-        let streams = self.streams.read()
+        let streams = self
+            .streams
+            .read()
             .map_err(|_| VecStoreError::LockError("streams lock poisoned".into()))?;
 
         if let Some(stream) = streams.get(collection) {
@@ -605,7 +666,9 @@ impl ChangeStreamManager {
 
         drop(streams);
 
-        let mut streams = self.streams.write()
+        let mut streams = self
+            .streams
+            .write()
             .map_err(|_| VecStoreError::LockError("streams lock poisoned".into()))?;
         Ok(streams
             .entry(collection.to_string())
@@ -615,20 +678,20 @@ impl ChangeStreamManager {
 
     /// Watch all collections
     pub fn watch_all(&self, filter: ChangeFilter) -> Result<Vec<Arc<Subscription>>, VecStoreError> {
-        let streams = self.streams.read()
+        let streams = self
+            .streams
+            .read()
             .map_err(|_| VecStoreError::LockError("streams lock poisoned".into()))?;
-        streams.values()
-            .map(|s| s.watch(filter.clone()))
-            .collect()
+        streams.values().map(|s| s.watch(filter.clone())).collect()
     }
 
     /// Get all statistics
     pub fn stats(&self) -> Result<Vec<ChangeStreamStats>, VecStoreError> {
-        let streams = self.streams.read()
+        let streams = self
+            .streams
+            .read()
             .map_err(|_| VecStoreError::LockError("streams lock poisoned".into()))?;
-        streams.values()
-            .map(|s| s.stats())
-            .collect()
+        streams.values().map(|s| s.stats()).collect()
     }
 }
 
@@ -657,8 +720,12 @@ mod tests {
         let sub = stream.watch(ChangeFilter::all()).unwrap();
 
         // Emit events
-        stream.emit_insert("doc1", vec![0.1, 0.2], HashMap::new()).unwrap();
-        stream.emit_insert("doc2", vec![0.3, 0.4], HashMap::new()).unwrap();
+        stream
+            .emit_insert("doc1", vec![0.1, 0.2], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc2", vec![0.3, 0.4], HashMap::new())
+            .unwrap();
 
         // Check events
         let event1 = sub.try_next().unwrap().unwrap();
@@ -677,9 +744,13 @@ mod tests {
         let sub = stream.watch(ChangeFilter::inserts()).unwrap();
 
         // Emit mixed events
-        stream.emit_insert("doc1", vec![0.1], HashMap::new()).unwrap();
+        stream
+            .emit_insert("doc1", vec![0.1], HashMap::new())
+            .unwrap();
         stream.emit_delete("doc2", None).unwrap();
-        stream.emit_insert("doc3", vec![0.2], HashMap::new()).unwrap();
+        stream
+            .emit_insert("doc3", vec![0.2], HashMap::new())
+            .unwrap();
 
         // Should only get inserts
         let events = sub.try_batch(10).unwrap();
@@ -692,9 +763,15 @@ mod tests {
         let stream = ChangeStream::new("test");
 
         // Emit some events
-        stream.emit_insert("doc1", vec![0.1], HashMap::new()).unwrap();
-        stream.emit_insert("doc2", vec![0.2], HashMap::new()).unwrap();
-        stream.emit_insert("doc3", vec![0.3], HashMap::new()).unwrap();
+        stream
+            .emit_insert("doc1", vec![0.1], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc2", vec![0.2], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc3", vec![0.3], HashMap::new())
+            .unwrap();
 
         // First subscriber gets all events
         let sub1 = stream.watch(ChangeFilter::all()).unwrap();
@@ -704,7 +781,9 @@ mod tests {
         let token = events[1].resume_token.clone();
 
         // Second subscriber resumes after doc2
-        let sub2 = stream.watch(ChangeFilter::all().resume_after(token)).unwrap();
+        let sub2 = stream
+            .watch(ChangeFilter::all().resume_after(token))
+            .unwrap();
 
         // Should get doc3 only
         let events = sub2.try_batch(10).unwrap();
@@ -717,13 +796,26 @@ mod tests {
         let stream = ChangeStream::new("test");
 
         // Subscribe to specific documents
-        let sub = stream.watch(ChangeFilter::for_documents(vec!["doc1".to_string(), "doc3".to_string()])).unwrap();
+        let sub = stream
+            .watch(ChangeFilter::for_documents(vec![
+                "doc1".to_string(),
+                "doc3".to_string(),
+            ]))
+            .unwrap();
 
         // Emit events
-        stream.emit_insert("doc1", vec![0.1], HashMap::new()).unwrap();
-        stream.emit_insert("doc2", vec![0.2], HashMap::new()).unwrap();
-        stream.emit_insert("doc3", vec![0.3], HashMap::new()).unwrap();
-        stream.emit_insert("doc4", vec![0.4], HashMap::new()).unwrap();
+        stream
+            .emit_insert("doc1", vec![0.1], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc2", vec![0.2], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc3", vec![0.3], HashMap::new())
+            .unwrap();
+        stream
+            .emit_insert("doc4", vec![0.4], HashMap::new())
+            .unwrap();
 
         // Should only get doc1 and doc3
         let events = sub.try_batch(10).unwrap();
@@ -739,8 +831,12 @@ mod tests {
         let stream1 = manager.stream("collection1").unwrap();
         let stream2 = manager.stream("collection2").unwrap();
 
-        stream1.emit_insert("doc1", vec![0.1], HashMap::new()).unwrap();
-        stream2.emit_insert("doc2", vec![0.2], HashMap::new()).unwrap();
+        stream1
+            .emit_insert("doc1", vec![0.1], HashMap::new())
+            .unwrap();
+        stream2
+            .emit_insert("doc2", vec![0.2], HashMap::new())
+            .unwrap();
 
         let stats = manager.stats().unwrap();
         assert_eq!(stats.len(), 2);
@@ -765,7 +861,9 @@ mod tests {
             timestamp: unix_timestamp(),
         };
 
-        stream.emit_update("doc1", Some(before.clone()), after).unwrap();
+        stream
+            .emit_update("doc1", Some(before.clone()), after)
+            .unwrap();
 
         let event = sub.try_next().unwrap().unwrap();
         assert_eq!(event.operation, Operation::Update);

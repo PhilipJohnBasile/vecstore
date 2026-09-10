@@ -139,9 +139,10 @@ impl<V: Clone> SemanticCache<V> {
             for (idx, entry) in bucket.iter().enumerate() {
                 // Check TTL
                 if let Some(ttl) = self.ttl
-                    && now.duration_since(entry.inserted_at) > ttl {
-                        continue; // Skip expired entries
-                    }
+                    && now.duration_since(entry.inserted_at) > ttl
+                {
+                    continue; // Skip expired entries
+                }
 
                 // Calculate similarity
                 let similarity = Self::cosine_similarity(query, &entry.query);
@@ -151,8 +152,8 @@ impl<V: Clone> SemanticCache<V> {
                         None => best_match = Some((idx, similarity)),
                         Some((_, prev_sim)) if similarity > prev_sim => {
                             best_match = Some((idx, similarity));
-                        }
-                        _ => {}
+                        },
+                        _ => {},
                     }
                 }
             }
@@ -181,9 +182,10 @@ impl<V: Clone> SemanticCache<V> {
             for entry in bucket {
                 // Check TTL
                 if let Some(ttl) = self.ttl
-                    && now.duration_since(entry.inserted_at) > ttl {
-                        continue;
-                    }
+                    && now.duration_since(entry.inserted_at) > ttl
+                {
+                    continue;
+                }
 
                 let similarity = Self::cosine_similarity(query, &entry.query);
                 if similarity >= self.similarity_threshold {
@@ -270,12 +272,13 @@ impl<V: Clone> SemanticCache<V> {
 
         // Remove the LRU entry
         if let Some(bucket_key) = oldest_bucket
-            && let Some(bucket) = self.entries.get_mut(&bucket_key) {
-                bucket.remove(oldest_idx);
-                if bucket.is_empty() {
-                    self.entries.remove(&bucket_key);
-                }
+            && let Some(bucket) = self.entries.get_mut(&bucket_key)
+        {
+            bucket.remove(oldest_idx);
+            if bucket.is_empty() {
+                self.entries.remove(&bucket_key);
             }
+        }
     }
 
     /// Hash vector to bucket key (quantized hashing)

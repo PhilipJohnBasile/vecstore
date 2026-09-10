@@ -137,8 +137,9 @@ impl VecDatabase {
 
         // Create namespace with quotas
         {
-            let manager = self.manager.read()
-                .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+            let manager = self.manager.read().map_err(|_| {
+                crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+            })?;
             manager
                 .create_namespace(namespace_id.clone(), description, Some(config.quotas))
                 .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))?;
@@ -168,8 +169,9 @@ impl VecDatabase {
     pub fn get_collection(&self, name: &str) -> Result<Option<Collection>> {
         let namespace_id: NamespaceId = name.to_string();
 
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         // Check if namespace exists
         match manager.get_namespace(&namespace_id) {
             Ok(_) => Ok(Some(Collection {
@@ -196,8 +198,9 @@ impl VecDatabase {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn list_collections(&self) -> Result<Vec<String>> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         let namespaces = manager.list_namespaces();
         Ok(namespaces.into_iter().map(|ns| ns.id).collect())
     }
@@ -215,8 +218,9 @@ impl VecDatabase {
     /// ```
     pub fn delete_collection(&mut self, name: &str) -> Result<()> {
         let namespace_id: NamespaceId = name.to_string();
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .delete_namespace(&namespace_id)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))
@@ -315,8 +319,9 @@ impl Collection {
     ///
     /// Returns information about vector count, storage usage, etc.
     pub fn stats(&self) -> Result<NamespaceStats> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .get_stats(&self.namespace_id)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))
@@ -324,8 +329,9 @@ impl Collection {
 
     /// Get namespace metadata (includes resource usage)
     pub fn namespace(&self) -> Result<Namespace> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .get_namespace(&self.namespace_id)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))
@@ -350,8 +356,9 @@ impl Collection {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn upsert(&mut self, id: String, vector: Vec<f32>, metadata: Metadata) -> Result<()> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .upsert(&self.namespace_id, id, vector, metadata)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))
@@ -379,8 +386,9 @@ impl Collection {
     /// # Ok::<(), anyhow::Error>(())
     /// ```
     pub fn query(&self, query: Query) -> Result<Vec<Neighbor>> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .query(&self.namespace_id, query)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))
@@ -388,8 +396,9 @@ impl Collection {
 
     /// Delete a vector by ID
     pub fn delete(&mut self, id: &str) -> Result<()> {
-        let manager = self.manager.read()
-            .map_err(|_| crate::error::VecStoreError::LockError("manager read lock poisoned".into()))?;
+        let manager = self.manager.read().map_err(|_| {
+            crate::error::VecStoreError::LockError("manager read lock poisoned".into())
+        })?;
         manager
             .remove(&self.namespace_id, id)
             .map_err(|e| crate::error::VecStoreError::Other(e.to_string()))

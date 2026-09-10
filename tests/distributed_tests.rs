@@ -33,7 +33,10 @@ fn test_distributed_config_builder() {
     assert_eq!(config.replication_factor, 5);
     assert_eq!(config.sharding_strategy, ShardingStrategy::ConsistentHash);
     assert_eq!(config.consistency_level, ConsistencyLevel::Quorum);
-    assert_eq!(config.replication_strategy, ReplicationStrategy::PrimaryBackup);
+    assert_eq!(
+        config.replication_strategy,
+        ReplicationStrategy::PrimaryBackup
+    );
 }
 
 /// Test sharding strategies
@@ -197,11 +200,11 @@ fn test_node_status() {
     // Just ensure all statuses are valid and can be used
     for status in statuses {
         match status {
-            NodeStatus::Healthy => {}
-            NodeStatus::Degraded => {}
-            NodeStatus::Failed => {}
-            NodeStatus::Joining => {}
-            NodeStatus::Leaving => {}
+            NodeStatus::Healthy => {},
+            NodeStatus::Degraded => {},
+            NodeStatus::Failed => {},
+            NodeStatus::Joining => {},
+            NodeStatus::Leaving => {},
         }
     }
 }

@@ -98,7 +98,7 @@
 pub mod cuda_kernels;
 pub mod metal_executor;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
@@ -253,7 +253,7 @@ impl GpuExecutor {
                     {
                         return Err(anyhow!("CUDA support not compiled. Enable 'cuda' feature."));
                     }
-                }
+                },
                 GpuBackend::Metal => {
                     #[cfg(feature = "metal")]
                     {
@@ -265,10 +265,10 @@ impl GpuExecutor {
                             "Metal support not compiled. Enable 'metal' feature."
                         ));
                     }
-                }
+                },
                 GpuBackend::Cpu => {
                     return Ok(Arc::new(CpuBackend::new(config)));
-                }
+                },
                 GpuBackend::WebGpu => {
                     #[cfg(feature = "webgpu")]
                     {
@@ -282,7 +282,7 @@ impl GpuExecutor {
                     {
                         return Err(anyhow!("WebGPU requires 'webgpu' feature"));
                     }
-                }
+                },
             }
         }
 
@@ -552,7 +552,10 @@ impl GpuOps for CudaBackend {
             name: props.name,
             total_memory_bytes: props.total_memory_bytes,
             available_memory_bytes: props.total_memory_bytes, // Approximation
-            compute_capability: (props.compute_capability.0 as u32, props.compute_capability.1 as u32),
+            compute_capability: (
+                props.compute_capability.0 as u32,
+                props.compute_capability.1 as u32,
+            ),
             max_threads_per_block: props.max_threads_per_block as usize,
             num_streaming_multiprocessors: props.multiprocessor_count as usize,
         }
@@ -570,7 +573,8 @@ impl GpuOps for CudaBackend {
         let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
 
         // Execute GPU kernel
-        self.executor.euclidean_distance(query, &flat_database, num_vectors, vector_dim)
+        self.executor
+            .euclidean_distance(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn batch_cosine_similarity(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
@@ -583,7 +587,8 @@ impl GpuOps for CudaBackend {
 
         let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
 
-        self.executor.cosine_similarity(query, &flat_database, num_vectors, vector_dim)
+        self.executor
+            .cosine_similarity(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn batch_dot_product(&self, query: &[f32], database: &[Vec<f32>]) -> Result<Vec<f32>> {
@@ -596,7 +601,8 @@ impl GpuOps for CudaBackend {
 
         let flat_database: Vec<f32> = database.iter().flat_map(|v| v.iter().copied()).collect();
 
-        self.executor.dot_product(query, &flat_database, num_vectors, vector_dim)
+        self.executor
+            .dot_product(query, &flat_database, num_vectors, vector_dim)
     }
 
     fn matrix_multiply(&self, a: &[Vec<f32>], b: &[Vec<f32>]) -> Result<Vec<Vec<f32>>> {
@@ -615,7 +621,9 @@ impl GpuOps for CudaBackend {
 
         let flat_vectors: Vec<f32> = vectors.iter().flat_map(|v| v.iter().copied()).collect();
 
-        let normalized = self.executor.l2_normalize(&flat_vectors, num_vectors, vector_dim)?;
+        let normalized = self
+            .executor
+            .l2_normalize(&flat_vectors, num_vectors, vector_dim)?;
 
         // Reshape back to Vec<Vec<f32>>
         Ok(normalized.chunks(vector_dim).map(|c| c.to_vec()).collect())
@@ -646,9 +654,7 @@ impl GpuOps for CudaBackend {
 // ============================================================================
 
 #[cfg(all(target_os = "macos", feature = "metal"))]
-use metal::{
-    Buffer, CommandQueue, ComputePipelineState, Device, MTLResourceOptions, MTLSize,
-};
+use metal::{Buffer, CommandQueue, ComputePipelineState, Device, MTLResourceOptions, MTLSize};
 
 /// Metal Shading Language source code for compute kernels
 #[cfg(all(target_os = "macos", feature = "metal"))]
@@ -797,8 +803,8 @@ impl MetalBackend {
     /// Create a new Metal backend with GPU device initialization
     pub fn new(config: &GpuConfig) -> Result<Self> {
         // Get the system default Metal device
-        let device = Device::system_default()
-            .ok_or_else(|| anyhow!("No Metal-capable GPU device found"))?;
+        let device =
+            Device::system_default().ok_or_else(|| anyhow!("No Metal-capable GPU device found"))?;
 
         // Create command queue for submitting work to GPU
         let command_queue = device.new_command_queue();
@@ -809,7 +815,8 @@ impl MetalBackend {
             .map_err(|e| anyhow!("Failed to compile Metal shaders: {}", e))?;
 
         // Create compute pipeline states for each kernel
-        let euclidean_pipeline = Self::create_pipeline(&device, &library, "euclidean_distance_kernel")?;
+        let euclidean_pipeline =
+            Self::create_pipeline(&device, &library, "euclidean_distance_kernel")?;
         let cosine_pipeline = Self::create_pipeline(&device, &library, "cosine_similarity_kernel")?;
         let dot_product_pipeline = Self::create_pipeline(&device, &library, "dot_product_kernel")?;
         let normalize_pipeline = Self::create_pipeline(&device, &library, "l2_normalize_kernel")?;
@@ -861,7 +868,8 @@ impl MetalBackend {
     /// Create an empty Metal buffer for output
     fn create_output_buffer(&self, num_elements: usize) -> Buffer {
         let size = (num_elements * size_of::<f32>()) as u64;
-        self.device.new_buffer(size, MTLResourceOptions::StorageModeShared)
+        self.device
+            .new_buffer(size, MTLResourceOptions::StorageModeShared)
     }
 
     /// Read results from a Metal buffer back to CPU
@@ -951,7 +959,8 @@ impl GpuOps for MetalBackend {
             total_memory_bytes: recommended_max,
             available_memory_bytes: recommended_max, // Unified memory, estimation
             compute_capability: (supports_family.0, supports_family.1),
-            max_threads_per_block: self.euclidean_pipeline.max_total_threads_per_threadgroup() as usize,
+            max_threads_per_block: self.euclidean_pipeline.max_total_threads_per_threadgroup()
+                as usize,
             num_streaming_multiprocessors: 10, // Not directly exposed by Metal API
         }
     }
@@ -969,7 +978,9 @@ impl GpuOps for MetalBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -999,7 +1010,9 @@ impl GpuOps for MetalBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -1029,7 +1042,9 @@ impl GpuOps for MetalBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -1051,15 +1066,18 @@ impl GpuOps for MetalBackend {
             return Ok(vec![]);
         }
 
-        let m = a.len();         // rows of A
-        let k = a[0].len();      // cols of A = rows of B
-        let n = b[0].len();      // cols of B
+        let m = a.len(); // rows of A
+        let k = a[0].len(); // cols of A = rows of B
+        let n = b[0].len(); // cols of B
 
         // Validate dimensions
         if b.len() != k {
             return Err(anyhow!(
                 "Matrix dimension mismatch: A is {}x{}, B is {}x{}",
-                m, k, b.len(), n
+                m,
+                k,
+                b.len(),
+                n
             ));
         }
 
@@ -1132,7 +1150,9 @@ impl GpuOps for MetalBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Vector {} has dimension {} but expected {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -1211,9 +1231,7 @@ impl GpuOps for MetalBackend {
 
         // Partial sort for efficiency when k << n
         if k < indexed.len() / 2 {
-            indexed.select_nth_unstable_by(k, |a, b| {
-                a.1.total_cmp(&b.1)
-            });
+            indexed.select_nth_unstable_by(k, |a, b| a.1.total_cmp(&b.1));
             indexed.truncate(k);
             indexed.sort_by(|a, b| a.1.total_cmp(&b.1));
         } else {
@@ -1539,43 +1557,29 @@ impl WebGpuBackend {
 
         // Request device with reasonable limits for compute
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("VecStore WebGPU Device"),
-                    required_features: wgpu::Features::empty(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: wgpu::MemoryHints::default(),
-                    trace: wgpu::Trace::default(),
-                    experimental_features: wgpu::ExperimentalFeatures::default(),
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("VecStore WebGPU Device"),
+                required_features: wgpu::Features::empty(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: wgpu::MemoryHints::default(),
+                trace: wgpu::Trace::default(),
+                experimental_features: wgpu::ExperimentalFeatures::default(),
+            })
             .await
             .map_err(|e| anyhow!("Failed to create WebGPU device: {}", e))?;
 
         // Compile all compute shaders and create pipelines
-        let euclidean_pipeline = Self::create_compute_pipeline(
-            &device,
-            WGSL_EUCLIDEAN_DISTANCE,
-            "euclidean_distance",
-        )?;
+        let euclidean_pipeline =
+            Self::create_compute_pipeline(&device, WGSL_EUCLIDEAN_DISTANCE, "euclidean_distance")?;
 
-        let cosine_pipeline = Self::create_compute_pipeline(
-            &device,
-            WGSL_COSINE_SIMILARITY,
-            "cosine_similarity",
-        )?;
+        let cosine_pipeline =
+            Self::create_compute_pipeline(&device, WGSL_COSINE_SIMILARITY, "cosine_similarity")?;
 
-        let dot_product_pipeline = Self::create_compute_pipeline(
-            &device,
-            WGSL_DOT_PRODUCT,
-            "dot_product",
-        )?;
+        let dot_product_pipeline =
+            Self::create_compute_pipeline(&device, WGSL_DOT_PRODUCT, "dot_product")?;
 
-        let normalize_pipeline = Self::create_compute_pipeline(
-            &device,
-            WGSL_L2_NORMALIZE,
-            "l2_normalize",
-        )?;
+        let normalize_pipeline =
+            Self::create_compute_pipeline(&device, WGSL_L2_NORMALIZE, "l2_normalize")?;
 
         Ok(Self {
             config: config.clone(),
@@ -1646,17 +1650,21 @@ impl WebGpuBackend {
         use wgpu::util::DeviceExt;
 
         // Create GPU buffers
-        let query_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Query Buffer"),
-            contents: bytemuck::cast_slice(query),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let query_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Query Buffer"),
+                contents: bytemuck::cast_slice(query),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
-        let database_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Database Buffer"),
-            contents: bytemuck::cast_slice(database),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let database_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Database Buffer"),
+                contents: bytemuck::cast_slice(database),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         // Output buffer (results)
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1681,11 +1689,13 @@ impl WebGpuBackend {
             _padding0: 0,
             _padding1: 0,
         };
-        let params_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Params Buffer"),
-            contents: bytemuck::cast_slice(&[params]),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Params Buffer"),
+                contents: bytemuck::cast_slice(&[params]),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         // Create bind group
         let bind_group_layout = pipeline.get_bind_group_layout(0);
@@ -1713,9 +1723,11 @@ impl WebGpuBackend {
         });
 
         // Create and submit command buffer
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Compute Encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Compute Encoder"),
+            });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1749,10 +1761,12 @@ impl WebGpuBackend {
         });
 
         // Poll the device until the buffer is mapped
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(std::time::Duration::from_secs(60)),
-        }).map_err(|e| anyhow!("GPU poll failed: {:?}", e))?;
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(60)),
+            })
+            .map_err(|e| anyhow!("GPU poll failed: {:?}", e))?;
 
         receiver
             .recv()
@@ -1779,11 +1793,13 @@ impl WebGpuBackend {
         let total_elements = num_vectors * vector_dim;
 
         // Create GPU buffers
-        let input_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Input Buffer"),
-            contents: bytemuck::cast_slice(input),
-            usage: wgpu::BufferUsages::STORAGE,
-        });
+        let input_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Input Buffer"),
+                contents: bytemuck::cast_slice(input),
+                usage: wgpu::BufferUsages::STORAGE,
+            });
 
         // Output buffer
         let output_buffer = self.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1808,11 +1824,13 @@ impl WebGpuBackend {
             _padding0: 0,
             _padding1: 0,
         };
-        let params_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Params Buffer"),
-            contents: bytemuck::cast_slice(&[params]),
-            usage: wgpu::BufferUsages::UNIFORM,
-        });
+        let params_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Params Buffer"),
+                contents: bytemuck::cast_slice(&[params]),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
 
         // Create bind group
         let bind_group_layout = self.normalize_pipeline.get_bind_group_layout(0);
@@ -1836,9 +1854,11 @@ impl WebGpuBackend {
         });
 
         // Create and submit command buffer
-        let mut encoder = self.device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("Normalize Encoder"),
-        });
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Normalize Encoder"),
+            });
 
         {
             let mut compute_pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -1869,10 +1889,12 @@ impl WebGpuBackend {
             let _ = sender.send(result);
         });
 
-        self.device.poll(wgpu::PollType::Wait {
-            submission_index: None,
-            timeout: Some(std::time::Duration::from_secs(60)),
-        }).map_err(|e| anyhow!("GPU poll failed: {:?}", e))?;
+        self.device
+            .poll(wgpu::PollType::Wait {
+                submission_index: None,
+                timeout: Some(std::time::Duration::from_secs(60)),
+            })
+            .map_err(|e| anyhow!("GPU poll failed: {:?}", e))?;
 
         receiver
             .recv()
@@ -1931,11 +1953,14 @@ impl GpuOps for WebGpuBackend {
         GpuDeviceInfo {
             backend: GpuBackend::WebGpu,
             device_id: self.config.device_id,
-            name: format!("{} ({:?})", self.adapter_info.name, self.adapter_info.backend),
+            name: format!(
+                "{} ({:?})",
+                self.adapter_info.name, self.adapter_info.backend
+            ),
             total_memory_bytes: self.config.max_memory_bytes,
             available_memory_bytes: self.config.max_memory_bytes,
-            compute_capability: (1, 0), // WebGPU version indicator
-            max_threads_per_block: 256, // Workgroup size
+            compute_capability: (1, 0),       // WebGPU version indicator
+            max_threads_per_block: 256,       // Workgroup size
             num_streaming_multiprocessors: 1, // Not directly available in WebGPU
         }
     }
@@ -1951,7 +1976,9 @@ impl GpuOps for WebGpuBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Database vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -1971,7 +1998,9 @@ impl GpuOps for WebGpuBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Database vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -1991,7 +2020,9 @@ impl GpuOps for WebGpuBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Database vector {} has dimension {} but query has dimension {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -2022,7 +2053,9 @@ impl GpuOps for WebGpuBackend {
             if vec.len() != vector_dim {
                 return Err(anyhow!(
                     "Vector {} has dimension {} but expected {}",
-                    i, vec.len(), vector_dim
+                    i,
+                    vec.len(),
+                    vector_dim
                 ));
             }
         }
@@ -2061,9 +2094,7 @@ impl GpuOps for WebGpuBackend {
         // Partial sort to get top k (more efficient than full sort for small k)
         let k = k.min(indexed.len());
         if k < indexed.len() {
-            indexed.select_nth_unstable_by(k, |a, b| {
-                a.1.total_cmp(&b.1)
-            });
+            indexed.select_nth_unstable_by(k, |a, b| a.1.total_cmp(&b.1));
             indexed.truncate(k);
         }
 
@@ -2351,7 +2382,10 @@ mod tests {
 
         #[test]
         fn test_metal_is_available() {
-            assert!(MetalBackend::is_available(), "Metal should be available on macOS");
+            assert!(
+                MetalBackend::is_available(),
+                "Metal should be available on macOS"
+            );
         }
 
         #[test]
@@ -2373,16 +2407,19 @@ mod tests {
 
             let query = vec![1.0, 2.0, 3.0, 4.0];
             let database = vec![
-                vec![1.0, 2.0, 3.0, 4.0],  // Same as query
-                vec![2.0, 3.0, 4.0, 5.0],  // Different
-                vec![0.0, 0.0, 0.0, 0.0],  // Origin
+                vec![1.0, 2.0, 3.0, 4.0], // Same as query
+                vec![2.0, 3.0, 4.0, 5.0], // Different
+                vec![0.0, 0.0, 0.0, 0.0], // Origin
             ];
 
             let distances = backend.batch_euclidean_distance(&query, &database).unwrap();
 
             assert_eq!(distances.len(), 3);
             assert!(distances[0] < 0.001, "Same vector should have distance ~0");
-            assert!(distances[1] > 1.0, "Different vector should have larger distance");
+            assert!(
+                distances[1] > 1.0,
+                "Different vector should have larger distance"
+            );
             assert!(distances[2] > 5.0, "Origin should have large distance");
         }
 
@@ -2393,17 +2430,23 @@ mod tests {
 
             let query = vec![1.0, 0.0, 0.0, 0.0];
             let database = vec![
-                vec![1.0, 0.0, 0.0, 0.0],   // Same direction
-                vec![0.0, 1.0, 0.0, 0.0],   // Perpendicular
-                vec![-1.0, 0.0, 0.0, 0.0],  // Opposite
+                vec![1.0, 0.0, 0.0, 0.0],  // Same direction
+                vec![0.0, 1.0, 0.0, 0.0],  // Perpendicular
+                vec![-1.0, 0.0, 0.0, 0.0], // Opposite
             ];
 
             let similarities = backend.batch_cosine_similarity(&query, &database).unwrap();
 
             assert_eq!(similarities.len(), 3);
-            assert!((similarities[0] - 1.0).abs() < 0.001, "Same direction should be 1.0");
+            assert!(
+                (similarities[0] - 1.0).abs() < 0.001,
+                "Same direction should be 1.0"
+            );
             assert!(similarities[1].abs() < 0.001, "Perpendicular should be 0.0");
-            assert!((similarities[2] + 1.0).abs() < 0.001, "Opposite should be -1.0");
+            assert!(
+                (similarities[2] + 1.0).abs() < 0.001,
+                "Opposite should be -1.0"
+            );
         }
 
         #[test]
@@ -2413,8 +2456,8 @@ mod tests {
 
             let query = vec![1.0, 2.0, 3.0, 4.0];
             let database = vec![
-                vec![1.0, 1.0, 1.0, 1.0],  // Sum = 10
-                vec![2.0, 2.0, 2.0, 2.0],  // Sum = 20
+                vec![1.0, 1.0, 1.0, 1.0], // Sum = 10
+                vec![2.0, 2.0, 2.0, 2.0], // Sum = 20
             ];
 
             let products = backend.batch_dot_product(&query, &database).unwrap();
@@ -2430,8 +2473,8 @@ mod tests {
             let backend = MetalBackend::new(&config).unwrap();
 
             let vectors = vec![
-                vec![3.0, 4.0, 0.0, 0.0],  // Magnitude 5
-                vec![1.0, 0.0, 0.0, 0.0],  // Already normalized
+                vec![3.0, 4.0, 0.0, 0.0], // Magnitude 5
+                vec![1.0, 0.0, 0.0, 0.0], // Already normalized
             ];
 
             let normalized = backend.batch_normalize(&vectors).unwrap();
@@ -2447,23 +2490,17 @@ mod tests {
             let config = GpuConfig::default();
             let backend = MetalBackend::new(&config).unwrap();
 
-            let a = vec![
-                vec![1.0, 2.0],
-                vec![3.0, 4.0],
-            ];
-            let b = vec![
-                vec![5.0, 6.0],
-                vec![7.0, 8.0],
-            ];
+            let a = vec![vec![1.0, 2.0], vec![3.0, 4.0]];
+            let b = vec![vec![5.0, 6.0], vec![7.0, 8.0]];
 
             let result = backend.matrix_multiply(&a, &b).unwrap();
 
             assert_eq!(result.len(), 2);
             assert_eq!(result[0].len(), 2);
-            assert!((result[0][0] - 19.0).abs() < 0.001);  // 1*5 + 2*7
-            assert!((result[0][1] - 22.0).abs() < 0.001);  // 1*6 + 2*8
-            assert!((result[1][0] - 43.0).abs() < 0.001);  // 3*5 + 4*7
-            assert!((result[1][1] - 50.0).abs() < 0.001);  // 3*6 + 4*8
+            assert!((result[0][0] - 19.0).abs() < 0.001); // 1*5 + 2*7
+            assert!((result[0][1] - 22.0).abs() < 0.001); // 1*6 + 2*8
+            assert!((result[1][0] - 43.0).abs() < 0.001); // 3*5 + 4*7
+            assert!((result[1][1] - 50.0).abs() < 0.001); // 3*6 + 4*8
         }
 
         #[test]
@@ -2475,7 +2512,7 @@ mod tests {
             let database = vec![
                 vec![0.0, 0.0, 0.0, 0.0],
                 vec![1.0, 1.0, 0.0, 0.0],
-                vec![0.5, 0.5, 0.0, 0.0],  // Exact match
+                vec![0.5, 0.5, 0.0, 0.0], // Exact match
                 vec![10.0, 10.0, 0.0, 0.0],
             ];
 
@@ -2483,7 +2520,7 @@ mod tests {
 
             assert_eq!(indices.len(), 2);
             assert_eq!(distances.len(), 2);
-            assert_eq!(indices[0], 2);  // Exact match should be first
+            assert_eq!(indices[0], 2); // Exact match should be first
             assert!(distances[0] < 0.001);
         }
 
@@ -2498,7 +2535,11 @@ mod tests {
 
             let query: Vec<f32> = (0..dimension).map(|i| i as f32 * 0.01).collect();
             let database: Vec<Vec<f32>> = (0..num_vectors)
-                .map(|i| (0..dimension).map(|j| ((i + j) % 100) as f32 * 0.01).collect())
+                .map(|i| {
+                    (0..dimension)
+                        .map(|j| ((i + j) % 100) as f32 * 0.01)
+                        .collect()
+                })
                 .collect();
 
             let distances = backend.batch_euclidean_distance(&query, &database).unwrap();
@@ -2516,12 +2557,11 @@ mod tests {
             assert_eq!(executor.backend_type(), GpuBackend::Metal);
 
             let query = vec![1.0, 2.0, 3.0];
-            let database = vec![
-                vec![1.0, 2.0, 3.0],
-                vec![4.0, 5.0, 6.0],
-            ];
+            let database = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
 
-            let distances = executor.batch_euclidean_distance(&query, &database).unwrap();
+            let distances = executor
+                .batch_euclidean_distance(&query, &database)
+                .unwrap();
             assert_eq!(distances.len(), 2);
         }
 
@@ -2551,7 +2591,7 @@ mod tests {
 
             let query = vec![1.0, 2.0, 3.0];
             let mismatched_db = vec![
-                vec![1.0, 2.0],  // Wrong dimension
+                vec![1.0, 2.0], // Wrong dimension
             ];
 
             let result = backend.batch_euclidean_distance(&query, &mismatched_db);
@@ -2594,21 +2634,24 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let query = vec![1.0, 2.0, 3.0, 4.0];
             let database = vec![
-                vec![1.0, 2.0, 3.0, 4.0],  // Same as query
-                vec![2.0, 3.0, 4.0, 5.0],  // Different
-                vec![0.0, 0.0, 0.0, 0.0],  // Origin
+                vec![1.0, 2.0, 3.0, 4.0], // Same as query
+                vec![2.0, 3.0, 4.0, 5.0], // Different
+                vec![0.0, 0.0, 0.0, 0.0], // Origin
             ];
 
             let distances = backend.batch_euclidean_distance(&query, &database).unwrap();
 
             assert_eq!(distances.len(), 3);
             assert!(distances[0] < 0.001, "Same vector should have distance ~0");
-            assert!(distances[1] > 1.0, "Different vector should have larger distance");
+            assert!(
+                distances[1] > 1.0,
+                "Different vector should have larger distance"
+            );
             assert!(distances[2] > 5.0, "Origin should have large distance");
         }
 
@@ -2620,22 +2663,28 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let query = vec![1.0, 0.0, 0.0, 0.0];
             let database = vec![
-                vec![1.0, 0.0, 0.0, 0.0],   // Same direction
-                vec![0.0, 1.0, 0.0, 0.0],   // Perpendicular
-                vec![-1.0, 0.0, 0.0, 0.0],  // Opposite
+                vec![1.0, 0.0, 0.0, 0.0],  // Same direction
+                vec![0.0, 1.0, 0.0, 0.0],  // Perpendicular
+                vec![-1.0, 0.0, 0.0, 0.0], // Opposite
             ];
 
             let similarities = backend.batch_cosine_similarity(&query, &database).unwrap();
 
             assert_eq!(similarities.len(), 3);
-            assert!((similarities[0] - 1.0).abs() < 0.01, "Same direction should be 1.0");
+            assert!(
+                (similarities[0] - 1.0).abs() < 0.01,
+                "Same direction should be 1.0"
+            );
             assert!(similarities[1].abs() < 0.01, "Perpendicular should be 0.0");
-            assert!((similarities[2] + 1.0).abs() < 0.01, "Opposite should be -1.0");
+            assert!(
+                (similarities[2] + 1.0).abs() < 0.01,
+                "Opposite should be -1.0"
+            );
         }
 
         #[test]
@@ -2646,13 +2695,13 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let query = vec![1.0, 2.0, 3.0, 4.0];
             let database = vec![
-                vec![1.0, 1.0, 1.0, 1.0],  // Sum = 10
-                vec![2.0, 2.0, 2.0, 2.0],  // Sum = 20
+                vec![1.0, 1.0, 1.0, 1.0], // Sum = 10
+                vec![2.0, 2.0, 2.0, 2.0], // Sum = 20
             ];
 
             let products = backend.batch_dot_product(&query, &database).unwrap();
@@ -2670,12 +2719,12 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let vectors = vec![
-                vec![3.0, 4.0, 0.0, 0.0],  // Magnitude 5
-                vec![1.0, 0.0, 0.0, 0.0],  // Already normalized
+                vec![3.0, 4.0, 0.0, 0.0], // Magnitude 5
+                vec![1.0, 0.0, 0.0, 0.0], // Already normalized
             ];
 
             let normalized = backend.batch_normalize(&vectors).unwrap();
@@ -2694,14 +2743,14 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let query = vec![0.5, 0.5, 0.0, 0.0];
             let database = vec![
                 vec![0.0, 0.0, 0.0, 0.0],
                 vec![1.0, 1.0, 0.0, 0.0],
-                vec![0.5, 0.5, 0.0, 0.0],  // Exact match
+                vec![0.5, 0.5, 0.0, 0.0], // Exact match
                 vec![10.0, 10.0, 0.0, 0.0],
             ];
 
@@ -2709,7 +2758,7 @@ mod tests {
 
             assert_eq!(indices.len(), 2);
             assert_eq!(distances.len(), 2);
-            assert_eq!(indices[0], 2);  // Exact match should be first
+            assert_eq!(indices[0], 2); // Exact match should be first
             assert!(distances[0] < 0.001);
         }
 
@@ -2721,7 +2770,7 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             // Create a large batch to test GPU performance
@@ -2730,7 +2779,11 @@ mod tests {
 
             let query: Vec<f32> = (0..dimension).map(|i| i as f32 * 0.01).collect();
             let database: Vec<Vec<f32>> = (0..num_vectors)
-                .map(|i| (0..dimension).map(|j| ((i + j) % 100) as f32 * 0.01).collect())
+                .map(|i| {
+                    (0..dimension)
+                        .map(|j| ((i + j) % 100) as f32 * 0.01)
+                        .collect()
+                })
                 .collect();
 
             let distances = backend.batch_euclidean_distance(&query, &database).unwrap();
@@ -2748,18 +2801,17 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             assert_eq!(executor.backend_type(), GpuBackend::WebGpu);
 
             let query = vec![1.0, 2.0, 3.0];
-            let database = vec![
-                vec![1.0, 2.0, 3.0],
-                vec![4.0, 5.0, 6.0],
-            ];
+            let database = vec![vec![1.0, 2.0, 3.0], vec![4.0, 5.0, 6.0]];
 
-            let distances = executor.batch_euclidean_distance(&query, &database).unwrap();
+            let distances = executor
+                .batch_euclidean_distance(&query, &database)
+                .unwrap();
             assert_eq!(distances.len(), 2);
         }
 
@@ -2771,7 +2823,7 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             // Empty database should return empty results
@@ -2796,12 +2848,12 @@ mod tests {
                 Err(_) => {
                     println!("Skipping test: WebGPU not available");
                     return;
-                }
+                },
             };
 
             let query = vec![1.0, 2.0, 3.0];
             let mismatched_db = vec![
-                vec![1.0, 2.0],  // Wrong dimension
+                vec![1.0, 2.0], // Wrong dimension
             ];
 
             let result = backend.batch_euclidean_distance(&query, &mismatched_db);

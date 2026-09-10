@@ -165,7 +165,7 @@ impl IsolationForest {
             IsolationTree::Leaf { size } => {
                 // Adjust for unsuccessful search
                 height as f32 + Self::average_path_length(*size)
-            }
+            },
             IsolationTree::Node {
                 feature,
                 split_value,
@@ -177,7 +177,7 @@ impl IsolationForest {
                 } else {
                     self.path_length(vector, right, height + 1)
                 }
-            }
+            },
         }
     }
 
@@ -278,11 +278,7 @@ impl LocalOutlierFactor {
             .enumerate()
             .filter_map(|(i, v)| {
                 let dist = euclidean_distance_simd(vector, v);
-                if dist > 0.0 {
-                    Some((i, dist))
-                } else {
-                    None
-                }
+                if dist > 0.0 { Some((i, dist)) } else { None }
             })
             .collect();
 

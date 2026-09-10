@@ -30,7 +30,10 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::hash::{Hash, Hasher};
-use std::sync::{RwLock, atomic::{AtomicU64, Ordering}};
+use std::sync::{
+    RwLock,
+    atomic::{AtomicU64, Ordering},
+};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -326,14 +329,16 @@ impl PrefetchPredictor {
     }
 
     fn should_prefetch(&self, query_hash: &str) -> bool {
-        self.patterns.iter()
+        self.patterns
+            .iter()
             .find(|p| p.query_hash == query_hash)
             .map(|p| p.count >= self.min_count)
             .unwrap_or(false)
     }
 
     fn get_frequent_patterns(&self) -> Vec<String> {
-        self.patterns.iter()
+        self.patterns
+            .iter()
             .filter(|p| p.count >= self.min_count)
             .map(|p| p.query_hash.clone())
             .collect()
@@ -390,7 +395,9 @@ impl AdaptiveCache {
 
         // Quick bloom filter check
         if !self.bloom.might_contain(key) {
-            let mut stats = self.l1_stats.write()
+            let mut stats = self
+                .l1_stats
+                .write()
                 .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
             stats.misses += 1;
             return Ok(None);
@@ -398,12 +405,16 @@ impl AdaptiveCache {
 
         // Check L1 (hot)
         {
-            let mut l1 = self.l1.write()
+            let mut l1 = self
+                .l1
+                .write()
                 .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
             if let Some(entry) = l1.get_mut(key) {
                 if !entry.is_expired(Duration::from_secs(self.config.l1_ttl_seconds)) {
                     entry.touch();
-                    let mut stats = self.l1_stats.write()
+                    let mut stats = self
+                        .l1_stats
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
                     stats.hits += 1;
                     return Ok(Some(entry.value.clone()));
@@ -415,45 +426,61 @@ impl AdaptiveCache {
 
         // Check L2 (warm) and promote to L1
         {
-            let mut l2 = self.l2.write()
+            let mut l2 = self
+                .l2
+                .write()
                 .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
             if let Some(entry) = l2.remove(key)
-                && !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds)) {
-                    let mut stats = self.l2_stats.write()
-                        .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
-                    stats.hits += 1;
-                    drop(stats);
-                    let value = entry.value.clone();
-                    self.promote_to_l1(key, entry)?;
-                    return Ok(Some(value));
-                }
+                && !entry.is_expired(Duration::from_secs(self.config.l2_ttl_seconds))
+            {
+                let mut stats = self
+                    .l2_stats
+                    .write()
+                    .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
+                stats.hits += 1;
+                drop(stats);
+                let value = entry.value.clone();
+                self.promote_to_l1(key, entry)?;
+                return Ok(Some(value));
+            }
         }
 
         // Check L3 (disk) and promote to L2
         if self.config.enable_l3 {
-            let mut l3 = self.l3.write()
+            let mut l3 = self
+                .l3
+                .write()
                 .map_err(|_| VecStoreError::LockError("l3 cache lock poisoned".into()))?;
             if let Some(entry) = l3.remove(key)
-                && !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds)) {
-                    let mut stats = self.l3_stats.write()
-                        .map_err(|_| VecStoreError::LockError("l3_stats lock poisoned".into()))?;
-                    stats.hits += 1;
-                    drop(stats);
-                    let value = entry.value.clone();
-                    self.promote_to_l2(key, entry)?;
-                    return Ok(Some(value));
-                }
+                && !entry.is_expired(Duration::from_secs(self.config.l3_ttl_seconds))
+            {
+                let mut stats = self
+                    .l3_stats
+                    .write()
+                    .map_err(|_| VecStoreError::LockError("l3_stats lock poisoned".into()))?;
+                stats.hits += 1;
+                drop(stats);
+                let value = entry.value.clone();
+                self.promote_to_l2(key, entry)?;
+                return Ok(Some(value));
+            }
         }
 
         // Miss
-        let mut stats = self.l1_stats.write()
+        let mut stats = self
+            .l1_stats
+            .write()
             .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
         stats.misses += 1;
         Ok(None)
     }
 
     /// Get with semantic matching
-    pub fn get_semantic(&self, key: &str, query_vector: &[f32]) -> Result<Option<CachedResult>, VecStoreError> {
+    pub fn get_semantic(
+        &self,
+        key: &str,
+        query_vector: &[f32],
+    ) -> Result<Option<CachedResult>, VecStoreError> {
         // Try exact match first
         if let Some(result) = self.get(key)? {
             return Ok(Some(result));
@@ -464,7 +491,9 @@ impl AdaptiveCache {
         }
 
         // Try semantic matching in L1
-        let l1 = self.l1.read()
+        let l1 = self
+            .l1
+            .read()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
         for (_, entry) in l1.iter() {
             if let Some(ref cached_vector) = entry.query_vector {
@@ -472,7 +501,9 @@ impl AdaptiveCache {
                 if similarity >= self.config.similarity_threshold {
                     let value = entry.value.clone();
                     drop(l1);
-                    let mut stats = self.l1_stats.write()
+                    let mut stats = self
+                        .l1_stats
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
                     stats.hits += 1;
                     return Ok(Some(value));
@@ -489,7 +520,12 @@ impl AdaptiveCache {
     }
 
     /// Put with query vector (for semantic matching)
-    pub fn put_with_vector(&self, key: &str, value: CachedResult, query_vector: Option<Vec<f32>>) -> Result<(), VecStoreError> {
+    pub fn put_with_vector(
+        &self,
+        key: &str,
+        value: CachedResult,
+        query_vector: Option<Vec<f32>>,
+    ) -> Result<(), VecStoreError> {
         let size_bytes = estimate_size(&value);
 
         let entry = CacheEntry {
@@ -506,7 +542,9 @@ impl AdaptiveCache {
 
         // Record for prefetching
         if self.config.enable_prefetch {
-            let mut prefetch = self.prefetch.write()
+            let mut prefetch = self
+                .prefetch
+                .write()
                 .map_err(|_| VecStoreError::LockError("prefetch lock poisoned".into()))?;
             prefetch.record(key, query_vector);
         }
@@ -514,11 +552,15 @@ impl AdaptiveCache {
         // Evict if necessary and insert into L1
         self.evict_l1_if_needed()?;
 
-        let mut l1 = self.l1.write()
+        let mut l1 = self
+            .l1
+            .write()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
         l1.insert(key.to_string(), entry);
 
-        let mut stats = self.l1_stats.write()
+        let mut stats = self
+            .l1_stats
+            .write()
             .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
         stats.entries = l1.len();
         stats.size_bytes += size_bytes;
@@ -542,7 +584,9 @@ impl AdaptiveCache {
 
         self.bloom.add(key);
 
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
         l2.insert(key.to_string(), entry);
 
@@ -551,17 +595,23 @@ impl AdaptiveCache {
 
     /// Invalidate cache entry
     pub fn invalidate(&self, key: &str) -> Result<(), VecStoreError> {
-        let mut l1 = self.l1.write()
+        let mut l1 = self
+            .l1
+            .write()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
         l1.remove(key);
         drop(l1);
 
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
         l2.remove(key);
         drop(l2);
 
-        let mut l3 = self.l3.write()
+        let mut l3 = self
+            .l3
+            .write()
             .map_err(|_| VecStoreError::LockError("l3 cache lock poisoned".into()))?;
         l3.remove(key);
 
@@ -570,34 +620,46 @@ impl AdaptiveCache {
 
     /// Clear all caches
     pub fn clear(&self) -> Result<(), VecStoreError> {
-        let mut l1 = self.l1.write()
+        let mut l1 = self
+            .l1
+            .write()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
         l1.clear();
         drop(l1);
 
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
         l2.clear();
         drop(l2);
 
-        let mut l3 = self.l3.write()
+        let mut l3 = self
+            .l3
+            .write()
             .map_err(|_| VecStoreError::LockError("l3 cache lock poisoned".into()))?;
         l3.clear();
         drop(l3);
 
         self.bloom.clear();
 
-        let mut stats = self.l1_stats.write()
+        let mut stats = self
+            .l1_stats
+            .write()
             .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
         *stats = TierStats::default();
         drop(stats);
 
-        let mut stats = self.l2_stats.write()
+        let mut stats = self
+            .l2_stats
+            .write()
             .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
         *stats = TierStats::default();
         drop(stats);
 
-        let mut stats = self.l3_stats.write()
+        let mut stats = self
+            .l3_stats
+            .write()
             .map_err(|_| VecStoreError::LockError("l3_stats lock poisoned".into()))?;
         *stats = TierStats::default();
 
@@ -606,11 +668,17 @@ impl AdaptiveCache {
 
     /// Get cache statistics
     pub fn stats(&self) -> Result<CacheStats, VecStoreError> {
-        let l1_stats = self.l1_stats.read()
+        let l1_stats = self
+            .l1_stats
+            .read()
             .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
-        let l2_stats = self.l2_stats.read()
+        let l2_stats = self
+            .l2_stats
+            .read()
             .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
-        let l3_stats = self.l3_stats.read()
+        let l3_stats = self
+            .l3_stats
+            .read()
             .map_err(|_| VecStoreError::LockError("l3_stats lock poisoned".into()))?;
 
         Ok(CacheStats {
@@ -623,38 +691,55 @@ impl AdaptiveCache {
 
     /// Get frequent query patterns for prefetching
     pub fn get_prefetch_candidates(&self) -> Result<Vec<String>, VecStoreError> {
-        let prefetch = self.prefetch.read()
+        let prefetch = self
+            .prefetch
+            .read()
             .map_err(|_| VecStoreError::LockError("prefetch lock poisoned".into()))?;
         Ok(prefetch.get_frequent_patterns())
     }
 
-    fn promote_to_l1(&self, key: &str, mut entry: CacheEntry<CachedResult>) -> Result<(), VecStoreError> {
+    fn promote_to_l1(
+        &self,
+        key: &str,
+        mut entry: CacheEntry<CachedResult>,
+    ) -> Result<(), VecStoreError> {
         entry.touch();
         self.evict_l1_if_needed()?;
 
-        let mut l1 = self.l1.write()
+        let mut l1 = self
+            .l1
+            .write()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
         l1.insert(key.to_string(), entry);
         Ok(())
     }
 
-    fn promote_to_l2(&self, key: &str, mut entry: CacheEntry<CachedResult>) -> Result<(), VecStoreError> {
+    fn promote_to_l2(
+        &self,
+        key: &str,
+        mut entry: CacheEntry<CachedResult>,
+    ) -> Result<(), VecStoreError> {
         entry.touch();
         self.evict_l2_if_needed()?;
 
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
         l2.insert(key.to_string(), entry);
         Ok(())
     }
 
     fn evict_l1_if_needed(&self) -> Result<(), VecStoreError> {
-        let mut l1 = self.l1.write()
+        let mut l1 = self
+            .l1
+            .write()
             .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
 
         while l1.len() >= self.config.l1_size {
             // Find LRU entry
-            let lru_key = l1.iter()
+            let lru_key = l1
+                .iter()
                 .min_by_key(|(_, e)| e.last_access)
                 .map(|(k, _)| k.clone());
 
@@ -663,12 +748,16 @@ impl AdaptiveCache {
                     // Demote to L2 - drop l1 lock first to avoid deadlock
                     drop(l1);
                     self.demote_to_l2(&key, entry)?;
-                    let mut stats = self.l1_stats.write()
+                    let mut stats = self
+                        .l1_stats
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l1_stats lock poisoned".into()))?;
                     stats.evictions += 1;
                     drop(stats);
                     // Re-acquire l1 lock
-                    l1 = self.l1.write()
+                    l1 = self
+                        .l1
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l1 cache lock poisoned".into()))?;
                 }
             } else {
@@ -679,11 +768,14 @@ impl AdaptiveCache {
     }
 
     fn evict_l2_if_needed(&self) -> Result<(), VecStoreError> {
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
 
         while l2.len() >= self.config.l2_size {
-            let lru_key = l2.iter()
+            let lru_key = l2
+                .iter()
                 .min_by_key(|(_, e)| e.last_access)
                 .map(|(k, _)| k.clone());
 
@@ -694,12 +786,16 @@ impl AdaptiveCache {
                     if self.config.enable_l3 {
                         self.demote_to_l3(&key, entry)?;
                     }
-                    let mut stats = self.l2_stats.write()
+                    let mut stats = self
+                        .l2_stats
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l2_stats lock poisoned".into()))?;
                     stats.evictions += 1;
                     drop(stats);
                     // Re-acquire l2 lock
-                    l2 = self.l2.write()
+                    l2 = self
+                        .l2
+                        .write()
                         .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
                 }
             } else {
@@ -709,18 +805,30 @@ impl AdaptiveCache {
         Ok(())
     }
 
-    fn demote_to_l2(&self, key: &str, entry: CacheEntry<CachedResult>) -> Result<(), VecStoreError> {
+    fn demote_to_l2(
+        &self,
+        key: &str,
+        entry: CacheEntry<CachedResult>,
+    ) -> Result<(), VecStoreError> {
         self.evict_l2_if_needed()?;
 
-        let mut l2 = self.l2.write()
+        let mut l2 = self
+            .l2
+            .write()
             .map_err(|_| VecStoreError::LockError("l2 cache lock poisoned".into()))?;
         l2.insert(key.to_string(), entry);
         Ok(())
     }
 
-    fn demote_to_l3(&self, key: &str, entry: CacheEntry<CachedResult>) -> Result<(), VecStoreError> {
+    fn demote_to_l3(
+        &self,
+        key: &str,
+        entry: CacheEntry<CachedResult>,
+    ) -> Result<(), VecStoreError> {
         // In production, this would write to disk
-        let mut l3 = self.l3.write()
+        let mut l3 = self
+            .l3
+            .write()
             .map_err(|_| VecStoreError::LockError("l3 cache lock poisoned".into()))?;
         l3.insert(key.to_string(), entry);
         Ok(())
@@ -760,12 +868,7 @@ pub struct CacheKeyGenerator;
 
 impl CacheKeyGenerator {
     /// Generate cache key from query parameters
-    pub fn generate(
-        collection: &str,
-        vector: &[f32],
-        k: usize,
-        filter: Option<&str>,
-    ) -> String {
+    pub fn generate(collection: &str, vector: &[f32], k: usize, filter: Option<&str>) -> String {
         use std::collections::hash_map::DefaultHasher;
 
         let mut hasher = DefaultHasher::new();
@@ -806,9 +909,7 @@ impl CacheKeyGenerator {
 fn estimate_size(result: &CachedResult) -> usize {
     let ids_size: usize = result.ids.iter().map(|s| s.len()).sum();
     let scores_size = result.scores.len() * 4;
-    let meta_size = result.metadata.as_ref()
-        .map(|m| m.len() * 64)
-        .unwrap_or(0);
+    let meta_size = result.metadata.as_ref().map(|m| m.len() * 64).unwrap_or(0);
 
     ids_size + scores_size + meta_size + 64 // overhead
 }
@@ -873,11 +974,16 @@ mod tests {
         let cache = AdaptiveCache::new(config);
 
         for i in 0..5 {
-            cache.put(&format!("key{}", i), CachedResult {
-                ids: vec![],
-                scores: vec![],
-                metadata: None,
-            }).unwrap();
+            cache
+                .put(
+                    &format!("key{}", i),
+                    CachedResult {
+                        ids: vec![],
+                        scores: vec![],
+                        metadata: None,
+                    },
+                )
+                .unwrap();
         }
 
         // L1 should have at most 3 entries
@@ -896,11 +1002,17 @@ mod tests {
         let vector1 = vec![1.0, 0.0, 0.0];
         let vector2 = vec![0.999, 0.001, 0.0]; // Very similar
 
-        cache.put_with_vector("key1", CachedResult {
-            ids: vec!["id1".to_string()],
-            scores: vec![1.0],
-            metadata: None,
-        }, Some(vector1.clone())).unwrap();
+        cache
+            .put_with_vector(
+                "key1",
+                CachedResult {
+                    ids: vec!["id1".to_string()],
+                    scores: vec![1.0],
+                    metadata: None,
+                },
+                Some(vector1.clone()),
+            )
+            .unwrap();
 
         // Should find via semantic matching
         let result = cache.get_semantic("key2", &vector2).unwrap();
@@ -923,11 +1035,16 @@ mod tests {
     fn test_cache_stats() {
         let cache = AdaptiveCache::new(CacheConfig::default());
 
-        cache.put("key1", CachedResult {
-            ids: vec![],
-            scores: vec![],
-            metadata: None,
-        }).unwrap();
+        cache
+            .put(
+                "key1",
+                CachedResult {
+                    ids: vec![],
+                    scores: vec![],
+                    metadata: None,
+                },
+            )
+            .unwrap();
 
         cache.get("key1").unwrap();
         cache.get("nonexistent").unwrap();

@@ -31,7 +31,7 @@
 //! let recommendations = recommender.recommend(&preferences, 10)?;
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -315,10 +315,7 @@ impl CollaborativeRecommender {
             .or_default()
             .insert(item_id.clone(), rating);
 
-        self.item_users
-            .entry(item_id)
-            .or_default()
-            .push(user_id);
+        self.item_users.entry(item_id).or_default().push(user_id);
     }
 
     /// Get recommendations for a user

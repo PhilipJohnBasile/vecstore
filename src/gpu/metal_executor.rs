@@ -258,7 +258,9 @@ mod tests {
         let query = vec![1.0, 0.0];
         let database = vec![0.0, 0.0, 1.0, 1.0];
 
-        let distances = executor.euclidean_distance(&query, &database, 2, 2).unwrap();
+        let distances = executor
+            .euclidean_distance(&query, &database, 2, 2)
+            .unwrap();
 
         assert_eq!(distances.len(), 2);
         assert!((distances[0] - 1.0).abs() < 1e-6); // distance to [0, 0] is 1

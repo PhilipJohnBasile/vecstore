@@ -28,7 +28,7 @@
 //! assert_eq!(reduced[0].len(), 2);
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Principal Component Analysis (PCA)

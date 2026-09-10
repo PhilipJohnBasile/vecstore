@@ -1,9 +1,9 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use std::collections::HashMap;
 use vecstore::{
+    Metadata, Query, VecStore,
     rag_utils::MultiQueryRetrieval,
     text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
-    Metadata, Query, VecStore,
 };
 
 // Mock embedding function for benchmarks

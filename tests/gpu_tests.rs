@@ -216,9 +216,7 @@ fn test_high_dimensional_vectors() {
     let query: Vec<f32> = (0..dim).map(|i| (i as f32) / (dim as f32)).collect();
     let database = vec![
         query.clone(),
-        (0..dim)
-            .map(|i| (i as f32) / (dim as f32) + 0.1)
-            .collect(),
+        (0..dim).map(|i| (i as f32) / (dim as f32) + 0.1).collect(),
     ];
 
     let distances = backend.batch_euclidean_distance(&query, &database).unwrap();
@@ -326,7 +324,7 @@ fn test_gpu_backend_variants() {
 
     for backend in backends {
         match backend {
-            GpuBackend::Cpu | GpuBackend::Cuda | GpuBackend::Metal | GpuBackend::WebGpu => {}
+            GpuBackend::Cpu | GpuBackend::Cuda | GpuBackend::Metal | GpuBackend::WebGpu => {},
         }
     }
 }

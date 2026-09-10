@@ -4,9 +4,9 @@ use std::panic::{self, AssertUnwindSafe};
 use tempfile::tempdir;
 use vecstore::store::hybrid::{HybridQuery, TextIndex};
 use vecstore::{
+    Distance, HNSWSearchParams, Metadata, NamespaceManager, NamespaceStatus, Query, VecStore,
     distributed::{DistributedConfig, DistributedStore},
-    parse_filter, Distance, HNSWSearchParams, Metadata, NamespaceManager, NamespaceStatus, Query,
-    VecStore,
+    parse_filter,
 };
 
 fn empty_metadata() -> Metadata {
@@ -468,7 +468,8 @@ fn query_with_filter_should_not_silently_ignore_parse_errors() {
     assert!(
         results
             .iter()
-            .all(|neighbor| neighbor.metadata.fields.get("role") == Some(&serde_json::json!("admin"))),
+            .all(|neighbor| neighbor.metadata.fields.get("role")
+                == Some(&serde_json::json!("admin"))),
         "Invalid filter syntax should not be silently ignored; expected only admin results, got {:?}",
         results
     );

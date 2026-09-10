@@ -35,9 +35,9 @@
 //! let drift = temporal.detect_drift(&store, "category:tech")?;
 //! ```
 
-use std::collections::HashMap;
-use chrono::{DateTime, Utc, Duration};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::error::VecStoreError;
 
@@ -79,7 +79,9 @@ pub enum DecayFunction {
 
 impl Default for DecayFunction {
     fn default() -> Self {
-        DecayFunction::Exponential { half_life_hours: 168.0 } // 1 week half-life
+        DecayFunction::Exponential {
+            half_life_hours: 168.0,
+        } // 1 week half-life
     }
 }
 
@@ -95,29 +97,37 @@ impl DecayFunction {
                 } else {
                     1.0 - (age_hours / max_age_hours)
                 }
-            }
+            },
 
             DecayFunction::Exponential { half_life_hours } => {
                 2.0_f64.powf(-age_hours / half_life_hours)
-            }
+            },
 
             DecayFunction::Gaussian { scale_hours } => {
                 let ratio = age_hours / scale_hours;
                 (-ratio * ratio).exp()
-            }
+            },
 
             DecayFunction::Step { cutoff_hours } => {
-                if age_hours <= *cutoff_hours { 1.0 } else { 0.0 }
-            }
+                if age_hours <= *cutoff_hours {
+                    1.0
+                } else {
+                    0.0
+                }
+            },
 
-            DecayFunction::Custom { rate, min_weight, max_age_hours } => {
+            DecayFunction::Custom {
+                rate,
+                min_weight,
+                max_age_hours,
+            } => {
                 if age_hours >= *max_age_hours {
                     *min_weight
                 } else {
                     let decay = (-rate * age_hours).exp();
                     decay.max(*min_weight)
                 }
-            }
+            },
         }
     }
 }
@@ -371,9 +381,7 @@ impl TemporalSearch {
         }
 
         // Re-sort by adjusted score
-        results.sort_by(|a, b| {
-            b.adjusted_score.total_cmp(&a.adjusted_score)
-        });
+        results.sort_by(|a, b| b.adjusted_score.total_cmp(&a.adjusted_score));
     }
 
     /// Get vectors that existed at a specific point in time
@@ -423,12 +431,14 @@ impl TemporalSearch {
         let old_cutoff = now - window * 2;
         let new_cutoff = now - window;
 
-        let old_vectors: Vec<_> = vectors.iter()
+        let old_vectors: Vec<_> = vectors
+            .iter()
             .filter(|(_, _, t)| *t >= old_cutoff && *t < new_cutoff)
             .map(|(_, v, _)| v.clone())
             .collect();
 
-        let new_vectors: Vec<_> = vectors.iter()
+        let new_vectors: Vec<_> = vectors
+            .iter()
             .filter(|(_, _, t)| *t >= new_cutoff)
             .map(|(_, v, _)| v.clone())
             .collect();
@@ -457,7 +467,8 @@ impl TemporalSearch {
         let new_centroid = Self::calculate_centroid(&new_vectors);
 
         // Calculate centroid shift
-        let centroid_shift: Vec<f32> = old_centroid.iter()
+        let centroid_shift: Vec<f32> = old_centroid
+            .iter()
             .zip(new_centroid.iter())
             .map(|(o, n)| n - o)
             .collect();
@@ -472,7 +483,8 @@ impl TemporalSearch {
         };
 
         // Calculate per-dimension drift
-        let mut dimension_drift: Vec<DimensionDrift> = centroid_shift.iter()
+        let mut dimension_drift: Vec<DimensionDrift> = centroid_shift
+            .iter()
             .enumerate()
             .map(|(i, &shift)| {
                 let direction = if shift > 0.01 {
@@ -540,7 +552,8 @@ impl TemporalSearch {
             let bucket_start = start + bucket_duration * i as i32;
             let bucket_end = bucket_start + bucket_duration;
 
-            let count = vectors.iter()
+            let count = vectors
+                .iter()
                 .filter(|(_, t)| *t >= bucket_start && *t < bucket_end)
                 .count();
 
@@ -567,7 +580,7 @@ impl TemporalSearch {
         // Calculate stability scores (Jaccard similarity between consecutive neighborhoods)
         let mut stability_scores = Vec::new();
         for i in 1..neighbor_history.len() {
-            let prev: std::collections::HashSet<_> = neighbor_history[i-1].1.iter().collect();
+            let prev: std::collections::HashSet<_> = neighbor_history[i - 1].1.iter().collect();
             let curr: std::collections::HashSet<_> = neighbor_history[i].1.iter().collect();
 
             let intersection = prev.intersection(&curr).count();
@@ -592,10 +605,13 @@ impl TemporalSearch {
         let trend = if stability_scores.is_empty() || stability_scores.len() < 2 {
             TrendDirection::Stable
         } else {
-            let avg_stability = stability_scores.iter().sum::<f64>() / stability_scores.len() as f64;
-            let variance: f64 = stability_scores.iter()
+            let avg_stability =
+                stability_scores.iter().sum::<f64>() / stability_scores.len() as f64;
+            let variance: f64 = stability_scores
+                .iter()
                 .map(|s| (s - avg_stability).powi(2))
-                .sum::<f64>() / stability_scores.len() as f64;
+                .sum::<f64>()
+                / stability_scores.len() as f64;
 
             if variance > 0.1 {
                 TrendDirection::Volatile
@@ -671,7 +687,8 @@ impl TemporalSearch {
         let mut total_variance = 0.0;
 
         for vec in vectors {
-            let dist_sq: f32 = vec.iter()
+            let dist_sq: f32 = vec
+                .iter()
                 .zip(centroid.iter())
                 .map(|(a, b)| (a - b).powi(2))
                 .sum();
@@ -789,13 +806,17 @@ mod tests {
     #[test]
     fn test_decay_functions() {
         // Exponential decay
-        let exp = DecayFunction::Exponential { half_life_hours: 24.0 };
+        let exp = DecayFunction::Exponential {
+            half_life_hours: 24.0,
+        };
         assert!((exp.weight(0.0) - 1.0).abs() < 1e-6);
         assert!((exp.weight(24.0) - 0.5).abs() < 1e-6);
         assert!((exp.weight(48.0) - 0.25).abs() < 1e-6);
 
         // Linear decay
-        let linear = DecayFunction::Linear { max_age_hours: 100.0 };
+        let linear = DecayFunction::Linear {
+            max_age_hours: 100.0,
+        };
         assert!((linear.weight(0.0) - 1.0).abs() < 1e-6);
         assert!((linear.weight(50.0) - 0.5).abs() < 1e-6);
         assert!((linear.weight(100.0) - 0.0).abs() < 1e-6);
@@ -839,7 +860,9 @@ mod tests {
     #[test]
     fn test_temporal_weight_calculation() {
         let config = TemporalConfig {
-            decay_function: DecayFunction::Exponential { half_life_hours: 24.0 },
+            decay_function: DecayFunction::Exponential {
+                half_life_hours: 24.0,
+            },
             ..Default::default()
         };
         let mut search = TemporalSearch::new(config);
@@ -867,9 +890,17 @@ mod tests {
         // Create vectors with drift
         let vectors = vec![
             ("v1".to_string(), vec![1.0, 0.0, 0.0], old_time),
-            ("v2".to_string(), vec![0.9, 0.1, 0.0], old_time + Duration::hours(1)),
+            (
+                "v2".to_string(),
+                vec![0.9, 0.1, 0.0],
+                old_time + Duration::hours(1),
+            ),
             ("v3".to_string(), vec![0.0, 1.0, 0.0], new_time),
-            ("v4".to_string(), vec![0.1, 0.9, 0.0], new_time + Duration::hours(1)),
+            (
+                "v4".to_string(),
+                vec![0.1, 0.9, 0.0],
+                new_time + Duration::hours(1),
+            ),
         ];
 
         let report = search.detect_drift(&vectors).unwrap();
@@ -890,9 +921,18 @@ mod tests {
 
         let vectors = vec![
             ("v1".to_string(), start + Duration::minutes(30)),
-            ("v2".to_string(), start + Duration::hours(1) + Duration::minutes(30)),
-            ("v3".to_string(), start + Duration::hours(2) + Duration::minutes(30)),
-            ("v4".to_string(), start + Duration::hours(3) + Duration::minutes(30)),
+            (
+                "v2".to_string(),
+                start + Duration::hours(1) + Duration::minutes(30),
+            ),
+            (
+                "v3".to_string(),
+                start + Duration::hours(2) + Duration::minutes(30),
+            ),
+            (
+                "v4".to_string(),
+                start + Duration::hours(3) + Duration::minutes(30),
+            ),
         ];
 
         let histogram = search.generate_histogram(&vectors, start, now);
@@ -913,9 +953,18 @@ mod tests {
 
         // Stable neighborhood over time
         let history = vec![
-            (now - Duration::hours(3), vec!["a".to_string(), "b".to_string(), "c".to_string()]),
-            (now - Duration::hours(2), vec!["a".to_string(), "b".to_string(), "c".to_string()]),
-            (now - Duration::hours(1), vec!["a".to_string(), "b".to_string(), "d".to_string()]),
+            (
+                now - Duration::hours(3),
+                vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            ),
+            (
+                now - Duration::hours(2),
+                vec!["a".to_string(), "b".to_string(), "c".to_string()],
+            ),
+            (
+                now - Duration::hours(1),
+                vec!["a".to_string(), "b".to_string(), "d".to_string()],
+            ),
             (now, vec!["a".to_string(), "b".to_string(), "d".to_string()]),
         ];
 
@@ -928,7 +977,9 @@ mod tests {
         let now = Utc::now();
         let query = TemporalQueryBuilder::new(vec![1.0, 0.0, 0.0])
             .k(20)
-            .with_decay(DecayFunction::Exponential { half_life_hours: 12.0 })
+            .with_decay(DecayFunction::Exponential {
+                half_life_hours: 12.0,
+            })
             .at_time(now)
             .min_weight(0.1);
 

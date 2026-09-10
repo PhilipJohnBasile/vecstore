@@ -525,10 +525,12 @@ impl QueryDecomposer {
 
         // Look for capitalized words as potential entities
         for word in query.split_whitespace() {
-            if word.len() > 1 && word.chars().next().unwrap().is_uppercase()
-                && !STOP_WORDS.contains(&word.to_lowercase().as_str()) {
-                    entities.push(word.to_string());
-                }
+            if word.len() > 1
+                && word.chars().next().unwrap().is_uppercase()
+                && !STOP_WORDS.contains(&word.to_lowercase().as_str())
+            {
+                entities.push(word.to_string());
+            }
         }
 
         for (i, entity) in entities.iter().take(self.max_sub_queries).enumerate() {
@@ -563,9 +565,15 @@ impl QueryDecomposer {
         let query_lower = query.to_lowercase();
 
         // Check for temporal indicators
-        let has_recent = query_lower.contains("recent") || query_lower.contains("latest") || query_lower.contains("new");
-        let has_past = query_lower.contains("previous") || query_lower.contains("old") || query_lower.contains("historical");
-        let has_future = query_lower.contains("upcoming") || query_lower.contains("future") || query_lower.contains("next");
+        let has_recent = query_lower.contains("recent")
+            || query_lower.contains("latest")
+            || query_lower.contains("new");
+        let has_past = query_lower.contains("previous")
+            || query_lower.contains("old")
+            || query_lower.contains("historical");
+        let has_future = query_lower.contains("upcoming")
+            || query_lower.contains("future")
+            || query_lower.contains("next");
 
         if has_recent {
             sub_queries.push(SubQuery {
@@ -624,11 +632,17 @@ impl QueryDecomposer {
 
         // Common aspects to search for
         let aspects = [
-            ("price", vec!["price", "cost", "cheap", "expensive", "affordable"]),
+            (
+                "price",
+                vec!["price", "cost", "cheap", "expensive", "affordable"],
+            ),
             ("quality", vec!["quality", "best", "top", "premium", "good"]),
             ("reviews", vec!["review", "rating", "feedback", "opinion"]),
             ("features", vec!["feature", "specification", "capability"]),
-            ("comparison", vec!["compare", "vs", "versus", "better", "difference"]),
+            (
+                "comparison",
+                vec!["compare", "vs", "versus", "better", "difference"],
+            ),
         ];
 
         let query_lower = query.to_lowercase();
@@ -685,14 +699,23 @@ impl ResultFuser {
             FusionStrategy::RRF { k } => self.fuse_rrf(branch_results, *k, top_k),
             FusionStrategy::WeightedSum => self.fuse_weighted(branch_results, top_k),
             FusionStrategy::MaxScore => self.fuse_max(branch_results, top_k),
-            FusionStrategy::Voting { min_votes } => self.fuse_voting(branch_results, *min_votes, top_k),
+            FusionStrategy::Voting { min_votes } => {
+                self.fuse_voting(branch_results, *min_votes, top_k)
+            },
             FusionStrategy::LLMRerank => self.fuse_weighted(branch_results, top_k), // Fallback
             FusionStrategy::CrossEncoder => self.fuse_weighted(branch_results, top_k), // Fallback
         }
     }
 
     fn fuse_rrf(&self, branch_results: &[BranchResult], k: f32, top_k: usize) -> Vec<FusedResult> {
-        let mut doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, serde_json::Value>)> = HashMap::new();
+        let mut doc_scores: HashMap<
+            String,
+            (
+                f32,
+                HashMap<String, f32>,
+                HashMap<String, serde_json::Value>,
+            ),
+        > = HashMap::new();
 
         for branch in branch_results {
             if !branch.success {
@@ -702,9 +725,9 @@ impl ResultFuser {
             for (rank, result) in branch.results.iter().enumerate() {
                 let rrf_score = 1.0 / (k + rank as f32 + 1.0);
 
-                let entry = doc_scores.entry(result.id.clone()).or_insert_with(|| {
-                    (0.0, HashMap::new(), result.metadata.clone())
-                });
+                let entry = doc_scores
+                    .entry(result.id.clone())
+                    .or_insert_with(|| (0.0, HashMap::new(), result.metadata.clone()));
 
                 entry.0 += rrf_score;
                 entry.1.insert(branch.sub_query_id.clone(), result.score);
@@ -729,7 +752,14 @@ impl ResultFuser {
     }
 
     fn fuse_weighted(&self, branch_results: &[BranchResult], top_k: usize) -> Vec<FusedResult> {
-        let mut doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, serde_json::Value>)> = HashMap::new();
+        let mut doc_scores: HashMap<
+            String,
+            (
+                f32,
+                HashMap<String, f32>,
+                HashMap<String, serde_json::Value>,
+            ),
+        > = HashMap::new();
 
         for branch in branch_results {
             if !branch.success {
@@ -737,9 +767,9 @@ impl ResultFuser {
             }
 
             for result in &branch.results {
-                let entry = doc_scores.entry(result.id.clone()).or_insert_with(|| {
-                    (0.0, HashMap::new(), result.metadata.clone())
-                });
+                let entry = doc_scores
+                    .entry(result.id.clone())
+                    .or_insert_with(|| (0.0, HashMap::new(), result.metadata.clone()));
 
                 entry.0 += result.score;
                 entry.1.insert(branch.sub_query_id.clone(), result.score);
@@ -764,7 +794,14 @@ impl ResultFuser {
     }
 
     fn fuse_max(&self, branch_results: &[BranchResult], top_k: usize) -> Vec<FusedResult> {
-        let mut doc_scores: HashMap<String, (f32, HashMap<String, f32>, HashMap<String, serde_json::Value>)> = HashMap::new();
+        let mut doc_scores: HashMap<
+            String,
+            (
+                f32,
+                HashMap<String, f32>,
+                HashMap<String, serde_json::Value>,
+            ),
+        > = HashMap::new();
 
         for branch in branch_results {
             if !branch.success {
@@ -772,9 +809,9 @@ impl ResultFuser {
             }
 
             for result in &branch.results {
-                let entry = doc_scores.entry(result.id.clone()).or_insert_with(|| {
-                    (0.0, HashMap::new(), result.metadata.clone())
-                });
+                let entry = doc_scores
+                    .entry(result.id.clone())
+                    .or_insert_with(|| (0.0, HashMap::new(), result.metadata.clone()));
 
                 if result.score > entry.0 {
                     entry.0 = result.score;
@@ -800,8 +837,20 @@ impl ResultFuser {
         fused
     }
 
-    fn fuse_voting(&self, branch_results: &[BranchResult], min_votes: usize, top_k: usize) -> Vec<FusedResult> {
-        let mut doc_votes: HashMap<String, (usize, HashMap<String, f32>, HashMap<String, serde_json::Value>)> = HashMap::new();
+    fn fuse_voting(
+        &self,
+        branch_results: &[BranchResult],
+        min_votes: usize,
+        top_k: usize,
+    ) -> Vec<FusedResult> {
+        let mut doc_votes: HashMap<
+            String,
+            (
+                usize,
+                HashMap<String, f32>,
+                HashMap<String, serde_json::Value>,
+            ),
+        > = HashMap::new();
 
         for branch in branch_results {
             if !branch.success {
@@ -809,9 +858,9 @@ impl ResultFuser {
             }
 
             for result in &branch.results {
-                let entry = doc_votes.entry(result.id.clone()).or_insert_with(|| {
-                    (0, HashMap::new(), result.metadata.clone())
-                });
+                let entry = doc_votes
+                    .entry(result.id.clone())
+                    .or_insert_with(|| (0, HashMap::new(), result.metadata.clone()));
 
                 entry.0 += 1;
                 entry.1.insert(branch.sub_query_id.clone(), result.score);
@@ -952,7 +1001,9 @@ impl AgentExecutor {
     /// Save agent state
     pub fn save_state(&self, state: &AgentState) {
         let key = format!("{}:{}", state.agent_id, state.session_id);
-        let Ok(mut states) = self.states.write() else { return; };
+        let Ok(mut states) = self.states.write() else {
+            return;
+        };
         states.insert(key, state.clone());
     }
 
@@ -1006,7 +1057,9 @@ impl AgentExecutor {
     /// Register a tool
     pub fn register_tool(&self, agent_id: &str, session_id: &str, tool: ToolDefinition) {
         let key = format!("{}:{}", agent_id, session_id);
-        let Ok(mut states) = self.states.write() else { return; };
+        let Ok(mut states) = self.states.write() else {
+            return;
+        };
 
         if let Some(state) = states.get_mut(&key) {
             state.register_tool(tool);
@@ -1068,13 +1121,12 @@ pub struct AgentStats {
 
 // Stop words for filtering
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-    "be", "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "shall", "can", "need", "dare", "ought",
-    "used", "that", "which", "who", "whom", "this", "these", "those", "what",
-    "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she",
-    "her", "it", "its", "they", "them", "their",
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "as", "is", "was", "are", "were", "been", "be", "have", "has", "had", "do", "does",
+    "did", "will", "would", "could", "should", "may", "might", "must", "shall", "can", "need",
+    "dare", "ought", "used", "that", "which", "who", "whom", "this", "these", "those", "what", "i",
+    "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her", "it", "its", "they",
+    "them", "their",
 ];
 
 #[cfg(test)]
@@ -1084,7 +1136,9 @@ mod tests {
     #[test]
     fn test_query_decomposition() {
         let decomposer = QueryDecomposer::new(DecompositionStrategy::Semantic, 5);
-        let sub_queries = decomposer.decompose("Find products similar to iPhone and cheaper than $500").unwrap();
+        let sub_queries = decomposer
+            .decompose("Find products similar to iPhone and cheaper than $500")
+            .unwrap();
 
         assert!(!sub_queries.is_empty());
     }
@@ -1174,7 +1228,9 @@ mod tests {
     #[test]
     fn test_query_planner() {
         let planner = QueryPlanner::new(DecompositionStrategy::Semantic, 5);
-        let plan = planner.plan("Find red cars with good fuel efficiency").unwrap();
+        let plan = planner
+            .plan("Find red cars with good fuel efficiency")
+            .unwrap();
 
         assert!(!plan.sub_queries.is_empty());
         assert!(!plan.execution_order.is_empty());

@@ -814,7 +814,10 @@ impl Benchmarker {
 
         // Calculate scalability factor
         let max_threads = multi_thread_qps.keys().max().copied().unwrap_or(1);
-        let max_qps = multi_thread_qps.get(&max_threads).copied().unwrap_or(single_thread_qps);
+        let max_qps = multi_thread_qps
+            .get(&max_threads)
+            .copied()
+            .unwrap_or(single_thread_qps);
         let scalability_factor = if single_thread_qps > 0.0 {
             (max_qps / single_thread_qps) / max_threads as f64
         } else {

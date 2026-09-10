@@ -49,9 +49,9 @@
 //! let distance = pq.asymmetric_distance(&query, &codes)?;
 //! ```
 
-use anyhow::{anyhow, Result};
-use rand::seq::SliceRandom;
+use anyhow::{Result, anyhow};
 use rand::Rng;
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -296,7 +296,11 @@ impl ProductQuantizer {
                 .iter()
                 .map(|v| {
                     let mut recon = vec![0.0; d];
-                    for (m, codebook) in temp_codebooks.iter().enumerate().take(self.config.num_subspaces) {
+                    for (m, codebook) in temp_codebooks
+                        .iter()
+                        .enumerate()
+                        .take(self.config.num_subspaces)
+                    {
                         let start_dim = m * self.subspace_dim;
                         let end_dim = start_dim + self.subspace_dim;
                         let subvec = &v[start_dim..end_dim];
@@ -499,7 +503,8 @@ impl ProductQuantizer {
     /// Find nearest centroid index
     #[inline]
     fn find_nearest_centroid(&self, vector: &[f32], centroids: &[Vec<f32>]) -> usize {
-        self.find_nearest_centroid_with_distance(vector, centroids).0
+        self.find_nearest_centroid_with_distance(vector, centroids)
+            .0
     }
 
     /// Find nearest centroid with distance
@@ -639,11 +644,11 @@ impl ProductQuantizer {
             match self.config.metric {
                 PQMetric::L2 => {
                     distance += self.l2_distance_squared(query_subvec, centroid);
-                }
+                },
                 PQMetric::InnerProduct => {
                     let ip: f32 = query_subvec.iter().zip(centroid).map(|(a, b)| a * b).sum();
                     distance -= ip; // Negate for "lower is better"
-                }
+                },
             }
         }
 
@@ -680,9 +685,11 @@ impl ProductQuantizer {
                 .iter()
                 .map(|centroid| match self.config.metric {
                     PQMetric::L2 => self.l2_distance_squared(query_subvec, centroid),
-                    PQMetric::InnerProduct => {
-                        -query_subvec.iter().zip(centroid).map(|(a, b)| a * b).sum::<f32>()
-                    }
+                    PQMetric::InnerProduct => -query_subvec
+                        .iter()
+                        .zip(centroid)
+                        .map(|(a, b)| a * b)
+                        .sum::<f32>(),
                 })
                 .collect();
 

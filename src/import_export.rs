@@ -85,7 +85,7 @@ fn value_to_metadata(value: serde_json::Value) -> Metadata {
         serde_json::Value::Object(map) => {
             let fields = map.into_iter().collect();
             Metadata { fields }
-        }
+        },
         _ => Metadata {
             fields: HashMap::new(),
         },

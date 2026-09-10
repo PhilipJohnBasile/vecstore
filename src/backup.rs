@@ -31,7 +31,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs::{self, File};
@@ -166,11 +166,7 @@ impl BackupManager {
         // Include milliseconds and a random suffix for uniqueness
         use rand::Rng;
         let random: u32 = rand::rng().random_range(0..10000);
-        format!(
-            "backup_{}_{}",
-            now.format("%Y%m%d_%H%M%S_%3f"),
-            random
-        )
+        format!("backup_{}_{}", now.format("%Y%m%d_%H%M%S_%3f"), random)
     }
 
     /// Create a backup of a VecStore directory
@@ -194,11 +190,7 @@ impl BackupManager {
         let mut total_size = 0u64;
 
         // Copy data files
-        let data_files = vec![
-            "manifest.json",
-            "records.bin",
-            "id_mapping.bin",
-        ];
+        let data_files = vec!["manifest.json", "records.bin", "id_mapping.bin"];
 
         for file in &data_files {
             let src = source.join(file);
@@ -319,7 +311,11 @@ impl BackupManager {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_file() && path.file_name().map(|n| n != "backup_info.json").unwrap_or(false)
+            if path.is_file()
+                && path
+                    .file_name()
+                    .map(|n| n != "backup_info.json")
+                    .unwrap_or(false)
             {
                 let mut file = File::open(&path)?;
                 let mut buffer = [0u8; 8192];
@@ -387,11 +383,7 @@ impl BackupManager {
     ///
     /// The target directory will be created if it doesn't exist.
     /// If it exists and is not empty, this will fail unless `force` is true.
-    pub fn restore_backup(
-        &self,
-        backup_id: &str,
-        target_path: impl AsRef<Path>,
-    ) -> Result<()> {
+    pub fn restore_backup(&self, backup_id: &str, target_path: impl AsRef<Path>) -> Result<()> {
         self.restore_backup_with_options(backup_id, target_path, false)
     }
 
@@ -621,7 +613,9 @@ mod walkdir {
         }
 
         pub fn file_type(&self) -> FileType {
-            FileType { is_file: self.is_file }
+            FileType {
+                is_file: self.is_file,
+            }
         }
     }
 
@@ -652,7 +646,7 @@ mod walkdir {
                             for e in entries.flatten() {
                                 self.stack.push(e.path());
                             }
-                        }
+                        },
                         Err(e) => return Some(Err(e)),
                     }
                 } else {
@@ -689,12 +683,18 @@ mod tests {
 
         // Create source with some files
         fs::create_dir_all(&source_dir).unwrap();
-        fs::write(source_dir.join("manifest.json"), r#"{"dimension":128,"record_count":100}"#).unwrap();
+        fs::write(
+            source_dir.join("manifest.json"),
+            r#"{"dimension":128,"record_count":100}"#,
+        )
+        .unwrap();
         fs::write(source_dir.join("records.bin"), vec![0u8; 1000]).unwrap();
 
         // Create backup
         let mgr = BackupManager::new(&backup_dir).unwrap();
-        let backup_id = mgr.create_backup(&source_dir, BackupConfig::default()).unwrap();
+        let backup_id = mgr
+            .create_backup(&source_dir, BackupConfig::default())
+            .unwrap();
 
         // Verify backup exists
         let backups = mgr.list_backups().unwrap();
@@ -719,10 +719,15 @@ mod tests {
         fs::write(source_dir.join("records.bin"), vec![1u8; 100]).unwrap();
 
         let mgr = BackupManager::new(&backup_dir).unwrap();
-        let backup_id = mgr.create_backup(&source_dir, BackupConfig {
-            verify: true,
-            ..Default::default()
-        }).unwrap();
+        let backup_id = mgr
+            .create_backup(
+                &source_dir,
+                BackupConfig {
+                    verify: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
 
         // Verification should pass
         assert!(mgr.verify_backup(&backup_id).unwrap());
@@ -742,17 +747,31 @@ mod tests {
         // Create 3 backups with delay to ensure unique timestamps
         for i in 0..3 {
             let result = mgr.create_backup(&source_dir, BackupConfig::default());
-            assert!(result.is_ok(), "Failed to create backup {}: {:?}", i, result.err());
+            assert!(
+                result.is_ok(),
+                "Failed to create backup {}: {:?}",
+                i,
+                result.err()
+            );
             std::thread::sleep(std::time::Duration::from_millis(100));
         }
 
         let backups = mgr.list_backups().unwrap();
-        assert_eq!(backups.len(), 3, "Expected 3 backups, got {}", backups.len());
+        assert_eq!(
+            backups.len(),
+            3,
+            "Expected 3 backups, got {}",
+            backups.len()
+        );
 
         // Prune to keep only 1
         let deleted = mgr.prune(1).unwrap();
         assert_eq!(deleted.len(), 2, "Expected to delete 2 backups");
-        assert_eq!(mgr.list_backups().unwrap().len(), 1, "Expected 1 backup remaining");
+        assert_eq!(
+            mgr.list_backups().unwrap().len(),
+            1,
+            "Expected 1 backup remaining"
+        );
     }
 
     #[test]
@@ -775,7 +794,13 @@ mod tests {
         BackupArchive::extract_archive(&archive_path, &extract_dir).unwrap();
 
         // Verify
-        assert_eq!(fs::read_to_string(extract_dir.join("file1.txt")).unwrap(), "hello");
-        assert_eq!(fs::read(extract_dir.join("file2.bin")).unwrap(), vec![1, 2, 3, 4]);
+        assert_eq!(
+            fs::read_to_string(extract_dir.join("file1.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(
+            fs::read(extract_dir.join("file2.bin")).unwrap(),
+            vec![1, 2, 3, 4]
+        );
     }
 }

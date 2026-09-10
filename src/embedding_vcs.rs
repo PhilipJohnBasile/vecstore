@@ -40,7 +40,7 @@
 //! vcs.checkout(&commit_id)?;
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -430,7 +430,10 @@ impl EmbeddingVCS {
         use std::hash::{Hash, Hasher};
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         message.hash(&mut hasher);
-        chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0).hash(&mut hasher);
+        chrono::Utc::now()
+            .timestamp_nanos_opt()
+            .unwrap_or(0)
+            .hash(&mut hasher);
         format!("{:016x}", hasher.finish())
     }
 

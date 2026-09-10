@@ -18,10 +18,12 @@ fn test_dimension_mismatch_on_insert() {
     // Wrong dimension should fail
     let result = store.upsert("vec2".into(), vec![1.0, 0.0], meta);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("dimension mismatch"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("dimension mismatch")
+    );
 }
 
 #[test]
@@ -45,10 +47,12 @@ fn test_dimension_mismatch_on_query() {
 
     let result = store.query(query);
     assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("dimension mismatch"));
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("dimension mismatch")
+    );
 }
 
 #[test]

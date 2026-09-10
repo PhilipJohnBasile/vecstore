@@ -257,7 +257,12 @@ impl DiscoveryIndex {
     }
 
     /// Insert vector
-    pub fn insert(&self, id: &str, vector: &[f32], metadata: HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn insert(
+        &self,
+        id: &str,
+        vector: &[f32],
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         if vector.len() != self.config.dimension {
             return Err(VecStoreError::DimensionMismatch {
                 expected: self.config.dimension,
@@ -265,12 +270,14 @@ impl DiscoveryIndex {
             });
         }
 
-        let mut vectors = self.vectors.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on vectors".into()))?;
+        let mut vectors = self.vectors.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on vectors".into())
+        })?;
         vectors.insert(id.to_string(), vector.to_vec());
 
-        let mut meta = self.metadata.write()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on metadata".into()))?;
+        let mut meta = self.metadata.write().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire write lock on metadata".into())
+        })?;
         meta.insert(id.to_string(), metadata);
 
         Ok(())
@@ -278,33 +285,41 @@ impl DiscoveryIndex {
 
     /// Get vector by ID
     pub fn get(&self, id: &str) -> Option<Vec<f32>> {
-        let Ok(vectors) = self.vectors.read() else { return None; };
+        let Ok(vectors) = self.vectors.read() else {
+            return None;
+        };
         vectors.get(id).cloned()
     }
 
     /// Execute discovery query
     pub fn discover(&self, query: DiscoveryQuery) -> Result<Vec<DiscoveryResult>> {
-        let vectors = self.vectors.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on vectors".into()))?;
-        let metadata = self.metadata.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on metadata".into()))?;
+        let vectors = self.vectors.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on vectors".into())
+        })?;
+        let metadata = self.metadata.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on metadata".into())
+        })?;
 
         // Get positive vectors
-        let positive_vecs: Vec<Vec<f32>> = query.positive_ids
+        let positive_vecs: Vec<Vec<f32>> = query
+            .positive_ids
             .iter()
             .filter_map(|id| vectors.get(id).cloned())
             .chain(query.positive_vectors.clone())
             .collect();
 
         // Get negative vectors
-        let negative_vecs: Vec<Vec<f32>> = query.negative_ids
+        let negative_vecs: Vec<Vec<f32>> = query
+            .negative_ids
             .iter()
             .filter_map(|id| vectors.get(id).cloned())
             .chain(query.negative_vectors.clone())
             .collect();
 
         // Exclude positive and negative IDs from results
-        let exclude_ids: HashSet<&str> = query.positive_ids.iter()
+        let exclude_ids: HashSet<&str> = query
+            .positive_ids
+            .iter()
             .chain(&query.negative_ids)
             .map(|s| s.as_str())
             .collect();
@@ -315,22 +330,28 @@ impl DiscoveryIndex {
             .filter(|(id, _)| !exclude_ids.contains(id.as_str()))
             .map(|(id, vec)| {
                 let pos_score = if !positive_vecs.is_empty() {
-                    positive_vecs.iter()
+                    positive_vecs
+                        .iter()
                         .map(|pv| cosine_similarity(vec, pv))
-                        .sum::<f32>() / positive_vecs.len() as f32
+                        .sum::<f32>()
+                        / positive_vecs.len() as f32
                 } else {
                     0.0
                 };
 
                 let neg_score = if !negative_vecs.is_empty() {
-                    negative_vecs.iter()
+                    negative_vecs
+                        .iter()
                         .map(|nv| cosine_similarity(vec, nv))
-                        .sum::<f32>() / negative_vecs.len() as f32
+                        .sum::<f32>()
+                        / negative_vecs.len() as f32
                 } else {
                     0.0
                 };
 
-                let target_score = query.target.as_ref()
+                let target_score = query
+                    .target
+                    .as_ref()
                     .map(|t| cosine_similarity(vec, t))
                     .unwrap_or(0.0);
 
@@ -338,23 +359,18 @@ impl DiscoveryIndex {
                 let score = match query.mode {
                     DiscoveryMode::Context => {
                         pos_score * query.positive_weight - neg_score * query.negative_weight
-                    }
+                    },
                     DiscoveryMode::Discover => {
                         // Maximize novelty (low similarity to all examples)
                         let all_sim = (pos_score + neg_score) / 2.0;
                         1.0 - all_sim
-                    }
-                    DiscoveryMode::Recommend => {
-                        pos_score * query.positive_weight
-                    }
-                    DiscoveryMode::Contrast => {
-                        -neg_score * query.negative_weight
-                    }
+                    },
+                    DiscoveryMode::Recommend => pos_score * query.positive_weight,
+                    DiscoveryMode::Contrast => -neg_score * query.negative_weight,
                     DiscoveryMode::Blend => {
-                        pos_score * query.positive_weight
-                            - neg_score * query.negative_weight
+                        pos_score * query.positive_weight - neg_score * query.negative_weight
                             + target_score * 0.5
-                    }
+                    },
                 };
 
                 DiscoveryResult {
@@ -406,7 +422,8 @@ impl DiscoveryIndex {
                     let diversity_penalty = if selected_vecs.is_empty() {
                         0.0
                     } else {
-                        selected_vecs.iter()
+                        selected_vecs
+                            .iter()
                             .map(|sv| cosine_similarity(vec, sv))
                             .fold(f32::NEG_INFINITY, f32::max)
                     };
@@ -434,13 +451,21 @@ impl DiscoveryIndex {
     }
 
     /// Explore from a starting point
-    pub fn explore(&self, start_id: &str, radius: f32, max_results: usize) -> Result<Vec<DiscoveryResult>> {
-        let vectors = self.vectors.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on vectors".into()))?;
-        let metadata = self.metadata.read()
-            .map_err(|_| VecStoreError::LockError("Failed to acquire read lock on metadata".into()))?;
+    pub fn explore(
+        &self,
+        start_id: &str,
+        radius: f32,
+        max_results: usize,
+    ) -> Result<Vec<DiscoveryResult>> {
+        let vectors = self.vectors.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on vectors".into())
+        })?;
+        let metadata = self.metadata.read().map_err(|_| {
+            VecStoreError::LockError("Failed to acquire read lock on metadata".into())
+        })?;
 
-        let start_vec = vectors.get(start_id)
+        let start_vec = vectors
+            .get(start_id)
             .ok_or_else(|| VecStoreError::NotFound(start_id.to_string()))?;
 
         let mut results: Vec<DiscoveryResult> = vectors
@@ -470,8 +495,12 @@ impl DiscoveryIndex {
 
     /// Find boundary vectors (transition points between clusters)
     pub fn find_boundaries(&self, num_boundaries: usize) -> Vec<DiscoveryResult> {
-        let Ok(vectors) = self.vectors.read() else { return Vec::new(); };
-        let Ok(metadata) = self.metadata.read() else { return Vec::new(); };
+        let Ok(vectors) = self.vectors.read() else {
+            return Vec::new();
+        };
+        let Ok(metadata) = self.metadata.read() else {
+            return Vec::new();
+        };
 
         if vectors.len() < 3 {
             return Vec::new();
@@ -496,7 +525,8 @@ impl DiscoveryIndex {
             if k > 0 {
                 let top_k: Vec<f32> = similarities.into_iter().take(k).collect();
                 let mean: f32 = top_k.iter().sum::<f32>() / k as f32;
-                let variance: f32 = top_k.iter().map(|s| (s - mean).powi(2)).sum::<f32>() / k as f32;
+                let variance: f32 =
+                    top_k.iter().map(|s| (s - mean).powi(2)).sum::<f32>() / k as f32;
 
                 // Boundary score = variance (high variance = boundary)
                 boundary_scores.push((id.to_string(), variance));
@@ -542,11 +572,8 @@ impl DiscoveryIndex {
         let vec_list: Vec<(&String, &Vec<f32>)> = vectors.iter().collect();
 
         // Initialize centroids (first k vectors)
-        let mut centroids: Vec<Vec<f32>> = vec_list
-            .iter()
-            .take(k)
-            .map(|(_, v)| (*v).clone())
-            .collect();
+        let mut centroids: Vec<Vec<f32>> =
+            vec_list.iter().take(k).map(|(_, v)| (*v).clone()).collect();
 
         // Run k-means for a few iterations
         let mut assignments: Vec<usize> = vec![0; vec_list.len()];
@@ -623,9 +650,9 @@ impl DiscoveryIndex {
                 let mut member_sims: Vec<(String, f32)> = members
                     .iter()
                     .filter_map(|id| {
-                        vectors.get(id).map(|v| {
-                            (id.clone(), cosine_similarity(v, centroid))
-                        })
+                        vectors
+                            .get(id)
+                            .map(|v| (id.clone(), cosine_similarity(v, centroid)))
                     })
                     .collect();
 
@@ -655,7 +682,11 @@ impl DiscoveryIndex {
             }
         }
 
-        let diversity_score = if count > 0 { total_dist / count as f32 } else { 0.0 };
+        let diversity_score = if count > 0 {
+            total_dist / count as f32
+        } else {
+            0.0
+        };
 
         ExplorationResult {
             regions,
@@ -719,15 +750,28 @@ mod tests {
 
     #[test]
     fn test_discovery_context() {
-        let config = DiscoveryConfig { dimension: 4, ..Default::default() };
+        let config = DiscoveryConfig {
+            dimension: 4,
+            ..Default::default()
+        };
         let index = DiscoveryIndex::new(config);
 
         // Insert vectors
-        index.insert("pos1", &[1.0, 0.0, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("pos2", &[0.9, 0.1, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("neg1", &[0.0, 0.0, 1.0, 0.0], HashMap::new()).unwrap();
-        index.insert("candidate1", &[0.8, 0.2, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("candidate2", &[0.0, 0.0, 0.8, 0.2], HashMap::new()).unwrap();
+        index
+            .insert("pos1", &[1.0, 0.0, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("pos2", &[0.9, 0.1, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("neg1", &[0.0, 0.0, 1.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("candidate1", &[0.8, 0.2, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("candidate2", &[0.0, 0.0, 0.8, 0.2], HashMap::new())
+            .unwrap();
 
         // Context search
         let query = DiscoveryQuery::new()
@@ -743,12 +787,18 @@ mod tests {
 
     #[test]
     fn test_discovery_with_diversity() {
-        let config = DiscoveryConfig { dimension: 4, enable_mmr: true, ..Default::default() };
+        let config = DiscoveryConfig {
+            dimension: 4,
+            enable_mmr: true,
+            ..Default::default()
+        };
         let index = DiscoveryIndex::new(config);
 
         for i in 0..10 {
             let vec = vec![(i as f32) / 10.0, 1.0 - (i as f32) / 10.0, 0.0, 0.0];
-            index.insert(&format!("vec_{}", i), &vec, HashMap::new()).unwrap();
+            index
+                .insert(&format!("vec_{}", i), &vec, HashMap::new())
+                .unwrap();
         }
 
         let query = DiscoveryQuery::new()
@@ -762,13 +812,24 @@ mod tests {
 
     #[test]
     fn test_explore() {
-        let config = DiscoveryConfig { dimension: 4, ..Default::default() };
+        let config = DiscoveryConfig {
+            dimension: 4,
+            ..Default::default()
+        };
         let index = DiscoveryIndex::new(config);
 
-        index.insert("center", &[1.0, 0.0, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("near1", &[0.95, 0.05, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("near2", &[0.9, 0.1, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("far", &[0.0, 1.0, 0.0, 0.0], HashMap::new()).unwrap();
+        index
+            .insert("center", &[1.0, 0.0, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("near1", &[0.95, 0.05, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("near2", &[0.9, 0.1, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("far", &[0.0, 1.0, 0.0, 0.0], HashMap::new())
+            .unwrap();
 
         let results = index.explore("center", 0.2, 10).unwrap();
 
@@ -789,12 +850,16 @@ mod tests {
         // Create two clusters
         for i in 0..5 {
             let vec = vec![1.0 - (i as f32) * 0.05, (i as f32) * 0.05, 0.0, 0.0];
-            index.insert(&format!("cluster1_{}", i), &vec, HashMap::new()).unwrap();
+            index
+                .insert(&format!("cluster1_{}", i), &vec, HashMap::new())
+                .unwrap();
         }
 
         for i in 0..5 {
             let vec = vec![0.0, 0.0, 1.0 - (i as f32) * 0.05, (i as f32) * 0.05];
-            index.insert(&format!("cluster2_{}", i), &vec, HashMap::new()).unwrap();
+            index
+                .insert(&format!("cluster2_{}", i), &vec, HashMap::new())
+                .unwrap();
         }
 
         let exploration = index.find_clusters();
@@ -805,12 +870,21 @@ mod tests {
 
     #[test]
     fn test_discovery_modes() {
-        let config = DiscoveryConfig { dimension: 4, ..Default::default() };
+        let config = DiscoveryConfig {
+            dimension: 4,
+            ..Default::default()
+        };
         let index = DiscoveryIndex::new(config);
 
-        index.insert("v1", &[1.0, 0.0, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("v2", &[0.0, 1.0, 0.0, 0.0], HashMap::new()).unwrap();
-        index.insert("v3", &[0.0, 0.0, 1.0, 0.0], HashMap::new()).unwrap();
+        index
+            .insert("v1", &[1.0, 0.0, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("v2", &[0.0, 1.0, 0.0, 0.0], HashMap::new())
+            .unwrap();
+        index
+            .insert("v3", &[0.0, 0.0, 1.0, 0.0], HashMap::new())
+            .unwrap();
 
         // Discover mode (novelty)
         let query = DiscoveryQuery::new()

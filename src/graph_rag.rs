@@ -63,7 +63,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 
@@ -330,10 +330,7 @@ impl GraphRAG {
             .push(relation.clone());
 
         // Add to incoming edges
-        self.incoming
-            .entry(to)
-            .or_default()
-            .push(relation);
+        self.incoming.entry(to).or_default().push(relation);
 
         Ok(())
     }
@@ -358,10 +355,7 @@ impl GraphRAG {
             .push(relation.clone());
 
         // Add to incoming edges
-        self.incoming
-            .entry(to)
-            .or_default()
-            .push(relation);
+        self.incoming.entry(to).or_default().push(relation);
 
         Ok(())
     }
@@ -456,9 +450,10 @@ impl GraphRAG {
                     }
 
                     if let Some(ref filter) = query.relation_type_filter
-                        && !filter.contains(&relation.relation_type) {
-                            continue;
-                        }
+                        && !filter.contains(&relation.relation_type)
+                    {
+                        continue;
+                    }
 
                     if !visited.contains(&relation.to) {
                         subgraph.push(relation.to.clone());

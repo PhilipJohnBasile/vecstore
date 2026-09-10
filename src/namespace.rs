@@ -3,7 +3,7 @@
 //! Provides namespace isolation, per-namespace quotas, and resource management
 //! for SaaS deployments.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -177,33 +177,36 @@ impl ResourceUsage {
     pub fn check_quotas(&self, quotas: &NamespaceQuotas) -> Result<()> {
         // Check vector count
         if let Some(max_vectors) = quotas.max_vectors
-            && self.vector_count >= max_vectors {
-                return Err(anyhow!(
-                    "Vector quota exceeded: {} / {} vectors",
-                    self.vector_count,
-                    max_vectors
-                ));
-            }
+            && self.vector_count >= max_vectors
+        {
+            return Err(anyhow!(
+                "Vector quota exceeded: {} / {} vectors",
+                self.vector_count,
+                max_vectors
+            ));
+        }
 
         // Check storage
         if let Some(max_storage) = quotas.max_storage_bytes
-            && self.storage_bytes >= max_storage {
-                return Err(anyhow!(
-                    "Storage quota exceeded: {} / {} bytes",
-                    self.storage_bytes,
-                    max_storage
-                ));
-            }
+            && self.storage_bytes >= max_storage
+        {
+            return Err(anyhow!(
+                "Storage quota exceeded: {} / {} bytes",
+                self.storage_bytes,
+                max_storage
+            ));
+        }
 
         // Check concurrent queries
         if let Some(max_concurrent) = quotas.max_concurrent_queries
-            && self.active_queries >= max_concurrent {
-                return Err(anyhow!(
-                    "Concurrent query limit exceeded: {} / {}",
-                    self.active_queries,
-                    max_concurrent
-                ));
-            }
+            && self.active_queries >= max_concurrent
+        {
+            return Err(anyhow!(
+                "Concurrent query limit exceeded: {} / {}",
+                self.active_queries,
+                max_concurrent
+            ));
+        }
 
         Ok(())
     }
@@ -223,9 +226,10 @@ impl ResourceUsage {
 
         // Check rate limit
         if let Some(max_rps) = quotas.max_requests_per_second
-            && self.requests_current_window as f64 >= max_rps {
-                return Err(anyhow!("Rate limit exceeded: {} requests/second", max_rps));
-            }
+            && self.requests_current_window as f64 >= max_rps
+        {
+            return Err(anyhow!("Rate limit exceeded: {} requests/second", max_rps));
+        }
 
         self.requests_current_window += 1;
         self.total_requests += 1;
@@ -277,24 +281,26 @@ impl Namespace {
 
         // Check if adding 'count' vectors would exceed quota
         if let Some(max_vectors) = self.quotas.max_vectors
-            && self.usage.vector_count + count > max_vectors {
-                return Err(anyhow!(
-                    "Upsert would exceed vector quota: {} + {} > {}",
-                    self.usage.vector_count,
-                    count,
-                    max_vectors
-                ));
-            }
+            && self.usage.vector_count + count > max_vectors
+        {
+            return Err(anyhow!(
+                "Upsert would exceed vector quota: {} + {} > {}",
+                self.usage.vector_count,
+                count,
+                max_vectors
+            ));
+        }
 
         // Check batch size
         if let Some(max_batch) = self.quotas.max_batch_size
-            && count > max_batch {
-                return Err(anyhow!(
-                    "Batch size exceeds limit: {} > {}",
-                    count,
-                    max_batch
-                ));
-            }
+            && count > max_batch
+        {
+            return Err(anyhow!(
+                "Batch size exceeds limit: {} > {}",
+                count,
+                max_batch
+            ));
+        }
 
         Ok(())
     }
@@ -305,15 +311,15 @@ impl Namespace {
         match self.status {
             NamespaceStatus::PendingDeletion => {
                 return Err(anyhow!("Namespace is pending deletion"));
-            }
+            },
             NamespaceStatus::Suspended => {
                 return Err(anyhow!(
                     "Namespace is suspended. Contact administrator to reactivate."
                 ));
-            }
+            },
             NamespaceStatus::Active | NamespaceStatus::ReadOnly => {
                 // OK to query
-            }
+            },
         }
 
         // Check concurrent query limit
@@ -321,13 +327,14 @@ impl Namespace {
 
         // Check result limit
         if let Some(max_results) = self.quotas.max_results_per_query
-            && k > max_results {
-                return Err(anyhow!(
-                    "Query limit exceeds maximum: {} > {}",
-                    k,
-                    max_results
-                ));
-            }
+            && k > max_results
+        {
+            return Err(anyhow!(
+                "Query limit exceeds maximum: {} > {}",
+                k,
+                max_results
+            ));
+        }
 
         Ok(())
     }

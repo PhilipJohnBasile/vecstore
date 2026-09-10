@@ -32,7 +32,7 @@
 //! let fixed = validator.auto_fix(&vector)?;
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Validation configuration
@@ -269,12 +269,13 @@ impl VectorValidator {
 
         // Check dimension
         if let Some(expected_dim) = self.config.expected_dimension
-            && vector.len() != expected_dim {
-                errors.push(ValidationError::DimensionMismatch {
-                    expected: expected_dim,
-                    actual: vector.len(),
-                });
-            }
+            && vector.len() != expected_dim
+        {
+            errors.push(ValidationError::DimensionMismatch {
+                expected: expected_dim,
+                actual: vector.len(),
+            });
+        }
 
         // Check for NaN and infinity
         let nan_indices: Vec<usize> = vector
@@ -477,7 +478,7 @@ impl VectorValidator {
 
     fn compute_variance(&self, vector: &[f32]) -> f32 {
         let mean = vector.iter().sum::<f32>() / vector.len() as f32;
-        
+
         vector.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / vector.len() as f32
     }
 
@@ -557,9 +558,11 @@ mod tests {
         let result = validator.validate(&vector);
         assert!(result.is_invalid());
         if let ValidationResult::Invalid(errors) = result {
-            assert!(errors
-                .iter()
-                .any(|e| matches!(e, ValidationError::ContainsNaN { .. })));
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| matches!(e, ValidationError::ContainsNaN { .. }))
+            );
         }
     }
 
@@ -578,9 +581,11 @@ mod tests {
         let result = validator.validate(&vector);
         assert!(result.is_invalid());
         if let ValidationResult::Invalid(errors) = result {
-            assert!(errors
-                .iter()
-                .any(|e| matches!(e, ValidationError::ZeroVector)));
+            assert!(
+                errors
+                    .iter()
+                    .any(|e| matches!(e, ValidationError::ZeroVector))
+            );
         }
     }
 

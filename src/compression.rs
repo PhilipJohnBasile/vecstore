@@ -41,12 +41,11 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Compression level
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum CompressionLevel {
     /// No compression (fastest)
     None,
@@ -61,7 +60,6 @@ pub enum CompressionLevel {
     /// Maximum compression (slower, best ratio)
     Max,
 }
-
 
 /// Compression configuration
 #[derive(Debug, Clone)]
@@ -236,7 +234,7 @@ impl CompressionConfig {
                 {
                     Ok(data.to_vec())
                 }
-            }
+            },
             CompressionLevel::Balanced => {
                 #[cfg(feature = "compression")]
                 {
@@ -253,7 +251,7 @@ impl CompressionConfig {
                 {
                     Ok(data.to_vec())
                 }
-            }
+            },
             CompressionLevel::Max => {
                 #[cfg(feature = "compression")]
                 {
@@ -270,7 +268,7 @@ impl CompressionConfig {
                 {
                     Ok(data.to_vec())
                 }
-            }
+            },
         }
     }
 
@@ -289,17 +287,17 @@ impl CompressionConfig {
                     let decompressed = lz4_flex::decompress_size_prepended(&data[1..])
                         .map_err(|e| anyhow!("LZ4 decompression failed: {}", e))?;
                     Ok(decompressed)
-                }
+                },
                 Some(0x5A) => {
                     // ZSTD format
                     let decompressed = zstd::decode_all(std::io::Cursor::new(&data[1..]))
                         .map_err(|e| anyhow!("ZSTD decompression failed: {}", e))?;
                     Ok(decompressed)
-                }
+                },
                 _ => {
                     // Uncompressed data (no magic byte or unknown format)
                     Ok(data.to_vec())
-                }
+                },
             }
         }
         #[cfg(not(feature = "compression"))]
@@ -329,7 +327,7 @@ impl CompressionConfig {
                 }
 
                 Ok(output)
-            }
+            },
             16 => {
                 // 16-bit quantization
                 let min = values.iter().copied().fold(f32::INFINITY, f32::min);
@@ -346,7 +344,7 @@ impl CompressionConfig {
                 }
 
                 Ok(output)
-            }
+            },
             32 => {
                 // No compression, just convert to bytes
                 let mut output = Vec::with_capacity(values.len() * 4);
@@ -354,7 +352,7 @@ impl CompressionConfig {
                     output.extend_from_slice(&v.to_le_bytes());
                 }
                 Ok(output)
-            }
+            },
             _ => Err(anyhow!("Unsupported precision bits: {}", precision_bits)),
         }
     }
@@ -385,7 +383,7 @@ impl CompressionConfig {
                 }
 
                 Ok(values)
-            }
+            },
             16 => {
                 if data.len() < 8 {
                     return Err(anyhow!("Insufficient data for float decompression"));
@@ -406,7 +404,7 @@ impl CompressionConfig {
                 }
 
                 Ok(values)
-            }
+            },
             32 => {
                 let mut values = Vec::with_capacity(count);
                 for i in 0..count {
@@ -417,7 +415,7 @@ impl CompressionConfig {
                     values.push(f32::from_le_bytes(data[offset..offset + 4].try_into()?));
                 }
                 Ok(values)
-            }
+            },
             _ => Err(anyhow!("Unsupported precision bits: {}", precision_bits)),
         }
     }

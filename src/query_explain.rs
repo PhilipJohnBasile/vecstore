@@ -81,47 +81,27 @@ pub enum PlanNodeType {
     /// Root query node
     Query,
     /// Vector similarity search
-    VectorScan {
-        index_type: String,
-        metric: String,
-    },
+    VectorScan { index_type: String, metric: String },
     /// Metadata filter
-    Filter {
-        expression: String,
-    },
+    Filter { expression: String },
     /// Hybrid search fusion
-    Fusion {
-        strategy: String,
-    },
+    Fusion { strategy: String },
     /// Reranking stage
-    Rerank {
-        method: String,
-    },
+    Rerank { method: String },
     /// Result limit/offset
-    Limit {
-        limit: usize,
-        offset: usize,
-    },
+    Limit { limit: usize, offset: usize },
     /// Aggregation
-    Aggregate {
-        function: String,
-    },
+    Aggregate { function: String },
     /// Cache lookup
     CacheLookup,
     /// Parallel execution
-    Parallel {
-        workers: usize,
-    },
+    Parallel { workers: usize },
     /// Index scan
-    IndexScan {
-        index_name: String,
-    },
+    IndexScan { index_name: String },
     /// Sequential scan (fallback)
     SeqScan,
     /// Sort operation
-    Sort {
-        keys: Vec<String>,
-    },
+    Sort { keys: Vec<String> },
 }
 
 /// Execution plan node
@@ -181,9 +161,7 @@ impl PlanNode {
     /// Total time including children
     pub fn total_time_ms(&self) -> f64 {
         let self_time = self.actual_time_ms.unwrap_or(0.0);
-        let children_time: f64 = self.children.iter()
-            .map(|c| c.total_time_ms())
-            .sum();
+        let children_time: f64 = self.children.iter().map(|c| c.total_time_ms()).sum();
         self_time + children_time
     }
 
@@ -196,26 +174,19 @@ impl PlanNode {
         // Node type and basic info
         let node_name = match &self.node_type {
             PlanNodeType::Query => "Query".to_string(),
-            PlanNodeType::VectorScan { index_type, metric } =>
-                format!("Vector Scan ({}, {})", index_type, metric),
-            PlanNodeType::Filter { expression } =>
-                format!("Filter ({})", expression),
-            PlanNodeType::Fusion { strategy } =>
-                format!("Fusion ({})", strategy),
-            PlanNodeType::Rerank { method } =>
-                format!("Rerank ({})", method),
-            PlanNodeType::Limit { limit, offset } =>
-                format!("Limit {} Offset {}", limit, offset),
-            PlanNodeType::Aggregate { function } =>
-                format!("Aggregate ({})", function),
+            PlanNodeType::VectorScan { index_type, metric } => {
+                format!("Vector Scan ({}, {})", index_type, metric)
+            },
+            PlanNodeType::Filter { expression } => format!("Filter ({})", expression),
+            PlanNodeType::Fusion { strategy } => format!("Fusion ({})", strategy),
+            PlanNodeType::Rerank { method } => format!("Rerank ({})", method),
+            PlanNodeType::Limit { limit, offset } => format!("Limit {} Offset {}", limit, offset),
+            PlanNodeType::Aggregate { function } => format!("Aggregate ({})", function),
             PlanNodeType::CacheLookup => "Cache Lookup".to_string(),
-            PlanNodeType::Parallel { workers } =>
-                format!("Parallel ({} workers)", workers),
-            PlanNodeType::IndexScan { index_name } =>
-                format!("Index Scan ({})", index_name),
+            PlanNodeType::Parallel { workers } => format!("Parallel ({} workers)", workers),
+            PlanNodeType::IndexScan { index_name } => format!("Index Scan ({})", index_name),
             PlanNodeType::SeqScan => "Sequential Scan".to_string(),
-            PlanNodeType::Sort { keys } =>
-                format!("Sort ({})", keys.join(", ")),
+            PlanNodeType::Sort { keys } => format!("Sort ({})", keys.join(", ")),
         };
 
         output.push_str(&format!("{}{}{}", prefix, arrow, node_name));
@@ -273,7 +244,8 @@ impl PlanNode {
     pub fn format_html(&self) -> String {
         let mut html = String::new();
 
-        html.push_str(r#"<!DOCTYPE html>
+        html.push_str(
+            r#"<!DOCTYPE html>
 <html>
 <head>
 <style>
@@ -292,7 +264,8 @@ h1 { color: #569cd6; }
 </head>
 <body>
 <h1>Query Execution Plan</h1>
-"#);
+"#,
+        );
 
         html.push_str(&self.format_html_node(100.0));
 
@@ -305,26 +278,19 @@ h1 { color: #569cd6; }
 
         let node_name = match &self.node_type {
             PlanNodeType::Query => "Query".to_string(),
-            PlanNodeType::VectorScan { index_type, metric } =>
-                format!("Vector Scan ({}, {})", index_type, metric),
-            PlanNodeType::Filter { expression } =>
-                format!("Filter: {}", expression),
-            PlanNodeType::Fusion { strategy } =>
-                format!("Fusion: {}", strategy),
-            PlanNodeType::Rerank { method } =>
-                format!("Rerank: {}", method),
-            PlanNodeType::Limit { limit, offset } =>
-                format!("Limit {} Offset {}", limit, offset),
-            PlanNodeType::Aggregate { function } =>
-                format!("Aggregate: {}", function),
+            PlanNodeType::VectorScan { index_type, metric } => {
+                format!("Vector Scan ({}, {})", index_type, metric)
+            },
+            PlanNodeType::Filter { expression } => format!("Filter: {}", expression),
+            PlanNodeType::Fusion { strategy } => format!("Fusion: {}", strategy),
+            PlanNodeType::Rerank { method } => format!("Rerank: {}", method),
+            PlanNodeType::Limit { limit, offset } => format!("Limit {} Offset {}", limit, offset),
+            PlanNodeType::Aggregate { function } => format!("Aggregate: {}", function),
             PlanNodeType::CacheLookup => "Cache Lookup".to_string(),
-            PlanNodeType::Parallel { workers } =>
-                format!("Parallel ({} workers)", workers),
-            PlanNodeType::IndexScan { index_name } =>
-                format!("Index Scan: {}", index_name),
+            PlanNodeType::Parallel { workers } => format!("Parallel ({} workers)", workers),
+            PlanNodeType::IndexScan { index_name } => format!("Index Scan: {}", index_name),
             PlanNodeType::SeqScan => "Sequential Scan".to_string(),
-            PlanNodeType::Sort { keys } =>
-                format!("Sort: {}", keys.join(", ")),
+            PlanNodeType::Sort { keys } => format!("Sort: {}", keys.join(", ")),
         };
 
         let time_pct = if parent_time > 0.0 {
@@ -335,17 +301,29 @@ h1 { color: #569cd6; }
 
         html.push_str("<div class=\"node\">");
         html.push_str(&format!("<span class=\"node-type\">{}</span>", node_name));
-        html.push_str(&format!(" <span class=\"cost\">cost={:.2}</span>", self.estimated_cost));
+        html.push_str(&format!(
+            " <span class=\"cost\">cost={:.2}</span>",
+            self.estimated_cost
+        ));
 
         if let Some(actual) = self.actual_rows {
-            html.push_str(&format!(" <span class=\"rows\">rows={}/{}</span>", actual, self.estimated_rows));
+            html.push_str(&format!(
+                " <span class=\"rows\">rows={}/{}</span>",
+                actual, self.estimated_rows
+            ));
         } else {
-            html.push_str(&format!(" <span class=\"rows\">rows={}</span>", self.estimated_rows));
+            html.push_str(&format!(
+                " <span class=\"rows\">rows={}</span>",
+                self.estimated_rows
+            ));
         }
 
         if let Some(time) = self.actual_time_ms {
             html.push_str(&format!(" <span class=\"time\">[{:.3} ms]</span>", time));
-            html.push_str(&format!("<div class=\"bar\" style=\"width: {}%;\"></div>", time_pct));
+            html.push_str(&format!(
+                "<div class=\"bar\" style=\"width: {}%;\"></div>",
+                time_pct
+            ));
         }
 
         for (key, value) in &self.properties {
@@ -353,7 +331,10 @@ h1 { color: #569cd6; }
         }
 
         for warning in &self.warnings {
-            html.push_str(&format!("<div class=\"warning\">WARNING: {}</div>", warning));
+            html.push_str(&format!(
+                "<div class=\"warning\">WARNING: {}</div>",
+                warning
+            ));
         }
 
         if !self.children.is_empty() {
@@ -382,7 +363,12 @@ h1 { color: #569cd6; }
         dot
     }
 
-    fn format_dot_node(&self, dot: &mut String, counter: &mut usize, parent: Option<usize>) -> usize {
+    fn format_dot_node(
+        &self,
+        dot: &mut String,
+        counter: &mut usize,
+        parent: Option<usize>,
+    ) -> usize {
         let id = *counter;
         *counter += 1;
 
@@ -392,7 +378,7 @@ h1 { color: #569cd6; }
             PlanNodeType::Filter { expression } => format!("Filter\\n{}", expression),
             PlanNodeType::Fusion { strategy } => format!("Fusion\\n{}", strategy),
             PlanNodeType::Rerank { method } => format!("Rerank\\n{}", method),
-            PlanNodeType::Limit { limit, .. } => format!("Limit {}",limit),
+            PlanNodeType::Limit { limit, .. } => format!("Limit {}", limit),
             _ => format!("{:?}", self.node_type),
         };
 
@@ -517,15 +503,25 @@ impl ExplainResult {
             output.push_str(&"-".repeat(60));
             output.push('\n');
             output.push_str(&format!("Total time: {:.3} ms\n", self.stats.total_time_ms));
-            output.push_str(&format!("  Planning: {:.3} ms\n", self.stats.planning_time_ms));
-            output.push_str(&format!("  Execution: {:.3} ms\n", self.stats.execution_time_ms));
-            output.push_str(&format!("Rows: {} examined, {} returned\n",
-                self.stats.rows_examined, self.stats.rows_returned));
+            output.push_str(&format!(
+                "  Planning: {:.3} ms\n",
+                self.stats.planning_time_ms
+            ));
+            output.push_str(&format!(
+                "  Execution: {:.3} ms\n",
+                self.stats.execution_time_ms
+            ));
+            output.push_str(&format!(
+                "Rows: {} examined, {} returned\n",
+                self.stats.rows_examined, self.stats.rows_returned
+            ));
         }
 
         if options.buffers {
-            output.push_str(&format!("Cache: {} hits, {} misses\n",
-                self.stats.cache_hits, self.stats.cache_misses));
+            output.push_str(&format!(
+                "Cache: {} hits, {} misses\n",
+                self.stats.cache_hits, self.stats.cache_misses
+            ));
             output.push_str(&format!("Memory: {} bytes\n", self.stats.memory_bytes));
             output.push_str(&format!("Disk reads: {}\n", self.stats.disk_reads));
         }
@@ -535,9 +531,16 @@ impl ExplainResult {
             output.push_str(&"-".repeat(60));
             output.push('\n');
             for (i, suggestion) in self.suggestions.iter().enumerate() {
-                output.push_str(&format!("{}. [{:?}] {}\n",
-                    i + 1, suggestion.suggestion_type, suggestion.description));
-                output.push_str(&format!("   Improvement: {}\n", suggestion.estimated_improvement));
+                output.push_str(&format!(
+                    "{}. [{:?}] {}\n",
+                    i + 1,
+                    suggestion.suggestion_type,
+                    suggestion.description
+                ));
+                output.push_str(&format!(
+                    "   Improvement: {}\n",
+                    suggestion.estimated_improvement
+                ));
                 output.push_str(&format!("   Action: {}\n", suggestion.action));
             }
         }
@@ -566,7 +569,8 @@ impl ExplainResult {
 
         // Insert stats before closing body
         if options.timing {
-            let stats_html = format!(r#"
+            let stats_html = format!(
+                r#"
 <div style="margin-top: 20px; padding: 15px; background: #252526; border: 1px solid #569cd6;">
 <h2 style="color: #569cd6;">Execution Statistics</h2>
 <table style="width: 100%;">
@@ -652,7 +656,10 @@ impl QueryExplainer {
         root.actual_rows = Some(k);
 
         // Add limit node
-        let mut limit_node = PlanNode::new(PlanNodeType::Limit { limit: k, offset: 0 });
+        let mut limit_node = PlanNode::new(PlanNodeType::Limit {
+            limit: k,
+            offset: 0,
+        });
         limit_node.estimated_rows = k;
         limit_node.actual_rows = Some(k);
         limit_node.estimated_cost = 0.1;
@@ -689,7 +696,8 @@ impl QueryExplainer {
             });
 
             // Estimate selectivity
-            let selectivity = self.selectivity_history
+            let selectivity = self
+                .selectivity_history
                 .get(filter_expr)
                 .copied()
                 .unwrap_or(0.1);
@@ -803,13 +811,19 @@ impl QueryExplainer {
         text_node.estimated_rows = k * 2;
         text_node.estimated_cost = 3.0;
         text_node.actual_time_ms = Some(2.0);
-        text_node.set_property("query_terms", &query_text.split_whitespace().count().to_string());
+        text_node.set_property(
+            "query_terms",
+            &query_text.split_whitespace().count().to_string(),
+        );
 
         fusion_node.add_child(vector_node);
         fusion_node.add_child(text_node);
 
         // Limit
-        let mut limit_node = PlanNode::new(PlanNodeType::Limit { limit: k, offset: 0 });
+        let mut limit_node = PlanNode::new(PlanNodeType::Limit {
+            limit: k,
+            offset: 0,
+        });
         limit_node.estimated_rows = k;
         limit_node.estimated_cost = 0.1;
         limit_node.actual_time_ms = Some(0.01);
@@ -855,12 +869,7 @@ mod tests {
         let explainer = QueryExplainer::new();
         let query = vec![0.1f32; 128];
 
-        let result = explainer.explain_search(
-            &query,
-            10,
-            None,
-            &ExplainOptions::default()
-        );
+        let result = explainer.explain_search(&query, 10, None, &ExplainOptions::default());
 
         assert!(result.stats.total_time_ms > 0.0);
         assert_eq!(result.stats.rows_returned, 10);
@@ -875,7 +884,7 @@ mod tests {
             &query,
             10,
             Some("category = 'test'"),
-            &ExplainOptions::default()
+            &ExplainOptions::default(),
         );
 
         let text = result.format(&ExplainOptions::default());
@@ -919,12 +928,7 @@ mod tests {
         let explainer = QueryExplainer::new();
         let query = vec![0.1f32; 128];
 
-        let result = explainer.explain_hybrid(
-            &query,
-            "test query",
-            10,
-            &ExplainOptions::default()
-        );
+        let result = explainer.explain_hybrid(&query, "test query", 10, &ExplainOptions::default());
 
         let text = result.format(&ExplainOptions::default());
         assert!(text.contains("Fusion"));

@@ -3,7 +3,7 @@
 // Azure OpenAI, HuggingFace Inference API, Jina AI
 
 use super::TextEmbedder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -136,13 +136,13 @@ impl AzureEmbedding {
                     data.sort_by_key(|d| d.index);
 
                     return Ok(data.into_iter().map(|d| d.embedding).collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -150,16 +150,16 @@ impl AzureEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Azure API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Azure API: {}", e));
-                }
+                },
             }
         }
     }
@@ -273,19 +273,19 @@ impl HuggingFaceEmbedding {
                         .context("Failed to parse HuggingFace response")?;
 
                     return Ok(embeddings);
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 503 && retries < self.max_retries => {
                     // Model loading, retry after longer wait
                     retries += 1;
                     tokio::time::sleep(Duration::from_secs(10)).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -293,16 +293,16 @@ impl HuggingFaceEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("HuggingFace API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call HuggingFace API: {}", e));
-                }
+                },
             }
         }
     }
@@ -442,13 +442,13 @@ impl JinaEmbedding {
                     data.sort_by_key(|d| d.index);
 
                     return Ok(data.into_iter().map(|d| d.embedding).collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -456,16 +456,16 @@ impl JinaEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Jina API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Jina API: {}", e));
-                }
+                },
             }
         }
     }

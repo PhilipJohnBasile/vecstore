@@ -13,8 +13,8 @@
 //! - Default capacity: 1000 entries
 //! - Configurable max size
 
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -77,12 +77,13 @@ impl<V: Clone> QueryCache<V> {
         if let Some(entry) = self.entries.get_mut(&hash) {
             // Check TTL if enabled
             if let Some(ttl) = self.ttl
-                && entry.inserted_at.elapsed() > ttl {
-                    // Entry expired, remove it
-                    self.entries.remove(&hash);
-                    self.misses += 1;
-                    return None;
-                }
+                && entry.inserted_at.elapsed() > ttl
+            {
+                // Entry expired, remove it
+                self.entries.remove(&hash);
+                self.misses += 1;
+                return None;
+            }
 
             // Update access time for LRU
             self.access_counter += 1;
@@ -244,19 +245,25 @@ impl<V: Clone> SharedQueryCache<V> {
 
     /// Get a cached value
     pub fn get(&self, key: &[f32]) -> Option<V> {
-        let Ok(mut guard) = self.inner.lock() else { return None; };
+        let Ok(mut guard) = self.inner.lock() else {
+            return None;
+        };
         guard.get(key)
     }
 
     /// Insert a value
     pub fn insert(&self, key: &[f32], value: V) {
-        let Ok(mut guard) = self.inner.lock() else { return; };
+        let Ok(mut guard) = self.inner.lock() else {
+            return;
+        };
         guard.insert(key, value);
     }
 
     /// Clear the cache
     pub fn clear(&self) {
-        let Ok(mut guard) = self.inner.lock() else { return; };
+        let Ok(mut guard) = self.inner.lock() else {
+            return;
+        };
         guard.clear();
     }
 
@@ -277,13 +284,17 @@ impl<V: Clone> SharedQueryCache<V> {
 
     /// Evict expired entries
     pub fn evict_expired(&self) -> usize {
-        let Ok(mut guard) = self.inner.lock() else { return 0; };
+        let Ok(mut guard) = self.inner.lock() else {
+            return 0;
+        };
         guard.evict_expired()
     }
 
     /// Get cache hit rate
     pub fn hit_rate(&self) -> f32 {
-        let Ok(guard) = self.inner.lock() else { return 0.0; };
+        let Ok(guard) = self.inner.lock() else {
+            return 0.0;
+        };
         guard.hit_rate()
     }
 
@@ -327,8 +338,7 @@ pub mod early_termination {
     impl Ord for HeapEntry {
         fn cmp(&self, other: &Self) -> Ordering {
             // Max-heap based on distance (peek gives largest distance)
-            self.distance
-                .total_cmp(&other.distance)
+            self.distance.total_cmp(&other.distance)
         }
     }
 

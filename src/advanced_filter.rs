@@ -28,7 +28,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use regex::Regex;
 use serde_json::Value;
 
@@ -64,7 +64,7 @@ impl AdvancedFilter {
             AdvancedFilter::JsonPath(path, op, value) => {
                 let extracted = extract_json_path(metadata, path)?;
                 compare_values(&extracted, op, value)
-            }
+            },
             AdvancedFilter::Regex(field, pattern) => {
                 let field_value = extract_field(metadata, field)?;
                 if let Some(s) = field_value.as_str() {
@@ -73,7 +73,7 @@ impl AdvancedFilter {
                 } else {
                     Ok(false)
                 }
-            }
+            },
             AdvancedFilter::ArrayContains(field, value) => {
                 let field_value = extract_field(metadata, field)?;
                 if let Some(arr) = field_value.as_array() {
@@ -81,7 +81,7 @@ impl AdvancedFilter {
                 } else {
                     Ok(false)
                 }
-            }
+            },
             AdvancedFilter::ArrayLength(field, op, length) => {
                 let field_value = extract_field(metadata, field)?;
                 if let Some(arr) = field_value.as_array() {
@@ -90,7 +90,7 @@ impl AdvancedFilter {
                 } else {
                     Ok(false)
                 }
-            }
+            },
             AdvancedFilter::ArrayAll(field, condition) => {
                 let field_value = extract_field(metadata, field)?;
                 if let Some(arr) = field_value.as_array() {
@@ -103,7 +103,7 @@ impl AdvancedFilter {
                 } else {
                     Ok(false)
                 }
-            }
+            },
             AdvancedFilter::ArrayAny(field, condition) => {
                 let field_value = extract_field(metadata, field)?;
                 if let Some(arr) = field_value.as_array() {
@@ -116,7 +116,7 @@ impl AdvancedFilter {
                 } else {
                     Ok(false)
                 }
-            }
+            },
             AdvancedFilter::And(filters) => {
                 for filter in filters {
                     if !filter.matches(metadata)? {
@@ -124,7 +124,7 @@ impl AdvancedFilter {
                     }
                 }
                 Ok(true)
-            }
+            },
             AdvancedFilter::Or(filters) => {
                 for filter in filters {
                     if filter.matches(metadata)? {
@@ -132,12 +132,12 @@ impl AdvancedFilter {
                     }
                 }
                 Ok(false)
-            }
+            },
             AdvancedFilter::Not(filter) => Ok(!filter.matches(metadata)?),
             AdvancedFilter::Basic(field, op, value) => {
                 let field_value = extract_field(metadata, field)?;
                 compare_values(&field_value, op, value)
-            }
+            },
         }
     }
 }

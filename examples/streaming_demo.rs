@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::time::Instant;
-use vecstore::{make_record, Metadata, VecStore};
+use vecstore::{Metadata, VecStore, make_record};
 
 fn main() -> anyhow::Result<()> {
     println!("╔═══════════════════════════════════════════════════════════════╗");

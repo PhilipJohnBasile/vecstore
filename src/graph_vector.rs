@@ -36,9 +36,9 @@
 //! )?;
 //! ```
 
-use std::collections::{HashMap, HashSet, BinaryHeap};
-use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use crate::error::VecStoreError;
 
@@ -289,7 +289,8 @@ impl GraphVectorEngine {
 
         if self.nodes.contains_key(&id) {
             return Err(VecStoreError::InvalidInput(format!(
-                "Node {} already exists", id
+                "Node {} already exists",
+                id
             )));
         }
 
@@ -319,19 +320,24 @@ impl GraphVectorEngine {
         // Validate nodes exist
         if !self.nodes.contains_key(&edge.from) {
             return Err(VecStoreError::NotFound(format!(
-                "Source node {} not found", edge.from
+                "Source node {} not found",
+                edge.from
             )));
         }
         if !self.nodes.contains_key(&edge.to) {
             return Err(VecStoreError::NotFound(format!(
-                "Target node {} not found", edge.to
+                "Target node {} not found",
+                edge.to
             )));
         }
 
         let edge_idx = self.edges.len();
 
         // Update adjacency lists
-        self.adjacency_out.get_mut(&edge.from).unwrap().push(edge_idx);
+        self.adjacency_out
+            .get_mut(&edge.from)
+            .unwrap()
+            .push(edge_idx);
         self.adjacency_in.get_mut(&edge.to).unwrap().push(edge_idx);
 
         // Update node references
@@ -387,9 +393,10 @@ impl GraphVectorEngine {
         while let Some(current) = heap.pop() {
             // Skip if we've seen this node with a better score
             if let Some(existing) = visited.get(&current.node_id)
-                && existing.score >= current.score {
-                    continue;
-                }
+                && existing.score >= current.score
+            {
+                continue;
+            }
 
             // Get node info
             let node = match self.nodes.get(&current.node_id) {
@@ -401,8 +408,8 @@ impl GraphVectorEngine {
             let vector_score = self.cosine_similarity(query_vector, &node.vector);
 
             // Combined score
-            let combined_score = vector_score * config.vector_weight
-                + current.score * config.edge_weight;
+            let combined_score =
+                vector_score * config.vector_weight + current.score * config.edge_weight;
 
             if combined_score < config.min_score {
                 continue;
@@ -430,8 +437,7 @@ impl GraphVectorEngine {
                     let edge = &self.edges[edge_idx];
 
                     // Check edge type filter
-                    if !config.edge_types.is_empty()
-                        && !config.edge_types.contains(&edge.edge_type)
+                    if !config.edge_types.is_empty() && !config.edge_types.contains(&edge.edge_type)
                     {
                         continue;
                     }
@@ -469,7 +475,8 @@ impl GraphVectorEngine {
         }
 
         // Filter and sort results
-        let mut results: Vec<GraphSearchResult> = visited.into_values()
+        let mut results: Vec<GraphSearchResult> = visited
+            .into_values()
             .filter(|r| config.include_start || r.hops > 0)
             .filter(|r| r.score >= config.min_score)
             .collect();
@@ -489,7 +496,8 @@ impl GraphVectorEngine {
     ) -> Result<Vec<(String, usize)>, VecStoreError> {
         if !self.nodes.contains_key(start_id) {
             return Err(VecStoreError::NotFound(format!(
-                "Node {} not found", start_id
+                "Node {} not found",
+                start_id
             )));
         }
 
@@ -527,7 +535,11 @@ impl GraphVectorEngine {
     }
 
     /// Find the shortest path between two nodes
-    pub fn shortest_path(&self, from: &str, to: &str) -> Result<Option<Vec<String>>, VecStoreError> {
+    pub fn shortest_path(
+        &self,
+        from: &str,
+        to: &str,
+    ) -> Result<Option<Vec<String>>, VecStoreError> {
         if !self.nodes.contains_key(from) {
             return Err(VecStoreError::NotFound(format!("Node {} not found", from)));
         }
@@ -587,7 +599,10 @@ impl GraphVectorEngine {
         direction: TraversalDirection,
     ) -> Result<Vec<(String, EdgeType, f32)>, VecStoreError> {
         if !self.nodes.contains_key(node_id) {
-            return Err(VecStoreError::NotFound(format!("Node {} not found", node_id)));
+            return Err(VecStoreError::NotFound(format!(
+                "Node {} not found",
+                node_id
+            )));
         }
 
         let edges = self.get_edges_for_traversal(node_id, &direction);
@@ -601,11 +616,7 @@ impl GraphVectorEngine {
                 &edge.from
             };
 
-            neighbors.push((
-                neighbor_id.clone(),
-                edge.edge_type.clone(),
-                edge.weight,
-            ));
+            neighbors.push((neighbor_id.clone(), edge.edge_type.clone(), edge.weight));
         }
 
         Ok(neighbors)
@@ -668,7 +679,9 @@ impl GraphVectorEngine {
         }
 
         // Mark edges for removal (edges involving this node)
-        let edges_to_remove: Vec<usize> = self.edges.iter()
+        let edges_to_remove: Vec<usize> = self
+            .edges
+            .iter()
             .enumerate()
             .filter(|(_, e)| e.from == id || e.to == id)
             .map(|(i, _)| i)
@@ -692,9 +705,10 @@ impl GraphVectorEngine {
 
     /// Update node vector
     pub fn update_vector(&mut self, id: &str, new_vector: Vec<f32>) -> Result<(), VecStoreError> {
-        let node = self.nodes.get_mut(id).ok_or_else(|| {
-            VecStoreError::NotFound(format!("Node {} not found", id))
-        })?;
+        let node = self
+            .nodes
+            .get_mut(id)
+            .ok_or_else(|| VecStoreError::NotFound(format!("Node {} not found", id)))?;
 
         node.vector = new_vector;
         Ok(())
@@ -708,7 +722,9 @@ impl GraphVectorEngine {
     // === Helper Methods ===
 
     fn find_similar_nodes(&self, query: &[f32], limit: usize) -> Vec<(String, f32)> {
-        let mut scores: Vec<_> = self.nodes.iter()
+        let mut scores: Vec<_> = self
+            .nodes
+            .iter()
             .map(|(id, node)| {
                 let sim = self.cosine_similarity(query, &node.vector);
                 (id.clone(), sim)
@@ -728,12 +744,12 @@ impl GraphVectorEngine {
                 if let Some(out_edges) = self.adjacency_out.get(node_id) {
                     edges.extend(out_edges);
                 }
-            }
+            },
             TraversalDirection::Incoming => {
                 if let Some(in_edges) = self.adjacency_in.get(node_id) {
                     edges.extend(in_edges);
                 }
-            }
+            },
             TraversalDirection::Both => {
                 if let Some(out_edges) = self.adjacency_out.get(node_id) {
                     edges.extend(out_edges);
@@ -741,7 +757,7 @@ impl GraphVectorEngine {
                 if let Some(in_edges) = self.adjacency_in.get(node_id) {
                     edges.extend(in_edges);
                 }
-            }
+            },
         }
 
         edges
@@ -900,15 +916,29 @@ mod tests {
         let mut engine = GraphVectorEngine::new();
 
         // Add nodes
-        engine.add_node(GraphNode::new("a", vec![1.0, 0.0, 0.0])).unwrap();
-        engine.add_node(GraphNode::new("b", vec![0.9, 0.1, 0.0])).unwrap();
-        engine.add_node(GraphNode::new("c", vec![0.0, 1.0, 0.0])).unwrap();
-        engine.add_node(GraphNode::new("d", vec![0.0, 0.0, 1.0])).unwrap();
+        engine
+            .add_node(GraphNode::new("a", vec![1.0, 0.0, 0.0]))
+            .unwrap();
+        engine
+            .add_node(GraphNode::new("b", vec![0.9, 0.1, 0.0]))
+            .unwrap();
+        engine
+            .add_node(GraphNode::new("c", vec![0.0, 1.0, 0.0]))
+            .unwrap();
+        engine
+            .add_node(GraphNode::new("d", vec![0.0, 0.0, 1.0]))
+            .unwrap();
 
         // Add edges: a -> b -> c, a -> d
-        engine.add_edge_simple("a", "b", EdgeType::References, 1.0).unwrap();
-        engine.add_edge_simple("b", "c", EdgeType::References, 0.8).unwrap();
-        engine.add_edge_simple("a", "d", EdgeType::RelatedTo, 0.5).unwrap();
+        engine
+            .add_edge_simple("a", "b", EdgeType::References, 1.0)
+            .unwrap();
+        engine
+            .add_edge_simple("b", "c", EdgeType::References, 0.8)
+            .unwrap();
+        engine
+            .add_edge_simple("a", "d", EdgeType::RelatedTo, 0.5)
+            .unwrap();
 
         engine
     }
@@ -929,7 +959,9 @@ mod tests {
     fn test_get_neighbors() {
         let engine = create_test_graph();
 
-        let neighbors = engine.get_neighbors("a", TraversalDirection::Outgoing).unwrap();
+        let neighbors = engine
+            .get_neighbors("a", TraversalDirection::Outgoing)
+            .unwrap();
         assert_eq!(neighbors.len(), 2);
 
         let neighbor_ids: Vec<_> = neighbors.iter().map(|(id, _, _)| id.as_str()).collect();
@@ -941,7 +973,9 @@ mod tests {
     fn test_find_reachable() {
         let engine = create_test_graph();
 
-        let reachable = engine.find_reachable("a", 2, TraversalDirection::Outgoing).unwrap();
+        let reachable = engine
+            .find_reachable("a", 2, TraversalDirection::Outgoing)
+            .unwrap();
 
         // Should find a (0 hops), b and d (1 hop), c (2 hops)
         assert_eq!(reachable.len(), 4);
@@ -990,14 +1024,26 @@ mod tests {
         let mut engine = GraphVectorEngine::new();
 
         // Component 1: a - b
-        engine.add_node(GraphNode::new("a", vec![1.0, 0.0])).unwrap();
-        engine.add_node(GraphNode::new("b", vec![0.0, 1.0])).unwrap();
-        engine.add_edge_simple("a", "b", EdgeType::RelatedTo, 1.0).unwrap();
+        engine
+            .add_node(GraphNode::new("a", vec![1.0, 0.0]))
+            .unwrap();
+        engine
+            .add_node(GraphNode::new("b", vec![0.0, 1.0]))
+            .unwrap();
+        engine
+            .add_edge_simple("a", "b", EdgeType::RelatedTo, 1.0)
+            .unwrap();
 
         // Component 2: c - d (disconnected)
-        engine.add_node(GraphNode::new("c", vec![0.5, 0.5])).unwrap();
-        engine.add_node(GraphNode::new("d", vec![0.5, 0.5])).unwrap();
-        engine.add_edge_simple("c", "d", EdgeType::RelatedTo, 1.0).unwrap();
+        engine
+            .add_node(GraphNode::new("c", vec![0.5, 0.5]))
+            .unwrap();
+        engine
+            .add_node(GraphNode::new("d", vec![0.5, 0.5]))
+            .unwrap();
+        engine
+            .add_edge_simple("c", "d", EdgeType::RelatedTo, 1.0)
+            .unwrap();
 
         let stats = engine.stats();
         assert_eq!(stats.component_count, 2);

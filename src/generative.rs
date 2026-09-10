@@ -35,9 +35,9 @@
 //! println!("Sources: {:?}", response.citations);
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
-use serde::{Deserialize, Serialize};
 
 use crate::error::Result;
 use crate::store::{Query, VecStore};
@@ -64,20 +64,11 @@ pub enum LLMProvider {
         max_tokens: Option<usize>,
     },
     /// Cohere Command models
-    Cohere {
-        model: String,
-        api_key: String,
-    },
+    Cohere { model: String, api_key: String },
     /// Google Gemini
-    Gemini {
-        model: String,
-        api_key: String,
-    },
+    Gemini { model: String, api_key: String },
     /// Ollama local models
-    Ollama {
-        model: String,
-        base_url: String,
-    },
+    Ollama { model: String, base_url: String },
     /// Azure OpenAI
     AzureOpenAI {
         deployment: String,
@@ -86,10 +77,7 @@ pub enum LLMProvider {
         api_version: String,
     },
     /// AWS Bedrock
-    Bedrock {
-        model_id: String,
-        region: String,
-    },
+    Bedrock { model_id: String, region: String },
     /// Custom HTTP endpoint
     Custom {
         endpoint: String,
@@ -154,17 +142,23 @@ fn default_prompt_template() -> String {
     "Answer the following question based on the provided context.\n\n\
      Context:\n{context}\n\n\
      Question: {query}\n\n\
-     Answer:".to_string()
+     Answer:"
+        .to_string()
 }
 
 fn default_system_prompt() -> String {
     "You are a helpful assistant that answers questions based on the provided context. \
      Be concise and accurate. If the context doesn't contain enough information, \
-     say so rather than making up an answer.".to_string()
+     say so rather than making up an answer."
+        .to_string()
 }
 
-fn default_true() -> bool { true }
-fn default_context_length() -> usize { 4000 }
+fn default_true() -> bool {
+    true
+}
+fn default_context_length() -> usize {
+    4000
+}
 
 impl GenerativeConfig {
     /// Create a new configuration
@@ -428,11 +422,7 @@ impl GenerativeSearch {
     }
 
     /// Generate a response for a query
-    pub fn generate(
-        &self,
-        query: &str,
-        options: GenerativeQuery,
-    ) -> Result<GenerativeResponse> {
+    pub fn generate(&self, query: &str, options: GenerativeQuery) -> Result<GenerativeResponse> {
         let start = std::time::Instant::now();
 
         // Step 1: Retrieve relevant documents (simulated)
@@ -488,14 +478,21 @@ impl GenerativeSearch {
 
             // Query the store
             let store_guard = store.read().map_err(|e| {
-                crate::error::VecStoreError::LockError(format!("Failed to acquire store lock: {}", e))
+                crate::error::VecStoreError::LockError(format!(
+                    "Failed to acquire store lock: {}",
+                    e
+                ))
             })?;
 
-            let results = store_guard.query(Query {
-                vector: query_vector,
-                k: options.limit,
-                filter: None, // Filter support planned for future release
-            }).map_err(|e| crate::error::VecStoreError::Internal(format!("Query failed: {}", e)))?;
+            let results = store_guard
+                .query(Query {
+                    vector: query_vector,
+                    k: options.limit,
+                    filter: None, // Filter support planned for future release
+                })
+                .map_err(|e| {
+                    crate::error::VecStoreError::Internal(format!("Query failed: {}", e))
+                })?;
 
             // Convert to RetrievedDocument format
             return Ok(results
@@ -522,7 +519,9 @@ impl GenerativeSearch {
                         id: neighbor.id,
                         content,
                         score: neighbor.score,
-                        metadata: Some(serde_json::to_value(&neighbor.metadata.fields).unwrap_or_default()),
+                        metadata: Some(
+                            serde_json::to_value(&neighbor.metadata.fields).unwrap_or_default(),
+                        ),
                     }
                 })
                 .collect());
@@ -530,7 +529,9 @@ impl GenerativeSearch {
 
         // Fallback: return placeholder documents when no store/embedder configured
         // Useful for testing RAG pipelines without full vector store setup
-        tracing::debug!("No store/embedder configured - returning placeholder documents for testing");
+        tracing::debug!(
+            "No store/embedder configured - returning placeholder documents for testing"
+        );
         Ok((0..options.limit.min(3))
             .map(|i| RetrievedDocument {
                 id: format!("placeholder_doc_{}", i),
@@ -554,11 +555,7 @@ impl GenerativeSearch {
         let mut context = String::new();
 
         for (i, doc) in docs.iter().enumerate() {
-            context.push_str(&format!(
-                "[{}] {}\n\n",
-                i + 1,
-                doc.content
-            ));
+            context.push_str(&format!("[{}] {}\n\n", i + 1, doc.content));
         }
 
         // Truncate if too long
@@ -577,7 +574,8 @@ impl GenerativeSearch {
         context: &str,
         options: &GenerativeQuery,
     ) -> Result<String> {
-        let template = options.prompt_template
+        let template = options
+            .prompt_template
             .as_ref()
             .unwrap_or(&self.config.prompt_template);
 
@@ -604,9 +602,7 @@ impl GenerativeSearch {
                 max_tokens,
             } => self.call_openai(prompt, model, api_key, *temperature, *max_tokens),
 
-            LLMProvider::Ollama { model, base_url } => {
-                self.call_ollama(prompt, model, base_url)
-            }
+            LLMProvider::Ollama { model, base_url } => self.call_ollama(prompt, model, base_url),
 
             // For other providers, return a message indicating they're not yet implemented
             _ => Ok(format!(
@@ -676,9 +672,9 @@ impl GenerativeSearch {
             )));
         }
 
-        let json: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e)))?;
+        let json: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e))
+        })?;
 
         json["choices"][0]["message"]["content"]
             .as_str()
@@ -717,9 +713,9 @@ impl GenerativeSearch {
             )));
         }
 
-        let json: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e)))?;
+        let json: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e))
+        })?;
 
         json["response"]
             .as_str()
@@ -921,10 +917,9 @@ mod tests {
         let config = GenerativeConfig::ollama("llama3");
         let gen_search = GenerativeSearch::new(config).unwrap();
 
-        let response = gen_search.generate(
-            "What is VecStore?",
-            GenerativeQuery::new().with_limit(3),
-        ).unwrap();
+        let response = gen_search
+            .generate("What is VecStore?", GenerativeQuery::new().with_limit(3))
+            .unwrap();
 
         assert!(!response.generated_text.is_empty());
         assert!(!response.citations.is_empty());
@@ -935,10 +930,9 @@ mod tests {
         let config = GenerativeConfig::ollama("llama3");
         let gen_search = GenerativeSearch::new(config).unwrap();
 
-        let stream = gen_search.generate_stream(
-            "What is VecStore?",
-            GenerativeQuery::new(),
-        ).unwrap();
+        let stream = gen_search
+            .generate_stream("What is VecStore?", GenerativeQuery::new())
+            .unwrap();
 
         let chunks: Vec<_> = stream.collect();
         assert!(!chunks.is_empty());

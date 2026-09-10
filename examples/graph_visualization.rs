@@ -143,14 +143,14 @@ fn main() -> Result<()> {
             println!("   2. Open graph.json in a D3.js visualization tool");
             println!("   3. Load graph_cytoscape.json in Cytoscape.js");
             println!("   4. Read graph_stats.txt for detailed metrics");
-        }
+        },
         Err(e) => {
             println!("⚠️  Graph visualization not available: {}", e);
             println!("\nNote: Graph visualization is currently only supported for WASM builds.");
             println!("To use visualization:");
             println!("  1. Build with: cargo build --target wasm32-unknown-unknown");
             println!("  2. Or use the WASM-based backend");
-        }
+        },
     }
 
     Ok(())

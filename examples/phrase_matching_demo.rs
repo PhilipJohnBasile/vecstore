@@ -8,7 +8,6 @@
 //!
 //! Run with: cargo run --example phrase_matching_demo
 
-
 // Mock TextIndex for demonstration (in practice, use VecStore's internal TextIndex)
 fn main() {
     println!("=== VecStore Phrase Matching Demo ===\n");

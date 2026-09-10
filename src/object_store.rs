@@ -53,15 +53,9 @@ pub enum StorageProvider {
         region: String,
     },
     /// Google Cloud Storage
-    GCS {
-        bucket: String,
-        prefix: String,
-    },
+    GCS { bucket: String, prefix: String },
     /// Azure Blob Storage
-    AzureBlob {
-        container: String,
-        prefix: String,
-    },
+    AzureBlob { container: String, prefix: String },
     /// MinIO (S3-compatible)
     MinIO {
         endpoint: String,
@@ -69,9 +63,7 @@ pub enum StorageProvider {
         prefix: String,
     },
     /// Local filesystem (for testing)
-    Local {
-        path: PathBuf,
-    },
+    Local { path: PathBuf },
 }
 
 /// Cache tier configuration
@@ -95,7 +87,10 @@ pub enum CacheStorageType {
     /// SSD-backed cache
     SSD { path: PathBuf },
     /// Hybrid memory + SSD
-    Hybrid { ssd_path: PathBuf, memory_ratio: f32 },
+    Hybrid {
+        ssd_path: PathBuf,
+        memory_ratio: f32,
+    },
 }
 
 /// Object store configuration
@@ -128,14 +123,12 @@ impl ObjectStoreConfig {
                 prefix: prefix.to_string(),
                 region: "us-east-1".to_string(),
             },
-            cache_tiers: vec![
-                CacheTier {
-                    name: "memory".to_string(),
-                    max_size_bytes: 1024 * 1024 * 1024, // 1GB
-                    ttl_seconds: 300,
-                    storage_type: CacheStorageType::Memory,
-                },
-            ],
+            cache_tiers: vec![CacheTier {
+                name: "memory".to_string(),
+                max_size_bytes: 1024 * 1024 * 1024, // 1GB
+                ttl_seconds: 300,
+                storage_type: CacheStorageType::Memory,
+            }],
             read_through_cache: true,
             write_through_cache: true,
             pre_warming: None,
@@ -152,14 +145,12 @@ impl ObjectStoreConfig {
                 bucket: bucket.to_string(),
                 prefix: prefix.to_string(),
             },
-            cache_tiers: vec![
-                CacheTier {
-                    name: "memory".to_string(),
-                    max_size_bytes: 1024 * 1024 * 1024,
-                    ttl_seconds: 300,
-                    storage_type: CacheStorageType::Memory,
-                },
-            ],
+            cache_tiers: vec![CacheTier {
+                name: "memory".to_string(),
+                max_size_bytes: 1024 * 1024 * 1024,
+                ttl_seconds: 300,
+                storage_type: CacheStorageType::Memory,
+            }],
             read_through_cache: true,
             write_through_cache: true,
             pre_warming: None,
@@ -362,15 +353,17 @@ impl MemoryCache {
 
     fn evict_one(&mut self) {
         // LRU eviction
-        let oldest_key = self.entries
+        let oldest_key = self
+            .entries
             .iter()
             .min_by_key(|(_, e)| e.last_access)
             .map(|(k, _)| k.clone());
 
         if let Some(key) = oldest_key
-            && let Some(entry) = self.entries.remove(&key) {
-                self.current_size = self.current_size.saturating_sub(entry.data.len() as u64);
-            }
+            && let Some(entry) = self.entries.remove(&key)
+        {
+            self.current_size = self.current_size.saturating_sub(entry.data.len() as u64);
+        }
     }
 
     fn invalidate(&mut self, key: &str) {
@@ -381,7 +374,8 @@ impl MemoryCache {
 
     fn stats(&self) -> CacheStats {
         let now = Instant::now();
-        let valid_entries: Vec<_> = self.entries
+        let valid_entries: Vec<_> = self
+            .entries
             .values()
             .filter(|e| now.duration_since(e.cached_at) < self.ttl)
             .collect();
@@ -484,13 +478,22 @@ impl AccessTracker {
     }
 
     fn most_recent(&self, n: usize) -> Vec<&str> {
-        self.recent.iter().rev().take(n).map(|s| s.as_str()).collect()
+        self.recent
+            .iter()
+            .rev()
+            .take(n)
+            .map(|s| s.as_str())
+            .collect()
     }
 
     fn most_frequent(&self, n: usize) -> Vec<(&str, u64)> {
         let mut items: Vec<_> = self.frequency.iter().collect();
         items.sort_by_key(|(_, count)| std::cmp::Reverse(*count));
-        items.into_iter().take(n).map(|(k, v)| (k.as_str(), *v)).collect()
+        items
+            .into_iter()
+            .take(n)
+            .map(|(k, v)| (k.as_str(), *v))
+            .collect()
     }
 }
 
@@ -549,7 +552,12 @@ impl ObjectStoreBackend {
     }
 
     /// Put a vector
-    pub fn put(&self, id: &str, vector: &[f32], metadata: &HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn put(
+        &self,
+        id: &str,
+        vector: &[f32],
+        metadata: &HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         let start = Instant::now();
 
         // Serialize
@@ -644,10 +652,14 @@ impl ObjectStoreBackend {
             // Update cache
             if self.config.read_through_cache {
                 let index_guard = self.metadata_index.read().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire metadata index read lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire metadata index read lock".to_string(),
+                    )
                 })?;
-                let meta = index_guard.get(id).cloned().unwrap_or_else(|| {
-                    ObjectMetadata {
+                let meta = index_guard
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| ObjectMetadata {
                         key: id.to_string(),
                         size_bytes: data.len() as u64,
                         created_at: unix_timestamp(),
@@ -655,12 +667,13 @@ impl ObjectStoreBackend {
                         access_count: 1,
                         compression: self.config.compression.clone(),
                         custom: HashMap::new(),
-                    }
-                });
+                    });
                 drop(index_guard);
 
                 let mut cache = self.memory_cache.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire memory cache write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire memory cache write lock".to_string(),
+                    )
                 })?;
                 cache.put(id.to_string(), data.clone(), meta);
             }
@@ -709,7 +722,10 @@ impl ObjectStoreBackend {
         let mut success_count = 0;
 
         for vector in vectors {
-            if self.put(&vector.id, &vector.vector, &vector.metadata).is_ok() {
+            if self
+                .put(&vector.id, &vector.vector, &vector.metadata)
+                .is_ok()
+            {
                 success_count += 1;
             }
         }
@@ -735,26 +751,42 @@ impl ObjectStoreBackend {
         let ids_to_warm: Vec<String> = match strategy {
             PreWarmStrategy::MostRecent => {
                 let tracker = self.access_tracker.read().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire access tracker read lock".to_string(),
+                    )
                 })?;
-                tracker.most_recent(count).into_iter().map(|s| s.to_string()).collect()
-            }
+                tracker
+                    .most_recent(count)
+                    .into_iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            },
             PreWarmStrategy::MostFrequent => {
                 let tracker = self.access_tracker.read().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire access tracker read lock".to_string(),
+                    )
                 })?;
-                tracker.most_frequent(count).into_iter().map(|(s, _)| s.to_string()).collect()
-            }
+                tracker
+                    .most_frequent(count)
+                    .into_iter()
+                    .map(|(s, _)| s.to_string())
+                    .collect()
+            },
             PreWarmStrategy::Predictive => {
                 // Use frequency as a simple predictor
                 let tracker = self.access_tracker.read().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire access tracker read lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire access tracker read lock".to_string(),
+                    )
                 })?;
-                tracker.most_frequent(count).into_iter().map(|(s, _)| s.to_string()).collect()
-            }
-            PreWarmStrategy::Explicit { ids } => {
-                ids.iter().take(count).cloned().collect()
-            }
+                tracker
+                    .most_frequent(count)
+                    .into_iter()
+                    .map(|(s, _)| s.to_string())
+                    .collect()
+            },
+            PreWarmStrategy::Explicit { ids } => ids.iter().take(count).cloned().collect(),
         };
 
         let mut warmed = 0;
@@ -884,8 +916,8 @@ impl ObjectStoreBackend {
     // Internal methods
 
     fn serialize(&self, vector: &StoredVector) -> Result<Vec<u8>> {
-        let json = serde_json::to_vec(vector)
-            .map_err(|e| VecStoreError::Serialization(e.to_string()))?;
+        let json =
+            serde_json::to_vec(vector).map_err(|e| VecStoreError::Serialization(e.to_string()))?;
 
         // Apply compression
         match &self.config.compression {
@@ -893,7 +925,7 @@ impl ObjectStoreBackend {
             CompressionType::Zstd { level: _ } => {
                 // Simplified - in production would use actual zstd
                 Ok(json) // Placeholder
-            }
+            },
             CompressionType::Gzip { level: _ } => Ok(json),
             CompressionType::Lz4 => Ok(json),
             CompressionType::Snappy => Ok(json),
@@ -914,55 +946,67 @@ impl ObjectStoreBackend {
         match &self.config.provider {
             StorageProvider::Local { path: _ } => {
                 let mut storage = self.local_storage.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage write lock".to_string(),
+                    )
                 })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
-            }
+            },
             StorageProvider::S3 { .. } => {
                 // In production: use aws-sdk-s3
                 let mut storage = self.local_storage.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage write lock".to_string(),
+                    )
                 })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
-            }
+            },
             StorageProvider::GCS { .. } => {
                 let mut storage = self.local_storage.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage write lock".to_string(),
+                    )
                 })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
-            }
+            },
             StorageProvider::AzureBlob { .. } => {
                 let mut storage = self.local_storage.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage write lock".to_string(),
+                    )
                 })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
-            }
+            },
             StorageProvider::MinIO { .. } => {
                 let mut storage = self.local_storage.write().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage write lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage write lock".to_string(),
+                    )
                 })?;
                 storage.insert(key.to_string(), data.to_vec());
                 Ok(())
-            }
+            },
         }
     }
 
     fn read_from_backend(&self, key: &str) -> Result<Option<Vec<u8>>> {
         match &self.config.provider {
-            StorageProvider::Local { path: _ } |
-            StorageProvider::S3 { .. } |
-            StorageProvider::GCS { .. } |
-            StorageProvider::AzureBlob { .. } |
-            StorageProvider::MinIO { .. } => {
+            StorageProvider::Local { path: _ }
+            | StorageProvider::S3 { .. }
+            | StorageProvider::GCS { .. }
+            | StorageProvider::AzureBlob { .. }
+            | StorageProvider::MinIO { .. } => {
                 let storage = self.local_storage.read().map_err(|_| {
-                    VecStoreError::LockError("Failed to acquire local storage read lock".to_string())
+                    VecStoreError::LockError(
+                        "Failed to acquire local storage read lock".to_string(),
+                    )
                 })?;
                 Ok(storage.get(key).cloned())
-            }
+            },
         }
     }
 
@@ -1027,8 +1071,8 @@ pub struct TieringConfig {
 impl Default for TieringConfig {
     fn default() -> Self {
         Self {
-            hot_to_warm_seconds: 3600,      // 1 hour
-            warm_to_cold_seconds: 86400,    // 24 hours
+            hot_to_warm_seconds: 3600,   // 1 hour
+            warm_to_cold_seconds: 86400, // 24 hours
             hot_access_threshold: 10,
         }
     }
@@ -1059,7 +1103,12 @@ impl TieredStorageManager {
     }
 
     /// Put to appropriate tier
-    pub fn put(&self, id: &str, vector: &[f32], metadata: &HashMap<String, serde_json::Value>) -> Result<()> {
+    pub fn put(
+        &self,
+        id: &str,
+        vector: &[f32],
+        metadata: &HashMap<String, serde_json::Value>,
+    ) -> Result<()> {
         // New data goes to hot tier
         self.hot_tier.put(id, vector, metadata)?;
 
@@ -1080,19 +1129,23 @@ impl TieredStorageManager {
 
         // Try warm
         if let Some(warm) = &self.warm_tier
-            && let Some(vector) = warm.get(id)? {
-                // Promote to hot on access
-                self.hot_tier.put(&vector.id, &vector.vector, &vector.metadata)?;
-                return Ok(Some(vector));
-            }
+            && let Some(vector) = warm.get(id)?
+        {
+            // Promote to hot on access
+            self.hot_tier
+                .put(&vector.id, &vector.vector, &vector.metadata)?;
+            return Ok(Some(vector));
+        }
 
         // Try cold
         if let Some(cold) = &self.cold_tier
-            && let Some(vector) = cold.get(id)? {
-                // Promote to hot on access
-                self.hot_tier.put(&vector.id, &vector.vector, &vector.metadata)?;
-                return Ok(Some(vector));
-            }
+            && let Some(vector) = cold.get(id)?
+        {
+            // Promote to hot on access
+            self.hot_tier
+                .put(&vector.id, &vector.vector, &vector.metadata)?;
+            return Ok(Some(vector));
+        }
 
         Ok(None)
     }
@@ -1151,8 +1204,8 @@ mod tests {
 
     #[test]
     fn test_cache_behavior() {
-        let mut config = ObjectStoreConfig::local("/tmp/vecstore_cache_test")
-            .with_cache_tier(CacheTier {
+        let mut config =
+            ObjectStoreConfig::local("/tmp/vecstore_cache_test").with_cache_tier(CacheTier {
                 name: "memory".to_string(),
                 max_size_bytes: 1024 * 1024,
                 ttl_seconds: 300,
@@ -1212,7 +1265,9 @@ mod tests {
 
         // Add some data
         for i in 0..100 {
-            backend.put(&format!("vec_{}", i), &vec![0.1; 128], &HashMap::new()).unwrap();
+            backend
+                .put(&format!("vec_{}", i), &vec![0.1; 128], &HashMap::new())
+                .unwrap();
         }
 
         let cost = backend.estimate_cost();

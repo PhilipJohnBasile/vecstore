@@ -211,7 +211,9 @@ impl VecStoreAdminService for AdminService {
     ) -> Result<Response<GetAggregateStatsResponse>, Status> {
         let manager = self.manager.read().await;
 
-        let stats = manager.get_aggregate_stats();
+        let stats = manager
+            .get_aggregate_stats()
+            .map_err(|e| Status::internal(format!("Failed to collect aggregate stats: {e}")))?;
 
         Ok(Response::new(GetAggregateStatsResponse {
             total_namespaces: stats.total_namespaces as i32,

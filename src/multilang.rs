@@ -21,9 +21,8 @@
 //! // ["gato", "corr", "rapid"] - stemmed, no stopwords
 //! ```
 
-use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
-
+use std::collections::{HashMap, HashSet};
 
 /// Supported languages
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -161,15 +160,33 @@ impl Language {
     /// Get all supported languages
     pub fn all() -> Vec<Language> {
         vec![
-            Language::English, Language::Spanish, Language::French,
-            Language::German, Language::Italian, Language::Portuguese,
-            Language::Dutch, Language::Swedish, Language::Norwegian,
-            Language::Danish, Language::Finnish, Language::Russian,
-            Language::Arabic, Language::Turkish, Language::Chinese,
-            Language::Japanese, Language::Korean, Language::Greek,
-            Language::Hebrew, Language::Hindi, Language::Thai,
-            Language::Vietnamese, Language::Polish, Language::Czech,
-            Language::Hungarian, Language::Romanian, Language::Indonesian,
+            Language::English,
+            Language::Spanish,
+            Language::French,
+            Language::German,
+            Language::Italian,
+            Language::Portuguese,
+            Language::Dutch,
+            Language::Swedish,
+            Language::Norwegian,
+            Language::Danish,
+            Language::Finnish,
+            Language::Russian,
+            Language::Arabic,
+            Language::Turkish,
+            Language::Chinese,
+            Language::Japanese,
+            Language::Korean,
+            Language::Greek,
+            Language::Hebrew,
+            Language::Hindi,
+            Language::Thai,
+            Language::Vietnamese,
+            Language::Polish,
+            Language::Czech,
+            Language::Hungarian,
+            Language::Romanian,
+            Language::Indonesian,
         ]
     }
 }
@@ -177,69 +194,79 @@ impl Language {
 /// Stopwords for each language
 fn get_stopwords(lang: Language) -> HashSet<&'static str> {
     match lang {
-        Language::English => {
-            ["a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-             "of", "with", "by", "from", "as", "is", "was", "are", "were", "been",
-             "be", "have", "has", "had", "do", "does", "did", "will", "would",
-             "could", "should", "may", "might", "must", "can", "this", "that",
-             "these", "those", "i", "you", "he", "she", "it", "we", "they",
-             "what", "which", "who", "when", "where", "why", "how", "all",
-             "each", "every", "both", "few", "more", "most", "other", "some",
-             "such", "no", "not", "only", "same", "so", "than", "too", "very"]
-                .iter().cloned().collect()
-        }
-        Language::Spanish => {
-            ["de", "la", "que", "el", "en", "y", "a", "los", "del", "se",
-             "las", "por", "un", "para", "con", "no", "una", "su", "al",
-             "es", "lo", "como", "más", "pero", "sus", "le", "ya", "o",
-             "fue", "este", "ha", "sí", "porque", "esta", "son", "entre",
-             "está", "cuando", "muy", "sin", "sobre", "ser", "tiene", "también"]
-                .iter().cloned().collect()
-        }
-        Language::French => {
-            ["le", "la", "les", "de", "du", "des", "un", "une", "et", "en",
-             "à", "au", "aux", "ce", "que", "qui", "dans", "pour", "sur",
-             "par", "avec", "ne", "pas", "plus", "ou", "son", "sa", "ses",
-             "il", "elle", "nous", "vous", "ils", "elles", "je", "tu",
-             "est", "sont", "être", "avoir", "fait", "faire", "comme"]
-                .iter().cloned().collect()
-        }
-        Language::German => {
-            ["der", "die", "das", "und", "in", "zu", "den", "von", "mit",
-             "ist", "nicht", "ein", "eine", "als", "auch", "es", "an",
-             "auf", "für", "sich", "des", "dem", "werden", "bei", "haben",
-             "wird", "sind", "oder", "nach", "am", "um", "aus", "nur",
-             "wie", "über", "so", "wenn", "aber", "noch", "durch", "kann"]
-                .iter().cloned().collect()
-        }
-        Language::Italian => {
-            ["il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di",
-             "a", "da", "in", "con", "su", "per", "tra", "fra", "che",
-             "e", "ma", "o", "se", "come", "non", "più", "anche", "solo",
-             "questo", "quello", "suo", "loro", "essere", "avere", "fare"]
-                .iter().cloned().collect()
-        }
-        Language::Russian => {
-            ["и", "в", "не", "на", "я", "что", "он", "с", "это", "а",
-             "как", "она", "по", "но", "они", "к", "у", "ты", "из", "мы",
-             "за", "от", "о", "же", "все", "так", "его", "её", "их"]
-                .iter().cloned().collect()
-        }
-        Language::Arabic => {
-            ["في", "من", "على", "إلى", "عن", "مع", "هذا", "هذه", "التي",
-             "الذي", "كان", "لم", "لا", "ما", "هو", "هي", "أن", "أو",
-             "و", "ثم", "بعد", "قبل", "كل", "بين", "حتى", "إذا"]
-                .iter().cloned().collect()
-        }
+        Language::English => [
+            "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with",
+            "by", "from", "as", "is", "was", "are", "were", "been", "be", "have", "has", "had",
+            "do", "does", "did", "will", "would", "could", "should", "may", "might", "must", "can",
+            "this", "that", "these", "those", "i", "you", "he", "she", "it", "we", "they", "what",
+            "which", "who", "when", "where", "why", "how", "all", "each", "every", "both", "few",
+            "more", "most", "other", "some", "such", "no", "not", "only", "same", "so", "than",
+            "too", "very",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::Spanish => [
+            "de", "la", "que", "el", "en", "y", "a", "los", "del", "se", "las", "por", "un",
+            "para", "con", "no", "una", "su", "al", "es", "lo", "como", "más", "pero", "sus", "le",
+            "ya", "o", "fue", "este", "ha", "sí", "porque", "esta", "son", "entre", "está",
+            "cuando", "muy", "sin", "sobre", "ser", "tiene", "también",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::French => [
+            "le", "la", "les", "de", "du", "des", "un", "une", "et", "en", "à", "au", "aux", "ce",
+            "que", "qui", "dans", "pour", "sur", "par", "avec", "ne", "pas", "plus", "ou", "son",
+            "sa", "ses", "il", "elle", "nous", "vous", "ils", "elles", "je", "tu", "est", "sont",
+            "être", "avoir", "fait", "faire", "comme",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::German => [
+            "der", "die", "das", "und", "in", "zu", "den", "von", "mit", "ist", "nicht", "ein",
+            "eine", "als", "auch", "es", "an", "auf", "für", "sich", "des", "dem", "werden", "bei",
+            "haben", "wird", "sind", "oder", "nach", "am", "um", "aus", "nur", "wie", "über", "so",
+            "wenn", "aber", "noch", "durch", "kann",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::Italian => [
+            "il", "lo", "la", "i", "gli", "le", "un", "uno", "una", "di", "a", "da", "in", "con",
+            "su", "per", "tra", "fra", "che", "e", "ma", "o", "se", "come", "non", "più", "anche",
+            "solo", "questo", "quello", "suo", "loro", "essere", "avere", "fare",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::Russian => [
+            "и", "в", "не", "на", "я", "что", "он", "с", "это", "а", "как", "она", "по", "но",
+            "они", "к", "у", "ты", "из", "мы", "за", "от", "о", "же", "все", "так", "его", "её",
+            "их",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
+        Language::Arabic => [
+            "في", "من", "على", "إلى", "عن", "مع", "هذا", "هذه", "التي", "الذي", "كان", "لم", "لا",
+            "ما", "هو", "هي", "أن", "أو", "و", "ثم", "بعد", "قبل", "كل", "بين", "حتى", "إذا",
+        ]
+        .iter()
+        .cloned()
+        .collect(),
         Language::Chinese | Language::Japanese | Language::Korean => {
             // CJK languages typically don't use stopword removal
             HashSet::new()
-        }
+        },
         _ => {
             // Default minimal stopwords
             ["a", "an", "the", "and", "or", "but", "in", "on", "at", "to"]
-                .iter().cloned().collect()
-        }
+                .iter()
+                .cloned()
+                .collect()
+        },
     }
 }
 
@@ -255,58 +282,120 @@ impl StemmingRules {
         match lang {
             Language::English => Self {
                 suffixes: vec![
-                    ("ational", "ate"), ("tional", "tion"), ("enci", "ence"),
-                    ("anci", "ance"), ("izer", "ize"), ("isation", "ize"),
-                    ("ization", "ize"), ("ation", "ate"), ("ator", "ate"),
-                    ("alism", "al"), ("iveness", "ive"), ("fulness", "ful"),
-                    ("ousness", "ous"), ("aliti", "al"), ("iviti", "ive"),
-                    ("biliti", "ble"), ("alli", "al"), ("entli", "ent"),
-                    ("eli", "e"), ("ousli", "ous"), ("ling", ""),
-                    ("ement", ""), ("ment", ""), ("ness", ""), ("ing", ""),
-                    ("ies", "y"), ("es", ""), ("ed", ""), ("s", ""),
+                    ("ational", "ate"),
+                    ("tional", "tion"),
+                    ("enci", "ence"),
+                    ("anci", "ance"),
+                    ("izer", "ize"),
+                    ("isation", "ize"),
+                    ("ization", "ize"),
+                    ("ation", "ate"),
+                    ("ator", "ate"),
+                    ("alism", "al"),
+                    ("iveness", "ive"),
+                    ("fulness", "ful"),
+                    ("ousness", "ous"),
+                    ("aliti", "al"),
+                    ("iviti", "ive"),
+                    ("biliti", "ble"),
+                    ("alli", "al"),
+                    ("entli", "ent"),
+                    ("eli", "e"),
+                    ("ousli", "ous"),
+                    ("ling", ""),
+                    ("ement", ""),
+                    ("ment", ""),
+                    ("ness", ""),
+                    ("ing", ""),
+                    ("ies", "y"),
+                    ("es", ""),
+                    ("ed", ""),
+                    ("s", ""),
                 ],
                 min_stem_length: 3,
             },
             Language::Spanish => Self {
                 suffixes: vec![
-                    ("amiento", ""), ("imientos", ""), ("imiento", ""),
-                    ("aciones", ""), ("adores", ""), ("amente", ""),
-                    ("idades", ""), ("mente", ""), ("ables", ""),
-                    ("ibles", ""), ("ación", ""), ("ador", ""),
-                    ("ante", ""), ("ando", ""), ("endo", ""),
-                    ("ido", ""), ("ido", ""), ("ar", ""), ("er", ""),
-                    ("ir", ""), ("as", ""), ("es", ""), ("os", ""),
+                    ("amiento", ""),
+                    ("imientos", ""),
+                    ("imiento", ""),
+                    ("aciones", ""),
+                    ("adores", ""),
+                    ("amente", ""),
+                    ("idades", ""),
+                    ("mente", ""),
+                    ("ables", ""),
+                    ("ibles", ""),
+                    ("ación", ""),
+                    ("ador", ""),
+                    ("ante", ""),
+                    ("ando", ""),
+                    ("endo", ""),
+                    ("ido", ""),
+                    ("ido", ""),
+                    ("ar", ""),
+                    ("er", ""),
+                    ("ir", ""),
+                    ("as", ""),
+                    ("es", ""),
+                    ("os", ""),
                 ],
                 min_stem_length: 3,
             },
             Language::French => Self {
                 suffixes: vec![
-                    ("issements", ""), ("issement", ""), ("atrices", ""),
-                    ("ateurs", ""), ("ations", ""), ("logies", ""),
-                    ("usion", "u"), ("ution", "u"), ("ences", ""),
-                    ("ances", ""), ("ments", ""), ("ement", ""),
-                    ("euses", ""), ("ables", ""), ("istes", ""),
-                    ("ation", ""), ("ique", ""), ("isme", ""),
-                    ("able", ""), ("iste", ""), ("ment", ""),
-                    ("ence", ""), ("ance", ""), ("euse", ""),
-                    ("eux", ""), ("ant", ""), ("ent", ""),
+                    ("issements", ""),
+                    ("issement", ""),
+                    ("atrices", ""),
+                    ("ateurs", ""),
+                    ("ations", ""),
+                    ("logies", ""),
+                    ("usion", "u"),
+                    ("ution", "u"),
+                    ("ences", ""),
+                    ("ances", ""),
+                    ("ments", ""),
+                    ("ement", ""),
+                    ("euses", ""),
+                    ("ables", ""),
+                    ("istes", ""),
+                    ("ation", ""),
+                    ("ique", ""),
+                    ("isme", ""),
+                    ("able", ""),
+                    ("iste", ""),
+                    ("ment", ""),
+                    ("ence", ""),
+                    ("ance", ""),
+                    ("euse", ""),
+                    ("eux", ""),
+                    ("ant", ""),
+                    ("ent", ""),
                     ("e", ""),
                 ],
                 min_stem_length: 3,
             },
             Language::German => Self {
                 suffixes: vec![
-                    ("ungen", ""), ("heit", ""), ("keit", ""),
-                    ("lich", ""), ("isch", ""), ("ung", ""),
-                    ("ig", ""), ("ik", ""), ("en", ""), ("er", ""),
-                    ("em", ""), ("es", ""), ("e", ""), ("s", ""),
+                    ("ungen", ""),
+                    ("heit", ""),
+                    ("keit", ""),
+                    ("lich", ""),
+                    ("isch", ""),
+                    ("ung", ""),
+                    ("ig", ""),
+                    ("ik", ""),
+                    ("en", ""),
+                    ("er", ""),
+                    ("em", ""),
+                    ("es", ""),
+                    ("e", ""),
+                    ("s", ""),
                 ],
                 min_stem_length: 3,
             },
             _ => Self {
-                suffixes: vec![
-                    ("ing", ""), ("ed", ""), ("es", ""), ("s", ""),
-                ],
+                suffixes: vec![("ing", ""), ("ed", ""), ("es", ""), ("s", "")],
                 min_stem_length: 3,
             },
         }
@@ -406,13 +495,13 @@ impl MultiLangAnalyzer {
                         &text[start..start + c.len_utf8()]
                     })
                     .collect()
-            }
+            },
             _ => {
                 // Word-based tokenization for most languages
                 text.split(|c: char| !c.is_alphanumeric() && c != '\'')
                     .filter(|s| !s.is_empty())
                     .collect()
-            }
+            },
         }
     }
 
@@ -521,13 +610,22 @@ impl AutoLangAnalyzer {
 
         // Check common words for European languages
         let common_words: HashMap<&str, Language> = [
-            ("the", Language::English), ("and", Language::English),
-            ("der", Language::German), ("und", Language::German),
-            ("le", Language::French), ("et", Language::French),
-            ("el", Language::Spanish), ("y", Language::Spanish),
-            ("il", Language::Italian), ("che", Language::Italian),
-            ("het", Language::Dutch), ("en", Language::Dutch),
-        ].iter().cloned().collect();
+            ("the", Language::English),
+            ("and", Language::English),
+            ("der", Language::German),
+            ("und", Language::German),
+            ("le", Language::French),
+            ("et", Language::French),
+            ("el", Language::Spanish),
+            ("y", Language::Spanish),
+            ("il", Language::Italian),
+            ("che", Language::Italian),
+            ("het", Language::Dutch),
+            ("en", Language::Dutch),
+        ]
+        .iter()
+        .cloned()
+        .collect();
 
         for word in text_lower.split_whitespace() {
             if let Some(&lang) = common_words.get(word) {

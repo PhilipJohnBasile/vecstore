@@ -50,7 +50,7 @@
 //! let results = store.search(&query, 10).await?;
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
@@ -399,14 +399,11 @@ impl VectorChunk {
 
     /// Get vector by ID
     pub fn get(&self, id: &str) -> Option<Vec<f32>> {
-        self.vector_ids
-            .iter()
-            .position(|vid| vid == id)
-            .map(|idx| {
-                let start = idx * self.dimension;
-                let end = start + self.dimension;
-                self.vectors[start..end].to_vec()
-            })
+        self.vector_ids.iter().position(|vid| vid == id).map(|idx| {
+            let start = idx * self.dimension;
+            let end = start + self.dimension;
+            self.vectors[start..end].to_vec()
+        })
     }
 
     /// Serialize chunk
@@ -421,8 +418,8 @@ impl VectorChunk {
 
     /// Compress chunk data
     pub fn compress(&self, level: u32) -> Result<Vec<u8>> {
-        use flate2::write::GzEncoder;
         use flate2::Compression;
+        use flate2::write::GzEncoder;
         use std::io::Write;
 
         let serialized = self.serialize()?;
@@ -761,9 +758,7 @@ impl TieredStore {
             let to_demote: Vec<String> = {
                 let mut lru = self.hot_lru.write().await;
                 let demote_count = (hot_bytes - hot_capacity_bytes) / (self.dimension * 4) + 1;
-                (0..demote_count)
-                    .filter_map(|_| lru.pop_front())
-                    .collect()
+                (0..demote_count).filter_map(|_| lru.pop_front()).collect()
             };
 
             // Demote vectors to warm tier
@@ -823,9 +818,7 @@ impl TieredStore {
 
         let chunks_to_flush: Vec<(String, VectorChunk)> = {
             let warm = self.warm_chunks.read().await;
-            warm.iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect()
+            warm.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         };
 
         for (chunk_id, chunk) in chunks_to_flush {

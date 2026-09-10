@@ -47,12 +47,12 @@ pub use candle_backend::{CandleEmbedder, CandleModel};
 use anyhow::Result;
 
 #[cfg(feature = "embeddings")]
-use anyhow::{anyhow, Context};
+use anyhow::{Context, anyhow};
 
 #[cfg(feature = "embeddings")]
 use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{Session, builder::GraphOptimizationLevel};
 #[cfg(feature = "embeddings")]
 use std::path::{Path, PathBuf};
 #[cfg(feature = "embeddings")]
@@ -315,7 +315,9 @@ impl Embedder {
         // Run inference using ort 2.0 inputs! macro and extract results
         // We need to extract data while holding the lock, then release it
         let embeddings_array = {
-            let mut session_guard = self.session.lock()
+            let mut session_guard = self
+                .session
+                .lock()
                 .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
             let outputs = session_guard
                 .run(ort::inputs![

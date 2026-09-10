@@ -3,7 +3,6 @@
 //! This module provides CUDA kernel implementations for distance calculations
 //! and other vector operations.
 
-
 /// CUDA kernel source for Euclidean distance
 pub const EUCLIDEAN_DISTANCE_KERNEL: &str = r#"
 extern "C" __global__ void euclidean_distance_kernel(
@@ -366,11 +365,17 @@ END:
             .map_err(|e| anyhow!("Failed to initialize CUDA device {}: {}", device_id, e))?;
 
         // Load PTX module
-        device.load_ptx(
-            cudarc::nvrtc::Ptx::from_src(Self::DISTANCE_PTX),
-            "distance_kernels",
-            &["euclidean_distance_kernel", "cosine_similarity_kernel", "dot_product_kernel"],
-        ).map_err(|e| anyhow!("Failed to load PTX: {}", e))?;
+        device
+            .load_ptx(
+                cudarc::nvrtc::Ptx::from_src(Self::DISTANCE_PTX),
+                "distance_kernels",
+                &[
+                    "euclidean_distance_kernel",
+                    "cosine_similarity_kernel",
+                    "dot_product_kernel",
+                ],
+            )
+            .map_err(|e| anyhow!("Failed to load PTX: {}", e))?;
 
         let euclidean_kernel = device
             .get_func("distance_kernels", "euclidean_distance_kernel")
@@ -404,13 +409,19 @@ END:
         use cudarc::driver::LaunchConfig;
 
         // Copy data to device
-        let query_dev = self.device.htod_sync_copy(query)
+        let query_dev = self
+            .device
+            .htod_sync_copy(query)
             .map_err(|e| anyhow!("Failed to copy query to device: {}", e))?;
-        let database_dev = self.device.htod_sync_copy(database)
+        let database_dev = self
+            .device
+            .htod_sync_copy(database)
             .map_err(|e| anyhow!("Failed to copy database to device: {}", e))?;
 
         // Allocate output buffer
-        let mut distances_dev = self.device.alloc_zeros::<f32>(num_vectors)
+        let mut distances_dev = self
+            .device
+            .alloc_zeros::<f32>(num_vectors)
             .map_err(|e| anyhow!("Failed to allocate output buffer: {}", e))?;
 
         // Configure launch
@@ -424,14 +435,25 @@ END:
 
         // Launch kernel
         unsafe {
-            self.euclidean_kernel.clone().launch(
-                cfg,
-                (&query_dev, &database_dev, &mut distances_dev, num_vectors as u32, vector_dim as u32),
-            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+            self.euclidean_kernel
+                .clone()
+                .launch(
+                    cfg,
+                    (
+                        &query_dev,
+                        &database_dev,
+                        &mut distances_dev,
+                        num_vectors as u32,
+                        vector_dim as u32,
+                    ),
+                )
+                .map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
         }
 
         // Copy results back
-        let distances = self.device.dtoh_sync_copy(&distances_dev)
+        let distances = self
+            .device
+            .dtoh_sync_copy(&distances_dev)
             .map_err(|e| anyhow!("Failed to copy results from device: {}", e))?;
 
         Ok(distances)
@@ -448,12 +470,18 @@ END:
         use cudarc::driver::LaunchAsync;
         use cudarc::driver::LaunchConfig;
 
-        let query_dev = self.device.htod_sync_copy(query)
+        let query_dev = self
+            .device
+            .htod_sync_copy(query)
             .map_err(|e| anyhow!("Failed to copy query: {}", e))?;
-        let database_dev = self.device.htod_sync_copy(database)
+        let database_dev = self
+            .device
+            .htod_sync_copy(database)
             .map_err(|e| anyhow!("Failed to copy database: {}", e))?;
 
-        let mut similarities_dev = self.device.alloc_zeros::<f32>(num_vectors)
+        let mut similarities_dev = self
+            .device
+            .alloc_zeros::<f32>(num_vectors)
             .map_err(|e| anyhow!("Failed to allocate output: {}", e))?;
 
         let threads_per_block = 256u32;
@@ -465,13 +493,24 @@ END:
         };
 
         unsafe {
-            self.cosine_kernel.clone().launch(
-                cfg,
-                (&query_dev, &database_dev, &mut similarities_dev, num_vectors as u32, vector_dim as u32),
-            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+            self.cosine_kernel
+                .clone()
+                .launch(
+                    cfg,
+                    (
+                        &query_dev,
+                        &database_dev,
+                        &mut similarities_dev,
+                        num_vectors as u32,
+                        vector_dim as u32,
+                    ),
+                )
+                .map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
         }
 
-        let similarities = self.device.dtoh_sync_copy(&similarities_dev)
+        let similarities = self
+            .device
+            .dtoh_sync_copy(&similarities_dev)
             .map_err(|e| anyhow!("Failed to copy results: {}", e))?;
 
         Ok(similarities)
@@ -488,12 +527,18 @@ END:
         use cudarc::driver::LaunchAsync;
         use cudarc::driver::LaunchConfig;
 
-        let query_dev = self.device.htod_sync_copy(query)
+        let query_dev = self
+            .device
+            .htod_sync_copy(query)
             .map_err(|e| anyhow!("Failed to copy query: {}", e))?;
-        let database_dev = self.device.htod_sync_copy(database)
+        let database_dev = self
+            .device
+            .htod_sync_copy(database)
             .map_err(|e| anyhow!("Failed to copy database: {}", e))?;
 
-        let mut products_dev = self.device.alloc_zeros::<f32>(num_vectors)
+        let mut products_dev = self
+            .device
+            .alloc_zeros::<f32>(num_vectors)
             .map_err(|e| anyhow!("Failed to allocate output: {}", e))?;
 
         let threads_per_block = 256u32;
@@ -505,13 +550,24 @@ END:
         };
 
         unsafe {
-            self.dot_kernel.clone().launch(
-                cfg,
-                (&query_dev, &database_dev, &mut products_dev, num_vectors as u32, vector_dim as u32),
-            ).map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
+            self.dot_kernel
+                .clone()
+                .launch(
+                    cfg,
+                    (
+                        &query_dev,
+                        &database_dev,
+                        &mut products_dev,
+                        num_vectors as u32,
+                        vector_dim as u32,
+                    ),
+                )
+                .map_err(|e| anyhow!("Kernel launch failed: {}", e))?;
         }
 
-        let products = self.device.dtoh_sync_copy(&products_dev)
+        let products = self
+            .device
+            .dtoh_sync_copy(&products_dev)
             .map_err(|e| anyhow!("Failed to copy results: {}", e))?;
 
         Ok(products)

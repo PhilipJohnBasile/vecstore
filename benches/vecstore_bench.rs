@@ -1,6 +1,6 @@
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use std::collections::HashMap;
-use vecstore::{make_record, FilterExpr, FilterOp, Metadata, Query, VecStore};
+use vecstore::{FilterExpr, FilterOp, Metadata, Query, VecStore, make_record};
 
 fn setup_store_with_data(n: usize, dim: usize) -> (tempfile::TempDir, VecStore) {
     let temp_dir = tempfile::tempdir().unwrap();

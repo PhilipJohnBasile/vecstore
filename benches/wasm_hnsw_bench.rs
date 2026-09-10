@@ -5,15 +5,15 @@
 //
 // Run with: cargo bench --bench wasm_hnsw_bench
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{BenchmarkId, Criterion, Throughput, black_box, criterion_group, criterion_main};
 use rand::Rng;
-use vecstore::store::wasm_hnsw::WasmHnsw;
 use vecstore::Distance;
+use vecstore::store::wasm_hnsw::WasmHnsw;
 
 fn generate_random_vectors(n: usize, dim: usize) -> Vec<Vec<f32>> {
     let mut rng = rand::thread_rng();
     (0..n)
-        .map(|_| (0..dim).map(|_| rng.gen::<f32>()).collect())
+        .map(|_| (0..dim).map(|_| rng.r#gen::<f32>()).collect())
         .collect()
 }
 

@@ -1,11 +1,11 @@
 // Auto-Tuning Engine - Automated parameter optimization for vector indexes
 // Bayesian optimization, hyperparameter search, and adaptive configuration
 
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::RwLock;
-use std::time::{Duration, Instant};
 use std::cmp::Ordering as CmpOrdering;
+use std::collections::HashMap;
+use std::sync::RwLock;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -132,7 +132,12 @@ pub struct Parameter {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ParameterType {
     /// Integer range
-    Integer { min: i64, max: i64, step: Option<i64>, log_scale: bool },
+    Integer {
+        min: i64,
+        max: i64,
+        step: Option<i64>,
+        log_scale: bool,
+    },
     /// Float range
     Float { min: f64, max: f64, log_scale: bool },
     /// Categorical choices
@@ -319,8 +324,13 @@ impl AutoTuner {
 
             let params = self.sample_random();
             let _result = self.evaluate_trial(&params, &objective_fn)?;
-            improvement_history.push(*self.stats.best_objective.read()
-                .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?);
+            improvement_history.push(
+                *self
+                    .stats
+                    .best_objective
+                    .read()
+                    .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?,
+            );
         }
 
         // Main optimization loop
@@ -341,10 +351,16 @@ impl AutoTuner {
                 SearchStrategy::PopulationBasedTraining => self.sample_random(),
             };
 
-            let prev_best = *self.stats.best_objective.read()
+            let prev_best = *self
+                .stats
+                .best_objective
+                .read()
                 .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
             let _result = self.evaluate_trial(&params, &objective_fn)?;
-            let new_best = *self.stats.best_objective.read()
+            let new_best = *self
+                .stats
+                .best_objective
+                .read()
                 .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
 
             improvement_history.push(new_best);
@@ -361,19 +377,30 @@ impl AutoTuner {
         }
 
         let total_time = start.elapsed();
-        *self.stats.total_time.write()
+        *self
+            .stats
+            .total_time
+            .write()
             .map_err(|_| VecStoreError::LockError("total_time lock poisoned".into()))? = total_time;
 
-        let trials = self.trials.read()
-            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?.clone();
-        let best_trial = self.best_trial.read()
-            .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))?.clone();
+        let trials = self
+            .trials
+            .read()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?
+            .clone();
+        let best_trial = self
+            .best_trial
+            .read()
+            .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))?
+            .clone();
 
         Ok(TuneResult {
-            best_params: best_trial.as_ref()
+            best_params: best_trial
+                .as_ref()
                 .map(|t| t.params.clone())
                 .unwrap_or_default(),
-            best_objective: best_trial.as_ref()
+            best_objective: best_trial
+                .as_ref()
                 .and_then(|t| t.objective)
                 .unwrap_or(f64::NEG_INFINITY),
             trials,
@@ -417,32 +444,38 @@ impl AutoTuner {
                 self.stats.completed_trials.fetch_add(1, Ordering::Relaxed);
 
                 // Update best
-                let current_best = *self.stats.best_objective.read()
-                    .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
+                let current_best =
+                    *self.stats.best_objective.read().map_err(|_| {
+                        VecStoreError::LockError("best_objective lock poisoned".into())
+                    })?;
                 let is_better = match self.config.direction {
                     OptimizeDirection::Maximize => objective > current_best,
                     OptimizeDirection::Minimize => objective < current_best,
                 };
 
                 if is_better {
-                    *self.stats.best_objective.write()
-                        .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))? = objective;
-                    *self.best_trial.write()
-                        .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))? = Some(trial.clone());
+                    *self.stats.best_objective.write().map_err(|_| {
+                        VecStoreError::LockError("best_objective lock poisoned".into())
+                    })? = objective;
+                    *self.best_trial.write().map_err(|_| {
+                        VecStoreError::LockError("best_trial lock poisoned".into())
+                    })? = Some(trial.clone());
                 }
 
                 // Update surrogate model
                 self.update_surrogate(&trial)?;
-            }
+            },
             Err(_) => {
                 trial.state = TrialState::Failed;
                 trial.duration = Some(start.elapsed());
                 self.stats.failed_trials.fetch_add(1, Ordering::Relaxed);
-            }
+            },
         }
 
-        self.trials.write()
-            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?.push(trial.clone());
+        self.trials
+            .write()
+            .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?
+            .push(trial.clone());
         Ok(trial)
     }
 
@@ -452,7 +485,12 @@ impl AutoTuner {
 
         for param in &self.parameter_space.parameters {
             let value = match &param.param_type {
-                ParameterType::Integer { min, max, step, log_scale } => {
+                ParameterType::Integer {
+                    min,
+                    max,
+                    step,
+                    log_scale,
+                } => {
                     let val = if *log_scale {
                         let log_min = (*min as f64).ln();
                         let log_max = (*max as f64).ln();
@@ -467,8 +505,12 @@ impl AutoTuner {
                         val
                     };
                     ParameterValue::Integer(val.clamp(*min, *max))
-                }
-                ParameterType::Float { min, max, log_scale } => {
+                },
+                ParameterType::Float {
+                    min,
+                    max,
+                    log_scale,
+                } => {
                     let val = if *log_scale {
                         let log_min = min.ln();
                         let log_max = max.ln();
@@ -477,14 +519,12 @@ impl AutoTuner {
                         random_f64(*min, *max)
                     };
                     ParameterValue::Float(val)
-                }
+                },
                 ParameterType::Categorical { choices } | ParameterType::Ordinal { choices } => {
                     let idx = random_usize(0, choices.len());
                     ParameterValue::String(choices[idx].clone())
-                }
-                ParameterType::Boolean => {
-                    ParameterValue::Boolean(random_bool())
-                }
+                },
+                ParameterType::Boolean => ParameterValue::Boolean(random_bool()),
             };
             params.insert(param.name.clone(), value);
         }
@@ -506,24 +546,24 @@ impl AutoTuner {
                     let pos = idx % range;
                     idx /= range;
                     ParameterValue::Integer(*min + pos as i64)
-                }
+                },
                 ParameterType::Float { min, max, .. } => {
                     let steps = 10;
                     let pos = idx % steps;
                     idx /= steps;
                     let val = min + (max - min) * (pos as f64 / (steps - 1) as f64);
                     ParameterValue::Float(val)
-                }
+                },
                 ParameterType::Categorical { choices } | ParameterType::Ordinal { choices } => {
                     let pos = idx % choices.len();
                     idx /= choices.len();
                     ParameterValue::String(choices[pos].clone())
-                }
+                },
                 ParameterType::Boolean => {
                     let val = idx.is_multiple_of(2);
                     idx /= 2;
                     ParameterValue::Boolean(val)
-                }
+                },
             };
             params.insert(param.name.clone(), value);
         }
@@ -533,7 +573,9 @@ impl AutoTuner {
 
     /// Sample using Bayesian optimization
     fn sample_bayesian(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read()
+        let trials = self
+            .trials
+            .read()
             .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < self.config.n_initial_samples {
@@ -560,14 +602,19 @@ impl AutoTuner {
 
     /// Compute acquisition value for a point
     fn compute_acquisition(&self, params: &HashMap<String, ParameterValue>) -> Result<f64> {
-        let surrogate = self.surrogate_model.read()
+        let surrogate = self
+            .surrogate_model
+            .read()
             .map_err(|_| VecStoreError::LockError("surrogate_model lock poisoned".into()))?;
 
         if let Some(model) = surrogate.as_ref() {
             let x = self.params_to_vector(params);
             let (mean, std) = model.predict(&x);
 
-            let best_f = *self.stats.best_objective.read()
+            let best_f = *self
+                .stats
+                .best_objective
+                .read()
                 .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?;
 
             // Expected Improvement
@@ -582,7 +629,9 @@ impl AutoTuner {
 
     /// Sample using TPE
     fn sample_tpe(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read()
+        let trials = self
+            .trials
+            .read()
             .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < self.config.n_initial_samples {
@@ -590,12 +639,12 @@ impl AutoTuner {
         }
 
         // Split trials into good and bad
-        let mut sorted_trials: Vec<_> = trials.iter()
-            .filter(|t| t.objective.is_some())
-            .collect();
+        let mut sorted_trials: Vec<_> = trials.iter().filter(|t| t.objective.is_some()).collect();
 
         sorted_trials.sort_by(|a, b| {
-            b.objective.unwrap().partial_cmp(&a.objective.unwrap())
+            b.objective
+                .unwrap()
+                .partial_cmp(&a.objective.unwrap())
                 .unwrap_or(CmpOrdering::Equal)
         });
 
@@ -608,10 +657,12 @@ impl AutoTuner {
         let mut params = HashMap::new();
 
         for param in &self.parameter_space.parameters {
-            let good_values: Vec<_> = good_trials.iter()
+            let good_values: Vec<_> = good_trials
+                .iter()
                 .filter_map(|t| t.params.get(&param.name))
                 .collect();
-            let bad_values: Vec<_> = bad_trials.iter()
+            let bad_values: Vec<_> = bad_trials
+                .iter()
                 .filter_map(|t| t.params.get(&param.name))
                 .collect();
 
@@ -633,13 +684,13 @@ impl AutoTuner {
             return match param_type {
                 ParameterType::Integer { min, max, .. } => {
                     ParameterValue::Integer(random_i64(*min, *max))
-                }
+                },
                 ParameterType::Float { min, max, .. } => {
                     ParameterValue::Float(random_f64(*min, *max))
-                }
+                },
                 ParameterType::Categorical { choices } | ParameterType::Ordinal { choices } => {
                     ParameterValue::String(choices[random_usize(0, choices.len())].clone())
-                }
+                },
                 ParameterType::Boolean => ParameterValue::Boolean(random_bool()),
             };
         }
@@ -650,7 +701,9 @@ impl AutoTuner {
 
     /// Sample using genetic algorithm
     fn sample_genetic(&self) -> Result<HashMap<String, ParameterValue>> {
-        let trials = self.trials.read()
+        let trials = self
+            .trials
+            .read()
             .map_err(|_| VecStoreError::LockError("trials lock poisoned".into()))?;
 
         if trials.len() < 2 {
@@ -658,12 +711,12 @@ impl AutoTuner {
         }
 
         // Select two parents from top trials
-        let mut sorted: Vec<_> = trials.iter()
-            .filter(|t| t.objective.is_some())
-            .collect();
+        let mut sorted: Vec<_> = trials.iter().filter(|t| t.objective.is_some()).collect();
 
         sorted.sort_by(|a, b| {
-            b.objective.unwrap().partial_cmp(&a.objective.unwrap())
+            b.objective
+                .unwrap()
+                .partial_cmp(&a.objective.unwrap())
                 .unwrap_or(CmpOrdering::Equal)
         });
 
@@ -692,7 +745,11 @@ impl AutoTuner {
         Ok(child)
     }
 
-    fn mutate_parameter(&self, param_type: &ParameterType, value: Option<ParameterValue>) -> ParameterValue {
+    fn mutate_parameter(
+        &self,
+        param_type: &ParameterType,
+        value: Option<ParameterValue>,
+    ) -> ParameterValue {
         match param_type {
             ParameterType::Integer { min, max, .. } => {
                 let base = match value {
@@ -701,7 +758,7 @@ impl AutoTuner {
                 };
                 let mutation = random_i64(-10, 10);
                 ParameterValue::Integer((base + mutation).clamp(*min, *max))
-            }
+            },
             ParameterType::Float { min, max, .. } => {
                 let base = match value {
                     Some(ParameterValue::Float(v)) => v,
@@ -709,10 +766,10 @@ impl AutoTuner {
                 };
                 let mutation = random_f64(-0.1, 0.1) * (max - min);
                 ParameterValue::Float((base + mutation).clamp(*min, *max))
-            }
+            },
             ParameterType::Categorical { choices } | ParameterType::Ordinal { choices } => {
                 ParameterValue::String(choices[random_usize(0, choices.len())].clone())
-            }
+            },
             ParameterType::Boolean => ParameterValue::Boolean(random_bool()),
         }
     }
@@ -721,7 +778,9 @@ impl AutoTuner {
     fn sample_annealing(&self, iteration: usize) -> Result<HashMap<String, ParameterValue>> {
         let temperature = 1.0 / (1.0 + iteration as f64 * 0.01);
 
-        let best = self.best_trial.read()
+        let best = self
+            .best_trial
+            .read()
             .map_err(|_| VecStoreError::LockError("best_trial lock poisoned".into()))?;
         if let Some(best_trial) = best.as_ref() {
             let mut params = best_trial.params.clone();
@@ -729,10 +788,8 @@ impl AutoTuner {
             // Perturb parameters based on temperature
             for param in &self.parameter_space.parameters {
                 if random_f64(0.0, 1.0) < temperature {
-                    let new_value = self.mutate_parameter(
-                        &param.param_type,
-                        params.get(&param.name).cloned(),
-                    );
+                    let new_value =
+                        self.mutate_parameter(&param.param_type, params.get(&param.name).cloned());
                     params.insert(param.name.clone(), new_value);
                 }
             }
@@ -752,7 +809,9 @@ impl AutoTuner {
         let x = self.params_to_vector(&trial.params);
         let y = trial.objective.unwrap();
 
-        let mut surrogate = self.surrogate_model.write()
+        let mut surrogate = self
+            .surrogate_model
+            .write()
             .map_err(|_| VecStoreError::LockError("surrogate_model lock poisoned".into()))?;
         if surrogate.is_none() {
             *surrogate = Some(SurrogateModel {
@@ -773,12 +832,20 @@ impl AutoTuner {
 
     /// Convert parameters to vector for surrogate model
     fn params_to_vector(&self, params: &HashMap<String, ParameterValue>) -> Vec<f64> {
-        self.parameter_space.parameters.iter()
+        self.parameter_space
+            .parameters
+            .iter()
             .map(|p| {
                 match params.get(&p.name) {
                     Some(ParameterValue::Integer(v)) => *v as f64,
                     Some(ParameterValue::Float(v)) => *v,
-                    Some(ParameterValue::Boolean(v)) => if *v { 1.0 } else { 0.0 },
+                    Some(ParameterValue::Boolean(v)) => {
+                        if *v {
+                            1.0
+                        } else {
+                            0.0
+                        }
+                    },
                     Some(ParameterValue::String(s)) => {
                         // Map categorical to index
                         if let ParameterType::Categorical { choices } = &p.param_type {
@@ -786,7 +853,7 @@ impl AutoTuner {
                         } else {
                             0.0
                         }
-                    }
+                    },
                     None => 0.0,
                 }
             })
@@ -817,7 +884,7 @@ impl AutoTuner {
                             params.insert(p2.clone(), temp.unwrap());
                         }
                     }
-                }
+                },
                 ConstraintType::GreaterThan(p1, p2) => {
                     if let (Some(v1), Some(v2)) = (params.get(p1), params.get(p2)) {
                         let v1_float = match v1 {
@@ -837,8 +904,8 @@ impl AutoTuner {
                             params.insert(p2.clone(), temp.unwrap());
                         }
                     }
-                }
-                _ => {}
+                },
+                _ => {},
             }
         }
     }
@@ -850,9 +917,15 @@ impl AutoTuner {
             completed_trials: self.stats.completed_trials.load(Ordering::Relaxed),
             failed_trials: self.stats.failed_trials.load(Ordering::Relaxed),
             pruned_trials: self.stats.pruned_trials.load(Ordering::Relaxed),
-            best_objective: *self.stats.best_objective.read()
+            best_objective: *self
+                .stats
+                .best_objective
+                .read()
                 .map_err(|_| VecStoreError::LockError("best_objective lock poisoned".into()))?,
-            total_time: *self.stats.total_time.read()
+            total_time: *self
+                .stats
+                .total_time
+                .read()
                 .map_err(|_| VecStoreError::LockError("total_time lock poisoned".into()))?,
         })
     }
@@ -883,7 +956,9 @@ impl SurrogateModel {
         };
 
         // Simple uncertainty estimate
-        let min_dist: f64 = self.observations.iter()
+        let min_dist: f64 = self
+            .observations
+            .iter()
             .map(|(obs_x, _)| self.compute_distance(x, obs_x))
             .fold(f64::INFINITY, f64::min);
 
@@ -930,32 +1005,45 @@ pub fn hnsw_parameter_space() -> ParameterSpace {
         parameters: vec![
             Parameter {
                 name: "m".to_string(),
-                param_type: ParameterType::Integer { min: 4, max: 64, step: Some(4), log_scale: false },
+                param_type: ParameterType::Integer {
+                    min: 4,
+                    max: 64,
+                    step: Some(4),
+                    log_scale: false,
+                },
                 description: "Number of connections per layer".to_string(),
                 default: ParameterValue::Integer(16),
             },
             Parameter {
                 name: "ef_construction".to_string(),
-                param_type: ParameterType::Integer { min: 50, max: 500, step: Some(50), log_scale: false },
+                param_type: ParameterType::Integer {
+                    min: 50,
+                    max: 500,
+                    step: Some(50),
+                    log_scale: false,
+                },
                 description: "Size of dynamic candidate list during construction".to_string(),
                 default: ParameterValue::Integer(100),
             },
             Parameter {
                 name: "ef_search".to_string(),
-                param_type: ParameterType::Integer { min: 10, max: 500, step: Some(10), log_scale: false },
+                param_type: ParameterType::Integer {
+                    min: 10,
+                    max: 500,
+                    step: Some(10),
+                    log_scale: false,
+                },
                 description: "Size of dynamic candidate list during search".to_string(),
                 default: ParameterValue::Integer(50),
             },
         ],
-        constraints: vec![
-            Constraint {
-                expression: "ef_construction >= ef_search".to_string(),
-                constraint_type: ConstraintType::GreaterThan(
-                    "ef_construction".to_string(),
-                    "ef_search".to_string(),
-                ),
-            },
-        ],
+        constraints: vec![Constraint {
+            expression: "ef_construction >= ef_search".to_string(),
+            constraint_type: ConstraintType::GreaterThan(
+                "ef_construction".to_string(),
+                "ef_search".to_string(),
+            ),
+        }],
     }
 }
 
@@ -965,26 +1053,31 @@ pub fn ivf_parameter_space() -> ParameterSpace {
         parameters: vec![
             Parameter {
                 name: "nlist".to_string(),
-                param_type: ParameterType::Integer { min: 16, max: 65536, step: None, log_scale: true },
+                param_type: ParameterType::Integer {
+                    min: 16,
+                    max: 65536,
+                    step: None,
+                    log_scale: true,
+                },
                 description: "Number of clusters".to_string(),
                 default: ParameterValue::Integer(100),
             },
             Parameter {
                 name: "nprobe".to_string(),
-                param_type: ParameterType::Integer { min: 1, max: 256, step: None, log_scale: false },
+                param_type: ParameterType::Integer {
+                    min: 1,
+                    max: 256,
+                    step: None,
+                    log_scale: false,
+                },
                 description: "Number of clusters to search".to_string(),
                 default: ParameterValue::Integer(8),
             },
         ],
-        constraints: vec![
-            Constraint {
-                expression: "nprobe <= nlist".to_string(),
-                constraint_type: ConstraintType::LessThan(
-                    "nprobe".to_string(),
-                    "nlist".to_string(),
-                ),
-            },
-        ],
+        constraints: vec![Constraint {
+            expression: "nprobe <= nlist".to_string(),
+            constraint_type: ConstraintType::LessThan("nprobe".to_string(), "nlist".to_string()),
+        }],
     }
 }
 
@@ -1029,12 +1122,19 @@ impl WorkloadAnalyzer {
     }
 
     /// Record a query
-    pub fn record_query(&self, latency_ms: f64, result_count: usize, filter_complexity: usize) -> Result<()> {
+    pub fn record_query(
+        &self,
+        latency_ms: f64,
+        result_count: usize,
+        filter_complexity: usize,
+    ) -> Result<()> {
         if random_f64(0.0, 1.0) > self.config.sample_rate {
             return Ok(());
         }
 
-        let mut queries = self.queries.write()
+        let mut queries = self
+            .queries
+            .write()
             .map_err(|_| VecStoreError::LockError("queries lock poisoned".into()))?;
         if queries.len() >= self.config.max_samples {
             queries.remove(0);
@@ -1051,7 +1151,9 @@ impl WorkloadAnalyzer {
 
     /// Analyze workload and recommend parameters
     pub fn recommend(&self) -> Result<WorkloadRecommendation> {
-        let queries = self.queries.read()
+        let queries = self
+            .queries
+            .read()
             .map_err(|_| VecStoreError::LockError("queries lock poisoned".into()))?;
 
         if queries.is_empty() {
@@ -1064,8 +1166,13 @@ impl WorkloadAnalyzer {
             });
         }
 
-        let avg_latency: f64 = queries.iter().map(|q| q.latency_ms).sum::<f64>() / queries.len() as f64;
-        let avg_filter_complexity: f64 = queries.iter().map(|q| q.filter_complexity as f64).sum::<f64>() / queries.len() as f64;
+        let avg_latency: f64 =
+            queries.iter().map(|q| q.latency_ms).sum::<f64>() / queries.len() as f64;
+        let avg_filter_complexity: f64 = queries
+            .iter()
+            .map(|q| q.filter_complexity as f64)
+            .sum::<f64>()
+            / queries.len() as f64;
 
         let latency_sensitive = avg_latency > 100.0;
         let filter_heavy = avg_filter_complexity > 2.0;
@@ -1099,8 +1206,8 @@ fn current_timestamp() -> u64 {
 }
 
 fn random_f64(min: f64, max: f64) -> f64 {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     let mut hasher = DefaultHasher::new();
     Instant::now().hash(&mut hasher);

@@ -123,7 +123,7 @@ impl Lexer {
                         _ => {
                             s.push('\\');
                             s.push(escaped);
-                        }
+                        },
                     }
                 }
             } else {
@@ -178,27 +178,27 @@ impl Lexer {
             Some('(') => {
                 self.advance();
                 Ok(Token::LParen)
-            }
+            },
             Some(')') => {
                 self.advance();
                 Ok(Token::RParen)
-            }
+            },
             Some('[') => {
                 self.advance();
                 Ok(Token::LBracket)
-            }
+            },
             Some(']') => {
                 self.advance();
                 Ok(Token::RBracket)
-            }
+            },
             Some(',') => {
                 self.advance();
                 Ok(Token::Comma)
-            }
+            },
             Some('=') => {
                 self.advance();
                 Ok(Token::Eq)
-            }
+            },
             Some('!') => {
                 self.advance();
                 if self.peek() == Some('=') {
@@ -207,7 +207,7 @@ impl Lexer {
                 } else {
                     Err(ParseError::UnexpectedToken("!".to_string()))
                 }
-            }
+            },
             Some('>') => {
                 self.advance();
                 if self.peek() == Some('=') {
@@ -216,7 +216,7 @@ impl Lexer {
                 } else {
                     Ok(Token::Gt)
                 }
-            }
+            },
             Some('<') => {
                 self.advance();
                 if self.peek() == Some('=') {
@@ -225,16 +225,16 @@ impl Lexer {
                 } else {
                     Ok(Token::Lt)
                 }
-            }
+            },
             Some('\'') | Some('"') => {
                 let quote = self.advance().unwrap();
                 let s = self.read_string(quote)?;
                 Ok(Token::String(s))
-            }
+            },
             Some(ch) if ch.is_numeric() || ch == '-' => {
                 let n = self.read_number()?;
                 Ok(Token::Number(n))
-            }
+            },
             Some(ch) if ch.is_alphabetic() || ch == '_' => {
                 let ident = self.read_ident_or_keyword();
                 let upper = ident.to_uppercase();
@@ -266,7 +266,7 @@ impl Lexer {
                     "STARTSWITH" => Ok(Token::StartsWith), // Major Issue #13 fix
                     _ => Ok(Token::Ident(ident)),
                 }
-            }
+            },
             Some(ch) => Err(ParseError::UnexpectedToken(ch.to_string())),
         }
     }
@@ -367,13 +367,13 @@ impl Parser {
                 let name = name.clone();
                 self.advance()?;
                 name
-            }
+            },
             _ => {
                 return Err(ParseError::Expected {
                     expected: "field name".to_string(),
                     got: format!("{:?}", self.current),
-                })
-            }
+                });
+            },
         };
 
         let op = match &self.current {
@@ -392,8 +392,8 @@ impl Parser {
                     expected: "operator (=, !=, >, >=, <, <=, CONTAINS, IN, STARTSWITH)"
                         .to_string(),
                     got: format!("{:?}", self.current),
-                })
-            }
+                });
+            },
         };
         self.advance()?;
 
@@ -422,7 +422,7 @@ impl Parser {
                         let s = s.clone();
                         self.advance()?;
                         serde_json::json!(s)
-                    }
+                    },
                     Token::Number(n) => {
                         let n = *n;
                         self.advance()?;
@@ -431,7 +431,7 @@ impl Parser {
                         } else {
                             serde_json::json!(n)
                         }
-                    }
+                    },
                     Token::Ident(s) => {
                         let s = s.clone();
                         self.advance()?;
@@ -441,13 +441,13 @@ impl Parser {
                             "null" => serde_json::json!(null),
                             _ => serde_json::json!(s),
                         }
-                    }
+                    },
                     _ => {
                         return Err(ParseError::Expected {
                             expected: "array element (string, number, or identifier)".to_string(),
                             got: format!("{:?}", self.current),
-                        })
-                    }
+                        });
+                    },
                 };
                 elements.push(elem);
 
@@ -456,17 +456,17 @@ impl Parser {
                     Token::Comma => {
                         self.advance()?;
                         // Continue to next element
-                    }
+                    },
                     Token::RBracket => {
                         self.advance()?;
                         break;
-                    }
+                    },
                     _ => {
                         return Err(ParseError::Expected {
                             expected: ", or ]".to_string(),
                             got: format!("{:?}", self.current),
-                        })
-                    }
+                        });
+                    },
                 }
             }
 
@@ -478,7 +478,7 @@ impl Parser {
                     let s = s.clone();
                     self.advance()?;
                     serde_json::json!(s)
-                }
+                },
                 Token::Number(n) => {
                     let n = *n;
                     self.advance()?;
@@ -488,7 +488,7 @@ impl Parser {
                     } else {
                         serde_json::json!(n)
                     }
-                }
+                },
                 Token::Ident(s) => {
                     let s = s.clone();
                     self.advance()?;
@@ -499,13 +499,13 @@ impl Parser {
                         "null" => serde_json::json!(null),
                         _ => serde_json::json!(s),
                     }
-                }
+                },
                 _ => {
                     return Err(ParseError::Expected {
                         expected: "value (string, number, or identifier)".to_string(),
                         got: format!("{:?}", self.current),
-                    })
-                }
+                    });
+                },
             }
         };
 
@@ -539,7 +539,7 @@ mod tests {
                 assert_eq!(field, "name");
                 assert_eq!(op, FilterOp::Eq);
                 assert_eq!(value, serde_json::json!("Alice"));
-            }
+            },
             _ => panic!("Expected Cmp"),
         }
     }
@@ -552,7 +552,7 @@ mod tests {
                 assert_eq!(field, "age");
                 assert_eq!(op, FilterOp::Gt);
                 assert_eq!(value, serde_json::json!(18));
-            }
+            },
             _ => panic!("Expected Cmp"),
         }
     }
@@ -563,7 +563,7 @@ mod tests {
         match filter {
             FilterExpr::And(exprs) => {
                 assert_eq!(exprs.len(), 2);
-            }
+            },
             _ => panic!("Expected And"),
         }
     }
@@ -574,7 +574,7 @@ mod tests {
         match filter {
             FilterExpr::Or(exprs) => {
                 assert_eq!(exprs.len(), 2);
-            }
+            },
             _ => panic!("Expected Or"),
         }
     }
@@ -583,7 +583,7 @@ mod tests {
     fn test_not() {
         let filter = parse_filter("NOT archived = true").unwrap();
         match filter {
-            FilterExpr::Not(_) => {}
+            FilterExpr::Not(_) => {},
             _ => panic!("Expected Not"),
         }
     }
@@ -592,7 +592,7 @@ mod tests {
     fn test_parentheses() {
         let filter = parse_filter("(age > 18 AND role = 'admin') OR vip = true").unwrap();
         match filter {
-            FilterExpr::Or(_) => {}
+            FilterExpr::Or(_) => {},
             _ => panic!("Expected Or"),
         }
     }
@@ -603,7 +603,7 @@ mod tests {
         match filter {
             FilterExpr::Cmp { op, .. } => {
                 assert_eq!(op, FilterOp::Contains);
-            }
+            },
             _ => panic!("Expected Cmp with Contains"),
         }
     }
@@ -617,7 +617,7 @@ mod tests {
 
         // Should parse successfully
         match filter {
-            FilterExpr::And(_) => {}
+            FilterExpr::And(_) => {},
             _ => panic!("Expected And at top level"),
         }
     }
@@ -628,7 +628,7 @@ mod tests {
         match filter {
             FilterExpr::Cmp { value, .. } => {
                 assert_eq!(value, serde_json::json!(true));
-            }
+            },
             _ => panic!("Expected Cmp"),
         }
     }
@@ -639,7 +639,7 @@ mod tests {
         match filter {
             FilterExpr::Cmp { value, .. } => {
                 assert_eq!(value, serde_json::json!("O'Reilly"));
-            }
+            },
             _ => panic!("Expected Cmp"),
         }
     }
@@ -650,7 +650,7 @@ mod tests {
         match filter {
             FilterExpr::Cmp { value, .. } => {
                 assert_eq!(value, serde_json::json!(-10));
-            }
+            },
             _ => panic!("Expected Cmp"),
         }
     }

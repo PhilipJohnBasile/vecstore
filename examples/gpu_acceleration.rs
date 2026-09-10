@@ -294,10 +294,10 @@ fn main() {
                 };
 
                 println!("{:<20}  {:>12.2}  {:>14.2}x", name, duration_ms, speedup);
-            }
+            },
             Err(_) => {
                 println!("{:<20}  {:>12}  {:>15}", name, "N/A", "N/A");
-            }
+            },
         }
     }
 

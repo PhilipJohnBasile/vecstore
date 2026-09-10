@@ -36,13 +36,13 @@ fn main() -> anyhow::Result<()> {
                 for warning in warnings {
                     println!("     {:?}", warning);
                 }
-            }
+            },
             ValidationResult::Invalid(errors) => {
                 println!("❌ INVALID ({} errors)", errors.len());
                 for error in errors {
                     println!("     {:?}", error);
                 }
-            }
+            },
         }
     }
 
@@ -59,10 +59,10 @@ fn main() -> anyhow::Result<()> {
             ValidationResult::Valid => println!("✓ VALID"),
             ValidationResult::Warning(warnings) => {
                 println!("⚠️  {} warnings", warnings.len());
-            }
+            },
             ValidationResult::Invalid(errors) => {
                 println!("❌ {} errors", errors.len());
-            }
+            },
         }
     }
 
@@ -90,7 +90,7 @@ fn main() -> anyhow::Result<()> {
                         "❌ INVALID"
                     }
                 );
-            }
+            },
             Err(e) => println!("  Error:    {}", e),
         }
     }

@@ -12,7 +12,7 @@
 //!
 //! Hybrid vectors enable powerful fusion search strategies.
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 
 /// Vector representation supporting dense, sparse, or hybrid
@@ -103,13 +103,14 @@ impl Vector {
             ));
         }
         if let Some(&max_idx) = indices.iter().max()
-            && max_idx >= dimension {
-                return Err(anyhow!(
-                    "Sparse vector index {} out of bounds (dimension: {})",
-                    max_idx,
-                    dimension
-                ));
-            }
+            && max_idx >= dimension
+        {
+            return Err(anyhow!(
+                "Sparse vector index {} out of bounds (dimension: {})",
+                max_idx,
+                dimension
+            ));
+        }
         Ok(Vector::Sparse {
             dimension,
             indices,
@@ -211,7 +212,7 @@ impl Vector {
                 } else {
                     1.0 - (indices.len() as f32 / *dimension as f32)
                 }
-            }
+            },
             Vector::Hybrid { sparse_indices, .. } => {
                 // For hybrid, report sparsity of sparse component
                 // (not well-defined since we don't know sparse dimension)
@@ -221,7 +222,7 @@ impl Vector {
                     // Just report presence of sparse component
                     0.5
                 }
-            }
+            },
         }
     }
 
@@ -252,7 +253,7 @@ impl Vector {
                     dense[idx] = val;
                 }
                 dense
-            }
+            },
             Vector::Hybrid { dense, .. } => dense.clone(),
         }
     }
@@ -283,7 +284,7 @@ impl Vector {
                 indices.len() * size_of::<usize>()
                     + values.len() * size_of::<f32>()
                     + size_of::<usize>() // dimension field
-            }
+            },
             Vector::Hybrid {
                 dense,
                 sparse_indices,
@@ -292,7 +293,7 @@ impl Vector {
                 dense.len() * size_of::<f32>()
                     + sparse_indices.len() * size_of::<usize>()
                     + sparse_values.len() * size_of::<f32>()
-            }
+            },
         }
     }
 }
