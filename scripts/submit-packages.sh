@@ -5,7 +5,10 @@
 # Example: ./scripts/submit-packages.sh 0.0.1 v0.0.1
 #
 
-set -e
+set -euo pipefail
+
+PACKAGE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$PACKAGE_ROOT"
 
 VERSION="${1:-}"
 TAG="${2:-}"
@@ -16,20 +19,24 @@ if [ -z "$VERSION" ] || [ -z "$TAG" ]; then
     exit 1
 fi
 
+for package_kind in nix conda macports; do
+    python3 scripts/validate-packaging.py --kind "$package_kind" --version "$VERSION" --ref "$TAG"
+done
+
 echo "📦 Preparing package submissions for VecStore $VERSION"
 echo ""
 
 # Get source tarball hash
 echo "🔍 Calculating source tarball hash..."
-TARBALL_URL="https://github.com/PhilipJohnBasile/vecstore/archive/refs/tags/$TAG.tar.gz"
-TARBALL_SHA256=$(curl -sL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
+TARBALL_URL="https://github.com/PhilipJohnBasile/vecstore/archive/$TAG.tar.gz"
+TARBALL_SHA256=$(curl -fsSL "$TARBALL_URL" | shasum -a 256 | awk '{print $1}')
 echo "   SHA256: $TARBALL_SHA256"
 echo ""
 
 # Check if Windows binary exists
 WINDOWS_BINARY_URL="https://github.com/PhilipJohnBasile/vecstore/releases/download/$TAG/vecstore-x86_64-pc-windows-msvc.zip"
 if curl --output /dev/null --silent --head --fail "$WINDOWS_BINARY_URL"; then
-    WINDOWS_SHA256=$(curl -sL "$WINDOWS_BINARY_URL" | shasum -a 256 | awk '{print $1}')
+    WINDOWS_SHA256=$(curl -fsSL "$WINDOWS_BINARY_URL" | shasum -a 256 | awk '{print $1}')
     echo "✅ Windows binary found"
     echo "   SHA256: $WINDOWS_SHA256"
     WINDOWS_READY="yes"
@@ -43,29 +50,6 @@ echo ""
 update_manifests() {
     echo "📝 Updating manifest files..."
 
-    # Update Nix
-    if [ -f "nix/default.nix" ]; then
-        sed -i.bak "s/version = \".*\"/version = \"$VERSION\"/" nix/default.nix
-        sed -i.bak "s/rev = \".*\"/rev = \"$TAG\"/" nix/default.nix
-        sed -i.bak "s/hash = \"sha256-.*\"/hash = \"sha256-REPLACE_WITH_ACTUAL_HASH\"/" nix/default.nix
-        echo "   ✅ Updated nix/default.nix"
-        echo "      TODO: Run 'nix-prefetch-url --unpack $TARBALL_URL' to get hash"
-    fi
-
-    # Update Conda
-    if [ -f "conda/meta.yaml" ]; then
-        sed -i.bak "s/{% set version = \".*\" %}/{% set version = \"$VERSION\" %}/" conda/meta.yaml
-        sed -i.bak "s/sha256: .*/sha256: $TARBALL_SHA256/" conda/meta.yaml
-        echo "   ✅ Updated conda/meta.yaml"
-    fi
-
-    # Update MacPorts
-    if [ -f "macports/Portfile" ]; then
-        sed -i.bak "s/github.setup.*PhilipJohnBasile vecstore .* v/github.setup        PhilipJohnBasile vecstore $VERSION v/" macports/Portfile
-        echo "   ✅ Updated macports/Portfile"
-        echo "      TODO: Update checksums with actual values"
-    fi
-
     # Update Winget (if Windows binary ready)
     if [ "$WINDOWS_READY" == "yes" ] && [ -f "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.installer.yaml" ]; then
         sed -i.bak "s/PackageVersion: .*/PackageVersion: $VERSION/" "winget/manifests/p/PhilipJohnBasile/vecstore/$VERSION/PhilipJohnBasile.vecstore.yaml"
@@ -78,8 +62,6 @@ update_manifests() {
         echo "   ⚠️ Winget manifest template for $VERSION not found; copy a previous release before running this script."
     fi
 
-    # Clean up backup files
-    find . -name "*.bak" -delete
 
     echo ""
 }
@@ -87,11 +69,10 @@ update_manifests() {
 # Function to create submission instructions
 create_instructions() {
     cat > PACKAGE_SUBMISSION.md <<EOF
-# Package Submission Instructions for v$TAG
+# Package Submission Instructions for VecStore $VERSION ($TAG)
 
-## Automated Updates (Already Done)
-- ✅ Homebrew tap (auto-updated via GitHub Actions)
-- ✅ Scoop bucket (auto-updated via GitHub Actions)
+## Separate release workflows
+Verify Homebrew and Scoop workflow results separately. This helper does not update either repository.
 
 ## Manual Submissions Needed
 
