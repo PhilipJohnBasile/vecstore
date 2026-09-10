@@ -51,6 +51,8 @@ jobs:
     if: github.event.inputs.submit_nix != 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Get version
         id: version
@@ -63,12 +65,11 @@ jobs:
             echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get source hash
-        id: hash
-        run: |
-          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.TAG }}.tar.gz"
-          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
-          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+      - name: Validate prepared recipe before submission
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+          PACKAGE_REF: ${{ steps.version.outputs.TAG }}
+        run: python3 scripts/validate-packaging.py --kind nix --version "$PACKAGE_VERSION" --ref "$PACKAGE_REF"
 
       - name: Fork and clone nixpkgs
         env:
@@ -90,11 +91,17 @@ jobs:
           cd nixpkgs
           mkdir -p pkgs/by-name/ve/vecstore
           cp ../nix/default.nix pkgs/by-name/ve/vecstore/package.nix
-
-          # Update version and hash
-          sed -i "s/version = \".*\"/version = \"${{ steps.version.outputs.VERSION }}\"/" pkgs/by-name/ve/vecstore/package.nix
-          sed -i "s/rev = \".*\"/rev = \"${{ steps.version.outputs.TAG }}\"/" pkgs/by-name/ve/vecstore/package.nix
-          sed -i "s/hash = \"sha256-.*\"/hash = \"sha256-${{ steps.hash.outputs.SHA256 }}\"/" pkgs/by-name/ve/vecstore/package.nix
+          python3 - <<'PYTHON'
+          from pathlib import Path
+          maintainers = Path("maintainers/maintainer-list.nix")
+          text = maintainers.read_text()
+          if "\n  philipjohnbasile = {" not in text:
+              entry = Path("../nix/maintainer-entry.nix").read_text()
+              anchor = "  Philipp-M = {"
+              if anchor not in text:
+                  raise SystemExit("Maintainer list changed; insert the prepared entry in sorted order before submission")
+              maintainers.write_text(text.replace(anchor, entry + anchor, 1))
+          PYTHON
 
       - name: Create PR
         env:
@@ -107,7 +114,7 @@ jobs:
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pkgs/by-name/ve/vecstore/
+          git add pkgs/by-name/ve/vecstore/ maintainers/maintainer-list.nix
           git commit -m "vecstore: init at ${{ steps.version.outputs.VERSION }}"
           git push origin vecstore-${{ steps.version.outputs.VERSION }}
 
@@ -147,6 +154,8 @@ jobs:
     if: github.event.inputs.submit_conda != 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Get version
         id: version
@@ -159,12 +168,11 @@ jobs:
             echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: Get source hash
-        id: hash
-        run: |
-          TARBALL_URL="https://github.com/${{ github.repository }}/archive/refs/tags/${{ steps.version.outputs.TAG }}.tar.gz"
-          SHA256=$(curl -sL "$TARBALL_URL" | sha256sum | awk '{print $1}')
-          echo "SHA256=$SHA256" >> $GITHUB_OUTPUT
+      - name: Validate prepared recipe before submission
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+          PACKAGE_REF: ${{ steps.version.outputs.TAG }}
+        run: python3 scripts/validate-packaging.py --kind conda --version "$PACKAGE_VERSION" --ref "$PACKAGE_REF"
 
       - name: Fork and clone staged-recipes
         env:
@@ -184,10 +192,6 @@ jobs:
           mkdir -p recipes/vecstore
           cp ../conda/meta.yaml recipes/vecstore/
           cp ../conda/build.sh recipes/vecstore/
-
-          # Update version and hash
-          sed -i "s/{% set version = \".*\" %}/{% set version = \"${{ steps.version.outputs.VERSION }}\" %}/" recipes/vecstore/meta.yaml
-          sed -i "s/sha256: .*/sha256: ${{ steps.hash.outputs.SHA256 }}/" recipes/vecstore/meta.yaml
 
       - name: Create PR
         env:
@@ -244,6 +248,8 @@ jobs:
     if: github.event.inputs.submit_macports != 'false'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Get version
         id: version
@@ -255,6 +261,12 @@ jobs:
             echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
             echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
           fi
+
+      - name: Validate prepared recipe before submission
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.VERSION }}
+          PACKAGE_REF: ${{ steps.version.outputs.TAG }}
+        run: python3 scripts/validate-packaging.py --kind macports --version "$PACKAGE_VERSION" --ref "$PACKAGE_REF"
 
       - name: Fork and clone macports-ports
         env:
@@ -273,9 +285,6 @@ jobs:
           cd macports-ports
           mkdir -p databases/vecstore
           cp ../macports/Portfile databases/vecstore/
-
-          # Update version
-          sed -i "s/github.setup.*PhilipJohnBasile vecstore .* v/github.setup        PhilipJohnBasile vecstore ${{ steps.version.outputs.VERSION }} v/" databases/vecstore/Portfile
 
       - name: Create PR
         env:

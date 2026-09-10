@@ -1,46 +1,51 @@
-{ lib
-, rustPlatform
-, fetchFromGitHub
-, pkg-config
-, protobuf
-, stdenv
-, darwin
+{
+  lib,
+  rustPlatform,
+  fetchFromGitHub,
+  pkg-config,
+  protobuf,
+  unstableGitUpdater,
 }:
 
-rustPlatform.buildRustPackage rec {
+rustPlatform.buildRustPackage (finalAttrs: {
+  __structuredAttrs = true;
+
   pname = "vecstore";
-  version = "0.0.1";
+  version = "0.1.0-unstable-2026-09-01";
 
   src = fetchFromGitHub {
     owner = "PhilipJohnBasile";
     repo = "vecstore";
-    rev = "v${version}";
-    hash = "sha256-REPLACE_WITH_ACTUAL_HASH";
+    rev = "1868a6273174f58856af25ba6c45eb057d3bbfd0";
+    hash = "sha256-sLhQjb3+7H7rgRoFNTRvTPtRaiDfJq8IqUbdwOu1g74=";
   };
 
-  cargoHash = "sha256-REPLACE_WITH_ACTUAL_CARGO_HASH";
+  cargoHash = "sha256-zcqmVMC8xCftzDegDyJAu7xVeMjiZImBg7A3hXHMveU=";
 
   nativeBuildInputs = [
     pkg-config
     protobuf
   ];
 
-  buildInputs = lib.optionals stdenv.isDarwin [
-    darwin.apple_sdk.frameworks.Security
-    darwin.apple_sdk.frameworks.SystemConfiguration
-  ];
-
   buildFeatures = [ "server" ];
 
-  # Build only the server binary
-  cargoBuildFlags = [ "--bin" "vecstore-server" ];
+  cargoBuildFlags = [
+    "--bin"
+    "vecstore-server"
+  ];
 
-  meta = with lib; {
-    description = "Embeddable vector database (alpha) with HNSW search and RAG tooling";
+  # VecStore's release profile uses panic=abort, while Rust's test harness
+  # requires unwind. Source tests run in the VecStore CI.
+  doCheck = false;
+
+  passthru.updateScript = unstableGitUpdater { };
+
+  meta = {
+    description = "Embeddable vector database with HNSW search and RAG tooling";
     homepage = "https://github.com/PhilipJohnBasile/vecstore";
-    license = licenses.mit;
-    maintainers = with maintainers; [ philipjohnbasile ];
+    license = lib.licenses.mit;
+    maintainers = [ lib.maintainers.philipjohnbasile ];
     mainProgram = "vecstore-server";
-    platforms = platforms.unix;
+    platforms = lib.platforms.unix;
   };
-}
+})
