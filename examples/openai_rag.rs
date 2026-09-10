@@ -38,7 +38,7 @@ async fn main() -> Result<()> {
             eprintln!("\nPlease set your OpenAI API key:");
             eprintln!("  export OPENAI_API_KEY='your-api-key-here'\n");
             std::process::exit(1);
-        }
+        },
     };
 
     println!("✓ API key found\n");
@@ -46,13 +46,34 @@ async fn main() -> Result<()> {
     // 2. Create sample documents to index
     println!("Creating sample documents...");
     let documents = vec![
-        ("rust_intro", "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety. It accomplishes these goals without using a garbage collector."),
-        ("rust_ownership", "Rust's ownership system is its most unique feature. The ownership rules ensure memory safety without needing a garbage collector. Each value has a variable that's its owner, and there can only be one owner at a time."),
-        ("rust_cargo", "Cargo is Rust's build system and package manager. It handles building your code, downloading dependencies, and building those dependencies. Most Rustaceans use Cargo to manage their Rust projects."),
-        ("python_intro", "Python is a high-level, interpreted programming language known for its simplicity and readability. It supports multiple programming paradigms and has a comprehensive standard library."),
-        ("python_django", "Django is a high-level Python web framework that encourages rapid development and clean, pragmatic design. It follows the model-template-views architectural pattern and includes an ORM."),
-        ("javascript_intro", "JavaScript is a versatile programming language primarily used for web development. It runs in browsers and enables interactive web pages. Node.js allows JavaScript to run on servers too."),
-        ("vecstore_intro", "VecStore is a high-performance vector database written in Rust. It provides efficient similarity search using HNSW indexing, supports multiple embedding backends, and offers both Rust and Python APIs."),
+        (
+            "rust_intro",
+            "Rust is a systems programming language that runs blazingly fast, prevents segfaults, and guarantees thread safety. It accomplishes these goals without using a garbage collector.",
+        ),
+        (
+            "rust_ownership",
+            "Rust's ownership system is its most unique feature. The ownership rules ensure memory safety without needing a garbage collector. Each value has a variable that's its owner, and there can only be one owner at a time.",
+        ),
+        (
+            "rust_cargo",
+            "Cargo is Rust's build system and package manager. It handles building your code, downloading dependencies, and building those dependencies. Most Rustaceans use Cargo to manage their Rust projects.",
+        ),
+        (
+            "python_intro",
+            "Python is a high-level, interpreted programming language known for its simplicity and readability. It supports multiple programming paradigms and has a comprehensive standard library.",
+        ),
+        (
+            "python_django",
+            "Django is a high-level Python web framework that encourages rapid development and clean, pragmatic design. It follows the model-template-views architectural pattern and includes an ORM.",
+        ),
+        (
+            "javascript_intro",
+            "JavaScript is a versatile programming language primarily used for web development. It runs in browsers and enables interactive web pages. Node.js allows JavaScript to run on servers too.",
+        ),
+        (
+            "vecstore_intro",
+            "VecStore is a high-performance vector database written in Rust. It provides efficient similarity search using HNSW indexing, supports multiple embedding backends, and offers both Rust and Python APIs.",
+        ),
     ];
 
     println!("✓ Created {} documents", documents.len());

@@ -201,7 +201,7 @@ fn main() -> anyhow::Result<()> {
     match result {
         Err(e) if e.to_string().contains("not active") => {
             println!("   ✅ Write rejected: {}", e);
-        }
+        },
         _ => println!("   ⚠️  Expected error but got: {:?}", result),
     }
 

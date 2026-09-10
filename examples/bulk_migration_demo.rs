@@ -10,8 +10,8 @@
 use anyhow::Result;
 use std::fs;
 use tempfile::TempDir;
-use vecstore::bulk_migration::{ChromaDBMigration, MigrationConfig, PineconeMigration};
 use vecstore::VecStore;
+use vecstore::bulk_migration::{ChromaDBMigration, MigrationConfig, PineconeMigration};
 
 fn main() -> Result<()> {
     println!("🔄 VecStore Bulk Migration Demo\n");

@@ -142,15 +142,15 @@ impl VectorOps {
                     result += a_values[i] * b_values[j];
                     i += 1;
                     j += 1;
-                }
+                },
                 std::cmp::Ordering::Less => {
                     // a's index is smaller - advance a
                     i += 1;
-                }
+                },
                 std::cmp::Ordering::Greater => {
                     // b's index is smaller - advance b
                     j += 1;
-                }
+                },
             }
         }
 

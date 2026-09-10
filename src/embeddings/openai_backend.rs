@@ -4,7 +4,7 @@
 // Supports text-embedding-3-small, text-embedding-3-large, and ada-002 models.
 
 use super::TextEmbedder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -92,7 +92,9 @@ impl RateLimiter {
     }
 
     async fn wait_if_needed(&self) {
-        let Ok(mut requests) = self.last_requests.lock() else { return; };
+        let Ok(mut requests) = self.last_requests.lock() else {
+            return;
+        };
 
         // Remove requests older than 1 minute
         let now = std::time::Instant::now();
@@ -108,7 +110,9 @@ impl RateLimiter {
                 if wait_time > Duration::from_secs(0) {
                     drop(requests); // Release lock before sleeping
                     tokio::time::sleep(wait_time).await;
-                    let Ok(reacquired) = self.last_requests.lock() else { return; };
+                    let Ok(reacquired) = self.last_requests.lock() else {
+                        return;
+                    };
                     requests = reacquired;
                 }
             }
@@ -312,14 +316,14 @@ impl OpenAIEmbedding {
                     data.sort_by_key(|d| d.index);
 
                     return Ok(data.into_iter().map(|d| d.embedding).collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     // Rate limit hit, retry with exponential backoff
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -327,17 +331,17 @@ impl OpenAIEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("OpenAI API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     // Network error, retry
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call OpenAI API: {}", e));
-                }
+                },
             }
         }
     }

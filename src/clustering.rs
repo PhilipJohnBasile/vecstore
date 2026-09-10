@@ -603,14 +603,14 @@ impl HierarchicalClustering {
                     .iter()
                     .flat_map(|&i| cluster2.iter().map(move |&j| distances[i][j]))
                     .fold(f32::INFINITY, f32::min)
-            }
+            },
             LinkageMethod::Complete => {
                 // Maximum distance
                 cluster1
                     .iter()
                     .flat_map(|&i| cluster2.iter().map(move |&j| distances[i][j]))
                     .fold(0.0, f32::max)
-            }
+            },
             LinkageMethod::Average => {
                 // Average distance
                 let sum: f32 = cluster1
@@ -618,7 +618,7 @@ impl HierarchicalClustering {
                     .flat_map(|&i| cluster2.iter().map(move |&j| distances[i][j]))
                     .sum();
                 sum / (cluster1.len() * cluster2.len()) as f32
-            }
+            },
         }
     }
 

@@ -312,7 +312,8 @@ impl BinaryQuantizer {
 
     /// Compute Hamming distance (fast binary comparison)
     pub fn hamming_distance(&self, a: &QuantizedVector, b: &QuantizedVector) -> u32 {
-        a.data.iter()
+        a.data
+            .iter()
             .zip(&b.data)
             .map(|(&x, &y)| (x ^ y).count_ones())
             .sum()
@@ -526,7 +527,8 @@ impl FourBitQuantizer {
             }
         }
 
-        self.params.scales = mins.iter()
+        self.params.scales = mins
+            .iter()
             .zip(&maxs)
             .map(|(&min, &max)| (max - min) / 15.0)
             .collect();
@@ -743,13 +745,14 @@ impl AdaptiveQuantizer {
         }
 
         // Allocate bits based on importance
-        let _total_bits = dim * match self.config.stored_bits {
-            BitWidth::Bit1 => 1,
-            BitWidth::Bit1_5 => 2,
-            BitWidth::Bit2 => 2,
-            BitWidth::Bit4 => 4,
-            BitWidth::Bit8 => 8,
-        };
+        let _total_bits = dim
+            * match self.config.stored_bits {
+                BitWidth::Bit1 => 1,
+                BitWidth::Bit1_5 => 2,
+                BitWidth::Bit2 => 2,
+                BitWidth::Bit4 => 4,
+                BitWidth::Bit8 => 8,
+            };
 
         // For now, use uniform allocation (could be optimized)
         self.bit_allocation = vec![self.config.stored_bits; dim];
@@ -812,13 +815,17 @@ impl QuantizedIndex {
             _ => self.four_bit_quantizer.encode(vector),
         };
 
-        let mut vectors = self.vectors.write()
-            .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire write lock on vectors".into()))?;
+        let mut vectors = self.vectors.write().map_err(|_| {
+            crate::error::VecStoreError::LockError("Failed to acquire write lock on vectors".into())
+        })?;
         vectors.insert(id.to_string(), quantized);
 
         if self.config.rescore {
-            let mut originals = self.original_vectors.write()
-                .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire write lock on original_vectors".into()))?;
+            let mut originals = self.original_vectors.write().map_err(|_| {
+                crate::error::VecStoreError::LockError(
+                    "Failed to acquire write lock on original_vectors".into(),
+                )
+            })?;
             originals.insert(id.to_string(), vector.to_vec());
         }
 
@@ -827,7 +834,9 @@ impl QuantizedIndex {
 
     /// Search with quantized comparison
     pub fn search(&self, query: &[f32], top_k: usize) -> Vec<(String, f32)> {
-        let Ok(vectors) = self.vectors.read() else { return Vec::new(); };
+        let Ok(vectors) = self.vectors.read() else {
+            return Vec::new();
+        };
 
         // First pass: approximate search with quantized vectors
         let candidates_k = if self.config.rescore {
@@ -843,7 +852,7 @@ impl QuantizedIndex {
                     BitWidth::Bit1 => {
                         let query_q = self.binary_quantizer.encode(query);
                         self.binary_quantizer.binary_similarity(&query_q, qvec)
-                    }
+                    },
                     _ => {
                         let decoded = match qvec.bit_width {
                             BitWidth::Bit2 => self.two_bit_quantizer.decode(qvec),
@@ -851,7 +860,7 @@ impl QuantizedIndex {
                             _ => self.four_bit_quantizer.decode(qvec),
                         };
                         cosine_similarity(&decoded, query)
-                    }
+                    },
                 };
                 (id.clone(), score)
             })
@@ -862,7 +871,9 @@ impl QuantizedIndex {
 
         // Second pass: rescore with original vectors
         if self.config.rescore {
-            let Ok(originals) = self.original_vectors.read() else { return candidates; };
+            let Ok(originals) = self.original_vectors.read() else {
+                return candidates;
+            };
 
             candidates = candidates
                 .into_iter()
@@ -953,7 +964,9 @@ mod tests {
     fn test_binary_quantization() {
         let quantizer = BinaryQuantizer::new(128);
 
-        let vector: Vec<f32> = (0..128).map(|i| if i % 2 == 0 { 0.5 } else { -0.5 }).collect();
+        let vector: Vec<f32> = (0..128)
+            .map(|i| if i % 2 == 0 { 0.5 } else { -0.5 })
+            .collect();
         let encoded = quantizer.encode(&vector);
 
         assert_eq!(encoded.dimension, 128);
@@ -967,13 +980,13 @@ mod tests {
     fn test_ternary_quantization() {
         let quantizer = TernaryQuantizer::new(128, 0.1);
 
-        let vector: Vec<f32> = (0..128).map(|i| {
-            match i % 3 {
+        let vector: Vec<f32> = (0..128)
+            .map(|i| match i % 3 {
                 0 => 0.5,
                 1 => -0.5,
                 _ => 0.0,
-            }
-        }).collect();
+            })
+            .collect();
 
         let encoded = quantizer.encode(&vector);
         let decoded = quantizer.decode(&encoded);

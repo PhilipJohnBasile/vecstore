@@ -35,12 +35,12 @@
 //! let results = quantizer.search(&query, &codes, 10)?;
 //! ```
 
-use std::collections::HashMap;
-use serde::{Deserialize, Serialize};
 use rand::Rng;
 use rand::SeedableRng;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// Configuration for RaBitQ quantization
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,11 +67,17 @@ pub const DEFAULT_NUM_SUBVECTORS: usize = 1;
 pub const DEFAULT_RERANK_FACTOR: usize = 4;
 
 #[inline]
-const fn default_num_subvectors() -> usize { DEFAULT_NUM_SUBVECTORS }
+const fn default_num_subvectors() -> usize {
+    DEFAULT_NUM_SUBVECTORS
+}
 #[inline]
-const fn default_true() -> bool { true }
+const fn default_true() -> bool {
+    true
+}
 #[inline]
-const fn default_rerank_factor() -> usize { DEFAULT_RERANK_FACTOR }
+const fn default_rerank_factor() -> usize {
+    DEFAULT_RERANK_FACTOR
+}
 
 impl RaBitQConfig {
     /// Create a new configuration
@@ -173,7 +179,8 @@ impl BinaryCode {
     /// Hamming distance to another code
     #[inline]
     pub fn hamming_distance(&self, other: &BinaryCode) -> u32 {
-        self.bits.iter()
+        self.bits
+            .iter()
             .zip(other.bits.iter())
             .map(|(a, b)| (a ^ b).count_ones())
             .sum()
@@ -222,7 +229,9 @@ impl RaBitQ {
     /// Train the quantizer on sample vectors
     pub fn train(&mut self, vectors: &[Vec<f32>]) -> Result<()> {
         if vectors.is_empty() {
-            return Err(VecStoreError::InvalidInput("Empty training set".to_string()));
+            return Err(VecStoreError::InvalidInput(
+                "Empty training set".to_string(),
+            ));
         }
 
         let dim = self.config.dimension;
@@ -247,7 +256,8 @@ impl RaBitQ {
                 variance[i] += diff * diff;
             }
         }
-        self.std = variance.iter()
+        self.std = variance
+            .iter()
             .map(|v| (v / vectors.len() as f32).sqrt().max(1e-6))
             .collect();
 
@@ -273,16 +283,11 @@ impl RaBitQ {
 
         for i in 0..dim {
             // Generate random vector
-            let mut vec: Vec<f32> = (0..dim)
-                .map(|_| rng.random::<f32>() - 0.5)
-                .collect();
+            let mut vec: Vec<f32> = (0..dim).map(|_| rng.random::<f32>() - 0.5).collect();
 
             // Gram-Schmidt orthogonalization
             for row in matrix.iter().take(i) {
-                let dot: f32 = vec.iter()
-                    .zip(row.iter())
-                    .map(|(a, b)| a * b)
-                    .sum();
+                let dot: f32 = vec.iter().zip(row.iter()).map(|(a, b)| a * b).sum();
 
                 for (v, m) in vec.iter_mut().zip(row.iter()) {
                     *v -= dot * m;
@@ -307,14 +312,17 @@ impl RaBitQ {
     #[inline]
     pub fn encode_one(&self, vector: &[f32]) -> Result<BinaryCode> {
         if !self.is_trained {
-            return Err(VecStoreError::InvalidInput("Quantizer not trained".to_string()));
+            return Err(VecStoreError::InvalidInput(
+                "Quantizer not trained".to_string(),
+            ));
         }
 
         let dim = self.config.dimension;
         let mut code = BinaryCode::new(dim);
 
         // Center and normalize
-        let centered: Vec<f32> = vector.iter()
+        let centered: Vec<f32> = vector
+            .iter()
             .zip(self.mean.iter())
             .zip(self.std.iter())
             .map(|((&v, &m), &s)| (v - m) / s)
@@ -327,7 +335,8 @@ impl RaBitQ {
 
         // Apply projection and binarize
         for i in 0..dim {
-            let projected: f32 = self.projection[i].iter()
+            let projected: f32 = self.projection[i]
+                .iter()
                 .zip(centered.iter())
                 .map(|(p, c)| p * c)
                 .sum();
@@ -343,9 +352,7 @@ impl RaBitQ {
     /// Encode multiple vectors
     #[inline]
     pub fn encode(&self, vectors: &[Vec<f32>]) -> Result<Vec<BinaryCode>> {
-        let codes: Result<Vec<_>> = vectors.iter()
-            .map(|v| self.encode_one(v))
-            .collect();
+        let codes: Result<Vec<_>> = vectors.iter().map(|v| self.encode_one(v)).collect();
 
         let codes = codes?;
 
@@ -365,7 +372,8 @@ impl RaBitQ {
         let dim = self.config.dimension;
 
         // Center and normalize query
-        let centered: Vec<f32> = query.iter()
+        let centered: Vec<f32> = query
+            .iter()
             .zip(self.mean.iter())
             .zip(self.std.iter())
             .map(|((&v, &m), &s)| (v - m) / s)
@@ -376,7 +384,8 @@ impl RaBitQ {
         // Project query
         let mut projected = vec![0.0f32; dim];
         for (i, proj_val) in projected.iter_mut().enumerate().take(dim) {
-            *proj_val = self.projection[i].iter()
+            *proj_val = self.projection[i]
+                .iter()
                 .zip(centered.iter())
                 .map(|(p, c)| p * c)
                 .sum();
@@ -408,7 +417,8 @@ impl RaBitQ {
         let oversample = k * self.config.rerank_factor;
 
         // First pass: asymmetric distance
-        let mut candidates: Vec<(usize, f32)> = codes.iter()
+        let mut candidates: Vec<(usize, f32)> = codes
+            .iter()
             .enumerate()
             .map(|(i, code)| (i, self.asymmetric_distance(query, code)))
             .collect();
@@ -420,7 +430,8 @@ impl RaBitQ {
         candidates.truncate(oversample.min(candidates.len()));
 
         // Return results
-        Ok(candidates.into_iter()
+        Ok(candidates
+            .into_iter()
             .take(k)
             .map(|(index, distance)| SearchResult { index, distance })
             .collect())
@@ -490,9 +501,10 @@ impl RaBitQIndex {
             self.codes.push(code);
 
             if let Some(meta) = metadata
-                && i < meta.len() {
-                    self.metadata.insert(id.clone(), meta[i].clone());
-                }
+                && i < meta.len()
+            {
+                self.metadata.insert(id.clone(), meta[i].clone());
+            }
         }
 
         Ok(())
@@ -502,7 +514,8 @@ impl RaBitQIndex {
     pub fn search(&self, query: &[f32], k: usize) -> Result<Vec<IndexSearchResult>> {
         let results = self.quantizer.search(query, &self.codes, k)?;
 
-        Ok(results.into_iter()
+        Ok(results
+            .into_iter()
             .map(|r| {
                 let id = self.ids[r.index].clone();
                 let meta = self.metadata.get(&id).cloned();
@@ -563,7 +576,7 @@ impl RaBitQPQ {
 
         if !config.dimension.is_multiple_of(num_subvectors) {
             return Err(VecStoreError::InvalidInput(
-                "Dimension must be divisible by num_subvectors".to_string()
+                "Dimension must be divisible by num_subvectors".to_string(),
             ));
         }
 
@@ -588,9 +601,8 @@ impl RaBitQPQ {
             let start = i * self.subvector_dim;
             let end = start + self.subvector_dim;
 
-            let subvectors: Vec<Vec<f32>> = vectors.iter()
-                .map(|v| v[start..end].to_vec())
-                .collect();
+            let subvectors: Vec<Vec<f32>> =
+                vectors.iter().map(|v| v[start..end].to_vec()).collect();
 
             sq.train(&subvectors)?;
         }

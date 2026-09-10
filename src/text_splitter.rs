@@ -624,12 +624,12 @@ impl CodeTextSplitter {
                     || trimmed.starts_with("pub enum ")
                     || trimmed.starts_with("impl ")
                     || trimmed.starts_with("trait ")
-            }
+            },
             Some("python") => {
                 trimmed.starts_with("def ")
                     || trimmed.starts_with("class ")
                     || trimmed.starts_with("async def ")
-            }
+            },
             Some("javascript") | Some("typescript") => {
                 trimmed.starts_with("function ")
                     || trimmed.starts_with("class ")
@@ -637,7 +637,7 @@ impl CodeTextSplitter {
                     || trimmed.starts_with("let ")
                     || trimmed.starts_with("async function ")
                     || trimmed.starts_with("export ")
-            }
+            },
             Some("java") | Some("c") | Some("cpp") => {
                 // Simple heuristic: look for function-like patterns
                 (trimmed.contains('(')
@@ -647,19 +647,19 @@ impl CodeTextSplitter {
                         || trimmed.contains("void")
                         || trimmed.contains("int")))
                     || trimmed.starts_with("class ")
-            }
+            },
             Some("go") => {
                 trimmed.starts_with("func ")
                     || trimmed.starts_with("type ")
                     || trimmed.starts_with("struct ")
-            }
+            },
             _ => {
                 // Language-agnostic heuristics
                 trimmed.starts_with("fn ")
                     || trimmed.starts_with("function ")
                     || trimmed.starts_with("def ")
                     || trimmed.starts_with("class ")
-            }
+            },
         }
     }
 

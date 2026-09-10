@@ -26,8 +26,7 @@ pub type Id = String;
 /// | Scalar4 | 8x | 96% | 3x | Large datasets |
 /// | Binary | 32x | 90% | 8x | High-dim embeddings (1024+) |
 /// | ProductQuantization | 32x | 70-90% | 0.5x | Maximum compression |
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub enum QuantizationConfig {
     /// No quantization - full float32 vectors
     #[default]
@@ -109,7 +108,6 @@ const fn default_pq_iterations() -> usize {
     DEFAULT_PQ_ITERATIONS
 }
 
-
 /// Statistics about quantized vector storage
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QuantizationStats {
@@ -168,7 +166,7 @@ impl QuantizationConfig {
                 // Original: 128 * 4 bytes = 512 bytes
                 // Compressed: num_subvectors * 1 byte
                 512.0 / *num_subvectors as f32
-            }
+            },
         }
     }
 
@@ -176,10 +174,18 @@ impl QuantizationConfig {
     pub fn description(&self) -> &'static str {
         match self {
             QuantizationConfig::None => "No quantization (full precision)",
-            QuantizationConfig::Scalar8 { .. } => "8-bit scalar quantization (4x compression, 99% recall)",
-            QuantizationConfig::Scalar4 { .. } => "4-bit scalar quantization (8x compression, 96% recall)",
-            QuantizationConfig::Binary { .. } => "Binary quantization (32x compression, 90% recall)",
-            QuantizationConfig::Product { .. } => "Product quantization (variable compression, 70-90% recall)",
+            QuantizationConfig::Scalar8 { .. } => {
+                "8-bit scalar quantization (4x compression, 99% recall)"
+            },
+            QuantizationConfig::Scalar4 { .. } => {
+                "4-bit scalar quantization (8x compression, 96% recall)"
+            },
+            QuantizationConfig::Binary { .. } => {
+                "Binary quantization (32x compression, 90% recall)"
+            },
+            QuantizationConfig::Product { .. } => {
+                "Product quantization (variable compression, 70-90% recall)"
+            },
         }
     }
 
@@ -189,7 +195,9 @@ impl QuantizationConfig {
             self,
             QuantizationConfig::Scalar8 { .. }
                 | QuantizationConfig::Scalar4 { .. }
-                | QuantizationConfig::Binary { use_mean_threshold: true }
+                | QuantizationConfig::Binary {
+                    use_mean_threshold: true
+                }
                 | QuantizationConfig::Product { .. }
         )
     }

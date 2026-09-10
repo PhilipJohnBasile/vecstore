@@ -13,7 +13,7 @@
 // Each provider implements the TextEmbedder trait for seamless integration.
 
 use super::TextEmbedder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::time::Duration;
@@ -82,7 +82,9 @@ impl RateLimiter {
     }
 
     async fn wait_if_needed(&self) {
-        let Ok(mut requests) = self.last_requests.lock() else { return; };
+        let Ok(mut requests) = self.last_requests.lock() else {
+            return;
+        };
 
         // Remove requests older than 1 minute
         let now = std::time::Instant::now();
@@ -98,7 +100,9 @@ impl RateLimiter {
                 if wait_time > Duration::from_secs(0) {
                     drop(requests); // Release lock before sleeping
                     tokio::time::sleep(wait_time).await;
-                    let Ok(reacquired) = self.last_requests.lock() else { return; };
+                    let Ok(reacquired) = self.last_requests.lock() else {
+                        return;
+                    };
                     requests = reacquired;
                 }
             }
@@ -214,13 +218,13 @@ impl CohereEmbedding {
                         .context("Failed to parse Cohere response")?;
 
                     return Ok(embed_response.embeddings);
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -228,16 +232,16 @@ impl CohereEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Cohere API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Cohere API: {}", e));
-                }
+                },
             }
         }
     }
@@ -428,13 +432,13 @@ impl VoyageEmbedding {
                     data.sort_by_key(|d| d.index);
 
                     return Ok(data.into_iter().map(|d| d.embedding).collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -442,16 +446,16 @@ impl VoyageEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Voyage API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Voyage API: {}", e));
-                }
+                },
             }
         }
     }
@@ -630,13 +634,13 @@ impl MistralEmbedding {
                     data.sort_by_key(|d| d.index);
 
                     return Ok(data.into_iter().map(|d| d.embedding).collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -644,16 +648,16 @@ impl MistralEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Mistral API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Mistral API: {}", e));
-                }
+                },
             }
         }
     }
@@ -701,7 +705,7 @@ impl GoogleModel {
             GoogleModel::TextEmbedding004 => "text-embedding-004",
             GoogleModel::TextEmbeddingGeckoMultilingual => {
                 "textembedding-gecko-multilingual@latest"
-            }
+            },
         }
     }
 
@@ -794,7 +798,10 @@ impl GoogleEmbedding {
 
         let url = format!(
             "https://{}-aiplatform.googleapis.com/v1/projects/{}/locations/{}/publishers/google/models/{}:predict",
-            self.location, self.project_id, self.location, self.model.as_str()
+            self.location,
+            self.project_id,
+            self.location,
+            self.model.as_str()
         );
 
         let mut retries = 0;
@@ -820,13 +827,13 @@ impl GoogleEmbedding {
                         .into_iter()
                         .map(|p| p.embeddings.values)
                         .collect());
-                }
+                },
                 Ok(resp) if resp.status().as_u16() == 429 && retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Ok(resp) => {
                     let status = resp.status();
                     let body = resp
@@ -834,16 +841,16 @@ impl GoogleEmbedding {
                         .await
                         .unwrap_or_else(|_| String::from("(no body)"));
                     return Err(anyhow!("Google API error {}: {}", status, body));
-                }
+                },
                 Err(_e) if retries < self.max_retries => {
                     retries += 1;
                     let wait_time = Duration::from_secs(2_u64.pow(retries as u32));
                     tokio::time::sleep(wait_time).await;
                     continue;
-                }
+                },
                 Err(e) => {
                     return Err(anyhow!("Failed to call Google API: {}", e));
-                }
+                },
             }
         }
     }

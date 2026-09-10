@@ -4,11 +4,11 @@
 //! enabling fully native Rust embeddings without Python dependencies.
 
 use crate::embeddings::TextEmbedder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
-use hf_hub::{api::sync::Api, Repo, RepoType};
+use hf_hub::{Repo, RepoType, api::sync::Api};
 use tokenizers::Tokenizer;
 
 /// Supported Candle embedding models
@@ -225,7 +225,11 @@ impl TextEmbedder for CandleEmbedder {
             .collect::<Result<Vec<_>>>()?;
 
         // Find max sequence length for padding
-        let max_len = encodings.iter().map(|e| e.get_ids().len()).max().unwrap_or(0);
+        let max_len = encodings
+            .iter()
+            .map(|e| e.get_ids().len())
+            .max()
+            .unwrap_or(0);
 
         // Pad sequences and create batch tensors
         let batch_size = encodings.len();

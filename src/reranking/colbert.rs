@@ -40,9 +40,9 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
 #[cfg(feature = "embeddings")]
 use anyhow::Context;
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 #[cfg(feature = "embeddings")]
@@ -51,7 +51,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(feature = "embeddings")]
 use ndarray::Array2;
 #[cfg(feature = "embeddings")]
-use ort::session::{builder::GraphOptimizationLevel, Session};
+use ort::session::{Session, builder::GraphOptimizationLevel};
 #[cfg(feature = "embeddings")]
 use std::sync::RwLock;
 #[cfg(feature = "embeddings")]
@@ -476,8 +476,7 @@ impl ColBERTReranker {
         }
 
         // Create 2D arrays (batch_size=1, seq_length)
-        let input_ids_array =
-            Array2::from_shape_vec((1, max_tokens), padded_input_ids.clone())?;
+        let input_ids_array = Array2::from_shape_vec((1, max_tokens), padded_input_ids.clone())?;
         let attention_mask_array =
             Array2::from_shape_vec((1, max_tokens), padded_attention_mask.clone())?;
 
@@ -486,12 +485,10 @@ impl ColBERTReranker {
         let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
         // Run inference using ort 2.0 inputs! macro
-        let mut session_guard = session.lock()
+        let mut session_guard = session
+            .lock()
             .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
-        let outputs = session_guard.run(ort::inputs![
-            input_ids_tensor,
-            attention_mask_tensor
-        ])?;
+        let outputs = session_guard.run(ort::inputs![input_ids_tensor, attention_mask_tensor])?;
 
         // Extract token embeddings using ort 2.0 API
         // ColBERT output shape: (batch_size, seq_length, embedding_dim)
@@ -559,7 +556,10 @@ impl ColBERTReranker {
         {
             // Check query cache first
             {
-                let cache = self.query_cache.read().map_err(|e| anyhow!("Cache lock error: {}", e))?;
+                let cache = self
+                    .query_cache
+                    .read()
+                    .map_err(|e| anyhow!("Cache lock error: {}", e))?;
                 if let Some(cached) = cache.get(query) {
                     return Ok(cached.clone());
                 }
@@ -576,7 +576,10 @@ impl ColBERTReranker {
 
             // Cache the result
             {
-                let mut cache = self.query_cache.write().map_err(|e| anyhow!("Cache lock error: {}", e))?;
+                let mut cache = self
+                    .query_cache
+                    .write()
+                    .map_err(|e| anyhow!("Cache lock error: {}", e))?;
                 cache.insert(query.to_string(), embeddings.clone());
             }
 
@@ -612,10 +615,7 @@ impl ColBERTReranker {
 
     /// Encode multiple documents in a batch (more efficient than encoding one by one)
     #[cfg(feature = "embeddings")]
-    pub async fn encode_documents_batch(
-        &self,
-        documents: &[&str],
-    ) -> Result<Vec<TokenEmbeddings>> {
+    pub async fn encode_documents_batch(&self, documents: &[&str]) -> Result<Vec<TokenEmbeddings>> {
         let session = self
             .session
             .as_ref()
@@ -654,7 +654,10 @@ impl ColBERTReranker {
 
             // Tokenize batch
             let encodings = tokenizer
-                .encode_batch(batch_texts.iter().map(|s| s.as_str()).collect::<Vec<_>>(), true)
+                .encode_batch(
+                    batch_texts.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+                    true,
+                )
                 .map_err(|e| anyhow!("Batch tokenization failed: {}", e))?;
 
             // Prepare batch input tensors
@@ -681,20 +684,21 @@ impl ColBERTReranker {
             // Create batch arrays
             let input_ids_array =
                 Array2::from_shape_vec((current_batch_size, max_tokens), all_input_ids)?;
-            let attention_mask_array =
-                Array2::from_shape_vec((current_batch_size, max_tokens), all_attention_masks.clone())?;
+            let attention_mask_array = Array2::from_shape_vec(
+                (current_batch_size, max_tokens),
+                all_attention_masks.clone(),
+            )?;
 
             // Create Tensor objects for ort 2.0
             let input_ids_tensor = ort::value::Tensor::from_array(input_ids_array)?;
             let attention_mask_tensor = ort::value::Tensor::from_array(attention_mask_array)?;
 
             // Run batch inference using ort 2.0 inputs! macro
-            let mut session_guard = session.lock()
+            let mut session_guard = session
+                .lock()
                 .map_err(|e| anyhow!("Failed to lock session: {}", e))?;
-            let outputs = session_guard.run(ort::inputs![
-                input_ids_tensor,
-                attention_mask_tensor
-            ])?;
+            let outputs =
+                session_guard.run(ort::inputs![input_ids_tensor, attention_mask_tensor])?;
 
             // Extract and process embeddings using ort 2.0 API
             let token_embeddings_view = outputs[0]
@@ -838,9 +842,11 @@ impl ColBERTReranker {
         for (q_idx, query_emb) in query_tokens.embeddings.iter().enumerate() {
             // Skip padding tokens if attention mask is available
             if let Some(ref mask) = query_tokens.attention_mask
-                && q_idx < mask.len() && mask[q_idx] == 0 {
-                    continue;
-                }
+                && q_idx < mask.len()
+                && mask[q_idx] == 0
+            {
+                continue;
+            }
 
             let mut max_sim = f32::NEG_INFINITY;
 
@@ -848,9 +854,11 @@ impl ColBERTReranker {
             for (d_idx, doc_emb) in doc_tokens.embeddings.iter().enumerate() {
                 // Skip padding tokens if attention mask is available
                 if let Some(ref mask) = doc_tokens.attention_mask
-                    && d_idx < mask.len() && mask[d_idx] == 0 {
-                        continue;
-                    }
+                    && d_idx < mask.len()
+                    && mask[d_idx] == 0
+                {
+                    continue;
+                }
 
                 let sim = self.compute_token_similarity(query_emb, doc_emb);
                 max_sim = max_sim.max(sim);
@@ -937,7 +945,10 @@ impl ColBERTReranker {
     /// Clear the query cache
     #[cfg(feature = "embeddings")]
     pub fn clear_query_cache(&self) -> Result<()> {
-        let mut cache = self.query_cache.write().map_err(|e| anyhow!("Cache lock error: {}", e))?;
+        let mut cache = self
+            .query_cache
+            .write()
+            .map_err(|e| anyhow!("Cache lock error: {}", e))?;
         cache.clear();
         Ok(())
     }
@@ -945,11 +956,7 @@ impl ColBERTReranker {
     /// Get cache statistics
     pub fn cache_stats(&self) -> CacheStats {
         #[cfg(feature = "embeddings")]
-        let query_cache_size = self
-            .query_cache
-            .read()
-            .map(|c| c.len())
-            .unwrap_or(0);
+        let query_cache_size = self.query_cache.read().map(|c| c.len()).unwrap_or(0);
 
         #[cfg(not(feature = "embeddings"))]
         let query_cache_size = 0;
@@ -1058,7 +1065,9 @@ impl ColBERTBatchReranker {
         };
 
         // Compute scores for all documents
-        let scores = self.reranker.compute_scores_batch(&query_tokens, &doc_embeddings)?;
+        let scores = self
+            .reranker
+            .compute_scores_batch(&query_tokens, &doc_embeddings)?;
 
         // Create indexed scores and sort
         let mut indexed_scores: Vec<(usize, f32)> = scores.into_iter().enumerate().collect();
@@ -1094,19 +1103,20 @@ impl ColBERTBatchReranker {
                 doc_embeddings.push(cached.clone());
             } else {
                 let embeddings = self.reranker.encode_document(doc_text).await?;
-                self.reranker.cache_document(doc_id.clone(), embeddings.clone());
+                self.reranker
+                    .cache_document(doc_id.clone(), embeddings.clone());
                 doc_embeddings.push(embeddings);
             }
         }
 
         // Compute scores
-        let scores = self.reranker.compute_scores_batch(&query_tokens, &doc_embeddings)?;
+        let scores = self
+            .reranker
+            .compute_scores_batch(&query_tokens, &doc_embeddings)?;
 
         // Create indexed scores and sort
-        let mut indexed_scores: Vec<(String, f32)> = doc_ids
-            .into_iter()
-            .zip(scores.into_iter())
-            .collect();
+        let mut indexed_scores: Vec<(String, f32)> =
+            doc_ids.into_iter().zip(scores.into_iter()).collect();
         indexed_scores.sort_by(|a, b| b.1.total_cmp(&a.1));
 
         // Return top-k
@@ -1141,7 +1151,11 @@ mod tests {
     #[test]
     fn test_token_embeddings_with_metadata() {
         let embeddings = vec![vec![0.1, 0.2], vec![0.3, 0.4], vec![0.5, 0.6]];
-        let tokens = vec!["hello".to_string(), "world".to_string(), "[PAD]".to_string()];
+        let tokens = vec![
+            "hello".to_string(),
+            "world".to_string(),
+            "[PAD]".to_string(),
+        ];
         let mask = vec![1, 1, 0];
 
         let token_embs = TokenEmbeddings::with_metadata(embeddings, tokens, mask);
@@ -1229,10 +1243,7 @@ mod tests {
             vec![1, 0], // Second token is padding
         );
 
-        let doc_tokens = TokenEmbeddings::new(vec![
-            vec![1.0, 0.0, 0.0],
-            vec![0.0, 1.0, 0.0],
-        ]);
+        let doc_tokens = TokenEmbeddings::new(vec![vec![1.0, 0.0, 0.0], vec![0.0, 1.0, 0.0]]);
 
         let score = reranker.compute_score(&query_tokens, &doc_tokens).unwrap();
 
@@ -1259,7 +1270,9 @@ mod tests {
             TokenEmbeddings::new(vec![vec![0.5, 0.5, 0.0]]), // Partial match
         ];
 
-        let scores = reranker.compute_scores_batch(&query_tokens, &doc_batch).unwrap();
+        let scores = reranker
+            .compute_scores_batch(&query_tokens, &doc_batch)
+            .unwrap();
 
         assert_eq!(scores.len(), 3);
         assert!(scores[0] > scores[2]); // Perfect match > partial

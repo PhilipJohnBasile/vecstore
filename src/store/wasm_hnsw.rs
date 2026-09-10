@@ -198,21 +198,23 @@ impl WasmHnsw {
             for neighbor_id in &neighbors_to_add {
                 // Add edge from new node to neighbor
                 if let Some(node) = self.nodes.get_mut(&id)
-                    && lc < node.neighbors.len() {
-                        node.neighbors[lc].insert(neighbor_id.clone());
-                    }
+                    && lc < node.neighbors.len()
+                {
+                    node.neighbors[lc].insert(neighbor_id.clone());
+                }
 
                 // Add edge from neighbor to new node
                 if let Some(neighbor_node) = self.nodes.get_mut(neighbor_id)
-                    && lc < neighbor_node.neighbors.len() {
-                        neighbor_node.neighbors[lc].insert(id.clone());
+                    && lc < neighbor_node.neighbors.len()
+                {
+                    neighbor_node.neighbors[lc].insert(id.clone());
 
-                        // Prune neighbor's connections if exceeded max
-                        let max_conn = if lc == 0 { self.m_max } else { self.m };
-                        if neighbor_node.neighbors[lc].len() > max_conn {
-                            self.prune_connections(neighbor_id, lc, max_conn);
-                        }
+                    // Prune neighbor's connections if exceeded max
+                    let max_conn = if lc == 0 { self.m_max } else { self.m };
+                    if neighbor_node.neighbors[lc].len() > max_conn {
+                        self.prune_connections(neighbor_id, lc, max_conn);
                     }
+                }
             }
 
             nearest = candidates;
@@ -275,9 +277,10 @@ impl WasmHnsw {
             for (layer, neighbor_ids) in node.neighbors.iter().enumerate() {
                 for neighbor_id in neighbor_ids {
                     if let Some(neighbor) = self.nodes.get_mut(neighbor_id)
-                        && layer < neighbor.neighbors.len() {
-                            neighbor.neighbors[layer].remove(id);
-                        }
+                        && layer < neighbor.neighbors.len()
+                    {
+                        neighbor.neighbors[layer].remove(id);
+                    }
                 }
             }
 
@@ -325,36 +328,35 @@ impl WasmHnsw {
 
             // Get node neighbors at this layer
             if let Some(node) = self.nodes.get(&current.id)
-                && layer < node.neighbors.len() {
-                    for neighbor_id in &node.neighbors[layer] {
-                        if visited.insert(neighbor_id.clone())
-                            && let Some(neighbor_node) = self.nodes.get(neighbor_id) {
-                                let dist = self.compute_distance(query, &neighbor_node.vector);
+                && layer < node.neighbors.len()
+            {
+                for neighbor_id in &node.neighbors[layer] {
+                    if visited.insert(neighbor_id.clone())
+                        && let Some(neighbor_node) = self.nodes.get(neighbor_id)
+                    {
+                        let dist = self.compute_distance(query, &neighbor_node.vector);
 
-                                if dist < worst_best || best.len() < num_closest {
-                                    let cand = Candidate {
-                                        id: neighbor_id.clone(),
-                                        distance: dist,
-                                    };
-                                    candidates.push(cand.clone());
-                                    best.push(cand);
+                        if dist < worst_best || best.len() < num_closest {
+                            let cand = Candidate {
+                                id: neighbor_id.clone(),
+                                distance: dist,
+                            };
+                            candidates.push(cand.clone());
+                            best.push(cand);
 
-                                    // Keep only num_closest best
-                                    if best.len() > num_closest {
-                                        best.pop();
-                                    }
-                                }
+                            // Keep only num_closest best
+                            if best.len() > num_closest {
+                                best.pop();
                             }
+                        }
                     }
                 }
+            }
         }
 
         // Convert to sorted vec (best first)
         let mut result: Vec<_> = best.into_iter().collect();
-        result.sort_by(|a, b| {
-            a.distance
-                .total_cmp(&b.distance)
-        });
+        result.sort_by(|a, b| a.distance.total_cmp(&b.distance));
         result
     }
 
@@ -389,10 +391,7 @@ impl WasmHnsw {
                 .collect();
 
             // Sort by distance
-            candidates.sort_by(|a, b| {
-                a.distance
-                    .total_cmp(&b.distance)
-            });
+            candidates.sort_by(|a, b| a.distance.total_cmp(&b.distance));
 
             // Keep only best max_conn
             let to_keep: HashSet<_> = candidates
@@ -403,9 +402,10 @@ impl WasmHnsw {
 
             // Update neighbors
             if let Some(node) = self.nodes.get_mut(node_id)
-                && layer < node.neighbors.len() {
-                    node.neighbors[layer] = to_keep;
-                }
+                && layer < node.neighbors.len()
+            {
+                node.neighbors[layer] = to_keep;
+            }
         }
     }
 
@@ -611,7 +611,7 @@ mod tests {
         let results_after = index.search(&[3.0, 4.0], 3, 50).unwrap();
         assert!(results_after.len() >= 1); // At least one result (v1 or v3)
         assert!(results_after.len() <= 2); // At most two results
-                                           // v2 should not be in results
+        // v2 should not be in results
         for (id, _) in &results_after {
             assert_ne!(id, "v2");
         }

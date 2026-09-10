@@ -3,8 +3,8 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use tempfile::TempDir;
-use vecstore::versioning::VersionedStore;
 use vecstore::Metadata;
+use vecstore::versioning::VersionedStore;
 
 fn create_metadata(desc: &str) -> Metadata {
     let mut fields = HashMap::new();

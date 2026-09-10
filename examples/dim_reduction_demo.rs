@@ -7,7 +7,7 @@
 //! - Reconstruct original vectors
 
 use anyhow::Result;
-use vecstore::dim_reduction::{ReductionStats, PCA};
+use vecstore::dim_reduction::{PCA, ReductionStats};
 
 fn generate_high_dim_data() -> Vec<Vec<f32>> {
     let mut vectors = Vec::new();

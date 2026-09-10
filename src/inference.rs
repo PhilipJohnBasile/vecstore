@@ -30,11 +30,11 @@
 //! let results = engine.query_text("greeting", 10)?;
 //! ```
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use serde::{Deserialize, Serialize};
 
-use crate::error::{VecStoreError, Result};
+use crate::error::{Result, VecStoreError};
 
 /// Embedding provider configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,15 +47,9 @@ pub enum EmbeddingProvider {
         dimensions: Option<usize>,
     },
     /// Cohere embeddings (embed-english-v3.0, embed-multilingual-v3.0)
-    Cohere {
-        model: String,
-        api_key: String,
-    },
+    Cohere { model: String, api_key: String },
     /// Voyage AI embeddings (voyage-3, voyage-3-lite, voyage-code-3)
-    VoyageAI {
-        model: String,
-        api_key: String,
-    },
+    VoyageAI { model: String, api_key: String },
     /// Google Vertex AI embeddings
     VertexAI {
         model: String,
@@ -68,15 +62,9 @@ pub enum EmbeddingProvider {
         tokenizer_path: String,
     },
     /// Ollama local models
-    Ollama {
-        model: String,
-        base_url: String,
-    },
+    Ollama { model: String, base_url: String },
     /// HuggingFace Inference API
-    HuggingFace {
-        model: String,
-        api_key: String,
-    },
+    HuggingFace { model: String, api_key: String },
     /// Custom HTTP endpoint
     Custom {
         endpoint: String,
@@ -89,47 +77,39 @@ impl EmbeddingProvider {
     /// Get the default dimension for this provider/model
     pub fn default_dimension(&self) -> usize {
         match self {
-            EmbeddingProvider::OpenAI { model, dimensions, .. } => {
-                dimensions.unwrap_or_else(|| match model.as_str() {
-                    "text-embedding-3-small" => 1536,
-                    "text-embedding-3-large" => 3072,
-                    "text-embedding-ada-002" => 1536,
-                    _ => 1536,
-                })
-            }
-            EmbeddingProvider::Cohere { model, .. } => {
-                match model.as_str() {
-                    "embed-english-v3.0" => 1024,
-                    "embed-multilingual-v3.0" => 1024,
-                    "embed-english-light-v3.0" => 384,
-                    _ => 1024,
-                }
-            }
-            EmbeddingProvider::VoyageAI { model, .. } => {
-                match model.as_str() {
-                    "voyage-3" => 1024,
-                    "voyage-3-lite" => 512,
-                    "voyage-code-3" => 1024,
-                    _ => 1024,
-                }
-            }
-            EmbeddingProvider::VertexAI { model, .. } => {
-                match model.as_str() {
-                    "textembedding-gecko@003" => 768,
-                    "text-embedding-004" => 768,
-                    "text-multilingual-embedding-002" => 768,
-                    _ => 768,
-                }
-            }
+            EmbeddingProvider::OpenAI {
+                model, dimensions, ..
+            } => dimensions.unwrap_or_else(|| match model.as_str() {
+                "text-embedding-3-small" => 1536,
+                "text-embedding-3-large" => 3072,
+                "text-embedding-ada-002" => 1536,
+                _ => 1536,
+            }),
+            EmbeddingProvider::Cohere { model, .. } => match model.as_str() {
+                "embed-english-v3.0" => 1024,
+                "embed-multilingual-v3.0" => 1024,
+                "embed-english-light-v3.0" => 384,
+                _ => 1024,
+            },
+            EmbeddingProvider::VoyageAI { model, .. } => match model.as_str() {
+                "voyage-3" => 1024,
+                "voyage-3-lite" => 512,
+                "voyage-code-3" => 1024,
+                _ => 1024,
+            },
+            EmbeddingProvider::VertexAI { model, .. } => match model.as_str() {
+                "textembedding-gecko@003" => 768,
+                "text-embedding-004" => 768,
+                "text-multilingual-embedding-002" => 768,
+                _ => 768,
+            },
             EmbeddingProvider::LocalONNX { .. } => 384, // Default for MiniLM
-            EmbeddingProvider::Ollama { model, .. } => {
-                match model.as_str() {
-                    "nomic-embed-text" => 768,
-                    "mxbai-embed-large" => 1024,
-                    "all-minilm" => 384,
-                    _ => 768,
-                }
-            }
+            EmbeddingProvider::Ollama { model, .. } => match model.as_str() {
+                "nomic-embed-text" => 768,
+                "mxbai-embed-large" => 1024,
+                "all-minilm" => 384,
+                _ => 768,
+            },
             EmbeddingProvider::HuggingFace { model, .. } => {
                 if model.contains("minilm") || model.contains("MiniLM") {
                     384
@@ -138,7 +118,7 @@ impl EmbeddingProvider {
                 } else {
                     768
                 }
-            }
+            },
             EmbeddingProvider::Custom { .. } => 768, // Default
         }
     }
@@ -180,10 +160,18 @@ pub struct InferenceConfig {
     pub timeout_ms: u64,
 }
 
-fn default_batch_size() -> usize { 100 }
-fn default_true() -> bool { true }
-fn default_cache_size() -> usize { 10000 }
-fn default_timeout() -> u64 { 30000 }
+fn default_batch_size() -> usize {
+    100
+}
+fn default_true() -> bool {
+    true
+}
+fn default_cache_size() -> usize {
+    10000
+}
+fn default_timeout() -> u64 {
+    30000
+}
 
 impl InferenceConfig {
     /// Create a new inference configuration
@@ -280,14 +268,15 @@ impl EmbeddingCache {
     /// Get an embedding from cache
     pub fn get(&mut self, key: &str, model: &str) -> Option<Vec<f32>> {
         if let Some(entry) = self.entries.get(key)
-            && entry.model == model {
-                // Move to end (most recently used)
-                if let Some(pos) = self.order.iter().position(|k| k == key) {
-                    self.order.remove(pos);
-                    self.order.push(key.to_string());
-                }
-                return Some(entry.embedding.clone());
+            && entry.model == model
+        {
+            // Move to end (most recently used)
+            if let Some(pos) = self.order.iter().position(|k| k == key) {
+                self.order.remove(pos);
+                self.order.push(key.to_string());
             }
+            return Some(entry.embedding.clone());
+        }
         None
     }
 
@@ -301,11 +290,14 @@ impl EmbeddingCache {
             }
         }
 
-        self.entries.insert(key.clone(), CacheEntry {
-            embedding,
-            model,
-            created_at: std::time::Instant::now(),
-        });
+        self.entries.insert(
+            key.clone(),
+            CacheEntry {
+                embedding,
+                model,
+                created_at: std::time::Instant::now(),
+            },
+        );
         self.order.push(key);
     }
 
@@ -382,16 +374,19 @@ impl InferenceEngine {
 
     /// Get current statistics
     pub fn stats(&self) -> InferenceStats {
-        let Ok(guard) = self.stats.read() else { return InferenceStats::default(); };
+        let Ok(guard) = self.stats.read() else {
+            return InferenceStats::default();
+        };
         guard.clone()
     }
 
     /// Embed a single text
     pub fn embed(&self, text: &str) -> Result<Vec<f32>> {
         let embeddings = self.embed_batch(&[text.to_string()])?;
-        embeddings.into_iter().next().ok_or_else(|| {
-            VecStoreError::InvalidInput("No embedding returned".to_string())
-        })
+        embeddings
+            .into_iter()
+            .next()
+            .ok_or_else(|| VecStoreError::InvalidInput("No embedding returned".to_string()))
     }
 
     /// Embed a batch of texts
@@ -413,20 +408,31 @@ impl InferenceEngine {
 
         // Check cache first
         if self.config.cache_enabled {
-            let mut cache = self.cache.write()
-                .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on embedding cache".into()))?;
+            let mut cache = self.cache.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire write lock on embedding cache".into())
+            })?;
             for (i, text) in texts.iter().enumerate() {
                 let cache_key = Self::cache_key(text);
                 if let Some(embedding) = cache.get(&cache_key, &model_name) {
                     results[i] = Some(embedding);
-                    self.stats.write()
-                        .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?
+                    self.stats
+                        .write()
+                        .map_err(|_| {
+                            VecStoreError::LockError(
+                                "Failed to acquire write lock on inference stats".into(),
+                            )
+                        })?
                         .cache_hits += 1;
                 } else {
                     uncached_indices.push(i);
                     uncached_texts.push(text.clone());
-                    self.stats.write()
-                        .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?
+                    self.stats
+                        .write()
+                        .map_err(|_| {
+                            VecStoreError::LockError(
+                                "Failed to acquire write lock on inference stats".into(),
+                            )
+                        })?
                         .cache_misses += 1;
                 }
             }
@@ -441,8 +447,11 @@ impl InferenceEngine {
 
             // Update cache and results
             if self.config.cache_enabled {
-                let mut cache = self.cache.write()
-                    .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on embedding cache".into()))?;
+                let mut cache = self.cache.write().map_err(|_| {
+                    VecStoreError::LockError(
+                        "Failed to acquire write lock on embedding cache".into(),
+                    )
+                })?;
                 for (i, embedding) in new_embeddings.into_iter().enumerate() {
                     let orig_idx = uncached_indices[i];
                     let cache_key = Self::cache_key(&uncached_texts[i]);
@@ -458,13 +467,15 @@ impl InferenceEngine {
 
         // Update stats
         {
-            let mut stats = self.stats.write()
-                .map_err(|_| VecStoreError::LockError("Failed to acquire write lock on inference stats".into()))?;
+            let mut stats = self.stats.write().map_err(|_| {
+                VecStoreError::LockError("Failed to acquire write lock on inference stats".into())
+            })?;
             stats.total_requests += 1;
             stats.total_embeddings += texts.len() as u64;
         }
 
-        results.into_iter()
+        results
+            .into_iter()
             .map(|r| r.ok_or_else(|| VecStoreError::InvalidInput("Missing embedding".to_string())))
             .collect()
     }
@@ -482,30 +493,30 @@ impl InferenceEngine {
     /// Generate embeddings using the configured provider
     fn generate_embeddings(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
         match &self.config.provider {
-            EmbeddingProvider::OpenAI { model, api_key, dimensions } => {
-                self.embed_openai(texts, model, api_key, *dimensions)
-            }
+            EmbeddingProvider::OpenAI {
+                model,
+                api_key,
+                dimensions,
+            } => self.embed_openai(texts, model, api_key, *dimensions),
             EmbeddingProvider::Cohere { model, api_key } => {
                 self.embed_cohere(texts, model, api_key)
-            }
+            },
             EmbeddingProvider::VoyageAI { model, api_key } => {
                 self.embed_voyageai(texts, model, api_key)
-            }
+            },
             EmbeddingProvider::Ollama { model, base_url } => {
                 self.embed_ollama(texts, model, base_url)
-            }
-            EmbeddingProvider::LocalONNX { .. } => {
-                self.embed_local_placeholder(texts)
-            }
-            EmbeddingProvider::VertexAI { .. } => {
-                self.embed_local_placeholder(texts)
-            }
+            },
+            EmbeddingProvider::LocalONNX { .. } => self.embed_local_placeholder(texts),
+            EmbeddingProvider::VertexAI { .. } => self.embed_local_placeholder(texts),
             EmbeddingProvider::HuggingFace { model, api_key } => {
                 self.embed_huggingface(texts, model, api_key)
-            }
-            EmbeddingProvider::Custom { endpoint, api_key, headers } => {
-                self.embed_custom(texts, endpoint, api_key.as_deref(), headers)
-            }
+            },
+            EmbeddingProvider::Custom {
+                endpoint,
+                api_key,
+                headers,
+            } => self.embed_custom(texts, endpoint, api_key.as_deref(), headers),
         }
     }
 
@@ -535,7 +546,9 @@ impl InferenceEngine {
             .header("Content-Type", "application/json")
             .json(&body)
             .send()
-            .map_err(|e| VecStoreError::Internal(format!("OpenAI embeddings request failed: {}", e)))?;
+            .map_err(|e| {
+                VecStoreError::Internal(format!("OpenAI embeddings request failed: {}", e))
+            })?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -546,18 +559,20 @@ impl InferenceEngine {
             )));
         }
 
-        let json: serde_json::Value = response
-            .json()
-            .map_err(|e| VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e)))?;
+        let json: serde_json::Value = response.json().map_err(|e| {
+            VecStoreError::Internal(format!("Failed to parse OpenAI response: {}", e))
+        })?;
 
         let embeddings: Vec<Vec<f32>> = json["data"]
             .as_array()
             .ok_or_else(|| VecStoreError::Internal("No data in OpenAI response".to_string()))?
             .iter()
             .filter_map(|item| {
-                item["embedding"]
-                    .as_array()
-                    .map(|arr| arr.iter().filter_map(|v| v.as_f64().map(|f| f as f32)).collect())
+                item["embedding"].as_array().map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_f64().map(|f| f as f32))
+                        .collect()
+                })
             })
             .collect();
 
@@ -574,9 +589,10 @@ impl InferenceEngine {
         dimensions: Option<usize>,
     ) -> Result<Vec<Vec<f32>>> {
         let dim = dimensions.unwrap_or(self.dimension);
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, dim)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, dim))
+            .collect())
     }
 
     /// Cohere embedding implementation
@@ -586,9 +602,10 @@ impl InferenceEngine {
         _model: &str,
         _api_key: &str,
     ) -> Result<Vec<Vec<f32>>> {
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// Voyage AI embedding implementation
@@ -598,19 +615,15 @@ impl InferenceEngine {
         _model: &str,
         _api_key: &str,
     ) -> Result<Vec<Vec<f32>>> {
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// Ollama embedding implementation
     #[cfg(feature = "ollama")]
-    fn embed_ollama(
-        &self,
-        texts: &[String],
-        model: &str,
-        base_url: &str,
-    ) -> Result<Vec<Vec<f32>>> {
+    fn embed_ollama(&self, texts: &[String], model: &str, base_url: &str) -> Result<Vec<Vec<f32>>> {
         let client = reqwest::blocking::Client::new();
         let url = format!("{}/api/embeddings", base_url.trim_end_matches('/'));
 
@@ -628,7 +641,9 @@ impl InferenceEngine {
                 .header("Content-Type", "application/json")
                 .json(&body)
                 .send()
-                .map_err(|e| VecStoreError::Internal(format!("Ollama embeddings request failed: {}", e)))?;
+                .map_err(|e| {
+                    VecStoreError::Internal(format!("Ollama embeddings request failed: {}", e))
+                })?;
 
             if !response.status().is_success() {
                 let status = response.status();
@@ -639,13 +654,15 @@ impl InferenceEngine {
                 )));
             }
 
-            let json: serde_json::Value = response
-                .json()
-                .map_err(|e| VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e)))?;
+            let json: serde_json::Value = response.json().map_err(|e| {
+                VecStoreError::Internal(format!("Failed to parse Ollama response: {}", e))
+            })?;
 
             let embedding: Vec<f32> = json["embedding"]
                 .as_array()
-                .ok_or_else(|| VecStoreError::Internal("No embedding in Ollama response".to_string()))?
+                .ok_or_else(|| {
+                    VecStoreError::Internal("No embedding in Ollama response".to_string())
+                })?
                 .iter()
                 .filter_map(|v| v.as_f64().map(|f| f as f32))
                 .collect();
@@ -664,9 +681,10 @@ impl InferenceEngine {
         _model: &str,
         _base_url: &str,
     ) -> Result<Vec<Vec<f32>>> {
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// HuggingFace embedding implementation
@@ -676,9 +694,10 @@ impl InferenceEngine {
         _model: &str,
         _api_key: &str,
     ) -> Result<Vec<Vec<f32>>> {
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// Custom endpoint embedding implementation
@@ -689,9 +708,10 @@ impl InferenceEngine {
         _api_key: Option<&str>,
         _headers: &HashMap<String, String>,
     ) -> Result<Vec<Vec<f32>>> {
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// Fallback embedding when ONNX/VertexAI features are not enabled.
@@ -703,10 +723,13 @@ impl InferenceEngine {
     /// These embeddings preserve some semantic similarity (same words produce similar hashes)
     /// but are not suitable for production semantic search.
     fn embed_local_placeholder(&self, texts: &[String]) -> Result<Vec<Vec<f32>>> {
-        tracing::debug!("Using placeholder embeddings - enable 'embeddings' feature for real ONNX inference");
-        Ok(texts.iter().map(|text| {
-            Self::deterministic_embedding(text, self.dimension)
-        }).collect())
+        tracing::debug!(
+            "Using placeholder embeddings - enable 'embeddings' feature for real ONNX inference"
+        );
+        Ok(texts
+            .iter()
+            .map(|text| Self::deterministic_embedding(text, self.dimension))
+            .collect())
     }
 
     /// Create a deterministic embedding from text (for testing/fallback)
@@ -741,13 +764,20 @@ impl InferenceEngine {
 
     /// Clear the embedding cache
     pub fn clear_cache(&self) {
-        let Ok(mut cache) = self.cache.write() else { return; };
+        let Ok(mut cache) = self.cache.write() else {
+            return;
+        };
         cache.clear();
     }
 
     /// Get cache statistics
     pub fn cache_stats(&self) -> CacheStats {
-        let Ok(cache) = self.cache.read() else { return CacheStats { size: 0, max_size: 0 }; };
+        let Ok(cache) = self.cache.read() else {
+            return CacheStats {
+                size: 0,
+                max_size: 0,
+            };
+        };
         cache.stats()
     }
 }

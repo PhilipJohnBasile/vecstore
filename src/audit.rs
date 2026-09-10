@@ -63,8 +63,7 @@ pub enum AuditOutcome {
 }
 
 /// Audit entry metadata
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AuditMetadata {
     /// User identifier
     pub user_id: Option<String>,
@@ -82,7 +81,6 @@ pub struct AuditMetadata {
     #[serde(flatten)]
     pub custom: std::collections::HashMap<String, serde_json::Value>,
 }
-
 
 /// Audit log entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -226,13 +224,16 @@ impl MemoryBackend {
     }
 
     pub fn get_entries(&self) -> Result<Vec<AuditEntry>, VecStoreError> {
-        let entries = self.entries.lock()
+        let entries = self
+            .entries
+            .lock()
             .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?;
         Ok(entries.iter().cloned().collect())
     }
 
     pub fn clear(&self) -> Result<(), VecStoreError> {
-        self.entries.lock()
+        self.entries
+            .lock()
             .map_err(|_| VecStoreError::LockError("entries lock poisoned".into()))?
             .clear();
         Ok(())
@@ -241,7 +242,9 @@ impl MemoryBackend {
 
 impl AuditBackend for MemoryBackend {
     fn write(&mut self, entry: &AuditEntry) -> Result<(), String> {
-        let mut entries = self.entries.lock()
+        let mut entries = self
+            .entries
+            .lock()
             .map_err(|_| "entries lock poisoned".to_string())?;
         if entries.len() >= self.max_size {
             entries.pop_front();
@@ -288,7 +291,9 @@ impl AuditBackend for FileBackend {
         let json = serde_json::to_string(entry)
             .map_err(|e| format!("Failed to serialize audit entry: {}", e))?;
 
-        let mut buffer = self.buffer.lock()
+        let mut buffer = self
+            .buffer
+            .lock()
             .map_err(|_| "buffer lock poisoned".to_string())?;
         buffer.push(json);
 
@@ -301,13 +306,17 @@ impl AuditBackend for FileBackend {
     }
 
     fn flush(&mut self) -> Result<(), String> {
-        let mut buffer = self.buffer.lock()
+        let mut buffer = self
+            .buffer
+            .lock()
             .map_err(|_| "buffer lock poisoned".to_string())?;
         if buffer.is_empty() {
             return Ok(());
         }
 
-        let mut file = self.file.lock()
+        let mut file = self
+            .file
+            .lock()
             .map_err(|_| "file lock poisoned".to_string())?;
 
         for line in buffer.iter() {
@@ -396,7 +405,8 @@ impl AuditLogger {
 
     /// Add a backend
     pub fn add_backend(&self, backend: Box<dyn AuditBackend>) -> Result<(), VecStoreError> {
-        self.backends.lock()
+        self.backends
+            .lock()
             .map_err(|_| VecStoreError::LockError("backends lock poisoned".into()))?
             .push(backend);
         Ok(())
@@ -421,7 +431,9 @@ impl AuditLogger {
         }
 
         // Write to all backends
-        let mut backends = self.backends.lock()
+        let mut backends = self
+            .backends
+            .lock()
             .map_err(|_| "backends lock poisoned".to_string())?;
         for backend in backends.iter_mut() {
             backend.write(&entry)?;
@@ -432,7 +444,9 @@ impl AuditLogger {
 
     /// Flush all backends
     pub fn flush(&self) -> Result<(), String> {
-        let mut backends = self.backends.lock()
+        let mut backends = self
+            .backends
+            .lock()
             .map_err(|_| "backends lock poisoned".to_string())?;
         for backend in backends.iter_mut() {
             backend.flush()?;

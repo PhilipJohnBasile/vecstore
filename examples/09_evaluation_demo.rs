@@ -9,8 +9,8 @@
 use anyhow::Result;
 use std::collections::HashMap;
 use vecstore::{
-    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
     Metadata, Query, VecStore,
+    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
 };
 
 fn main() -> Result<()> {
@@ -50,7 +50,10 @@ fn main() -> Result<()> {
             "What is VecStore?",
             "VecStore is a high-performance vector database built in Rust.",
         ),
-        ("How fast is VecStore?", "Rust avoids the Python interpreter in tight loops."),
+        (
+            "How fast is VecStore?",
+            "Rust avoids the Python interpreter in tight loops.",
+        ),
     ];
 
     let mut total_score = 0.0;

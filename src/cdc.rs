@@ -275,45 +275,51 @@ impl ChangeFilter {
                     if !ns.contains(event_ns) {
                         return false;
                     }
-                }
+                },
                 None => return false,
             }
         }
 
         // Check change type
         if let Some(ref cts) = self.change_types
-            && !cts.contains(&event.change_type) {
-                return false;
-            }
+            && !cts.contains(&event.change_type)
+        {
+            return false;
+        }
 
         // Check ID prefix
         if let Some(ref prefix) = self.id_prefix
-            && !event.vector_id.starts_with(prefix) {
-                return false;
-            }
+            && !event.vector_id.starts_with(prefix)
+        {
+            return false;
+        }
 
         // Check ID pattern (simple glob)
         if let Some(ref pattern) = self.id_pattern
-            && !glob_match(pattern, &event.vector_id) {
-                return false;
-            }
+            && !glob_match(pattern, &event.vector_id)
+        {
+            return false;
+        }
 
         // Check source
         if let Some(ref sources) = self.sources
-            && !sources.contains(&event.source) {
-                return false;
-            }
+            && !sources.contains(&event.source)
+        {
+            return false;
+        }
 
         // Check sequence range
         if let Some(from) = self.from_sequence
-            && event.sequence < from {
-                return false;
-            }
+            && event.sequence < from
+        {
+            return false;
+        }
 
         if let Some(to) = self.to_sequence
-            && event.sequence > to {
-                return false;
-            }
+            && event.sequence > to
+        {
+            return false;
+        }
 
         true
     }
@@ -333,7 +339,7 @@ fn glob_match_impl(pattern: &[char], text: &[char]) -> bool {
             // Try matching zero or more characters
             glob_match_impl(&pattern[1..], text)
                 || (!text.is_empty() && glob_match_impl(pattern, &text[1..]))
-        }
+        },
         (Some('?'), Some(_)) => glob_match_impl(&pattern[1..], &text[1..]),
         (Some(p), Some(t)) if p == t => glob_match_impl(&pattern[1..], &text[1..]),
         _ => false,
@@ -380,7 +386,7 @@ impl ChangeStream {
                     } else {
                         self.stats.filtered_out.fetch_add(1, Ordering::Relaxed);
                     }
-                }
+                },
                 Err(_) => return None,
             }
         }
@@ -406,7 +412,7 @@ impl ChangeStream {
                     } else {
                         self.stats.filtered_out.fetch_add(1, Ordering::Relaxed);
                     }
-                }
+                },
                 Err(mpsc::RecvTimeoutError::Timeout) => return None,
                 Err(mpsc::RecvTimeoutError::Disconnected) => return None,
             }
@@ -427,7 +433,7 @@ impl ChangeStream {
                     } else {
                         self.stats.filtered_out.fetch_add(1, Ordering::Relaxed);
                     }
-                }
+                },
                 Err(TryRecvError::Empty) => return None,
                 Err(TryRecvError::Disconnected) => return None,
             }
@@ -556,11 +562,11 @@ impl EventBroadcaster {
                 Ok(_) => {
                     self.inner.stats.published.fetch_add(1, Ordering::Relaxed);
                     true
-                }
+                },
                 Err(_) => {
                     // Subscriber dropped (disconnected)
                     false
-                }
+                },
             }
         });
 
@@ -653,7 +659,7 @@ impl AsyncChangeStream {
                     } else {
                         self.stats.filtered_out.fetch_add(1, Ordering::Relaxed);
                     }
-                }
+                },
                 None => return None,
             }
         }
@@ -753,7 +759,7 @@ impl AsyncEventBroadcaster {
             Ok(_) => {
                 self.inner.stats.published.fetch_add(1, Ordering::Relaxed);
                 true
-            }
+            },
             Err(_) => false,
         });
 
@@ -825,12 +831,16 @@ mod tests {
         assert!(!ChangeFilter::new().namespace("users").matches(&event));
 
         // Match by change type
-        assert!(ChangeFilter::new()
-            .change_type(ChangeType::Insert)
-            .matches(&event));
-        assert!(!ChangeFilter::new()
-            .change_type(ChangeType::Delete)
-            .matches(&event));
+        assert!(
+            ChangeFilter::new()
+                .change_type(ChangeType::Insert)
+                .matches(&event)
+        );
+        assert!(
+            !ChangeFilter::new()
+                .change_type(ChangeType::Delete)
+                .matches(&event)
+        );
 
         // Match by ID prefix
         assert!(ChangeFilter::new().id_prefix("products:").matches(&event));
@@ -891,8 +901,9 @@ mod tests {
         broadcaster.publish(
             VectorChangeEvent::insert("p1", vec![0.1]).with_namespace("products".to_string()),
         );
-        broadcaster
-            .publish(VectorChangeEvent::insert("u1", vec![0.2]).with_namespace("users".to_string()));
+        broadcaster.publish(
+            VectorChangeEvent::insert("u1", vec![0.2]).with_namespace("users".to_string()),
+        );
         broadcaster.publish(
             VectorChangeEvent::insert("p2", vec![0.3]).with_namespace("products".to_string()),
         );

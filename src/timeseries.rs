@@ -44,7 +44,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use chrono::{DateTime, Datelike, Timelike, Utc};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -86,17 +86,17 @@ impl DecayFunction {
             DecayFunction::Exponential { half_life } => {
                 let lambda = std::f64::consts::LN_2 / half_life;
                 score * (-lambda * age_seconds).exp() as f32
-            }
+            },
 
             DecayFunction::Linear { max_age } => {
                 let decay = (1.0 - age_seconds / max_age).max(0.0);
                 score * decay as f32
-            }
+            },
 
             DecayFunction::Gaussian { sigma } => {
                 let exponent = -(age_seconds.powi(2)) / (2.0 * sigma.powi(2));
                 score * exponent.exp() as f32
-            }
+            },
         }
     }
 }
@@ -222,10 +222,7 @@ impl TimeSeriesIndex {
             timestamp,
         };
 
-        self.entries
-            .entry(timestamp)
-            .or_default()
-            .push(entry);
+        self.entries.entry(timestamp).or_default().push(entry);
 
         self.num_vectors += 1;
 
@@ -361,10 +358,7 @@ impl TimeSeriesIndex {
                     TemporalGroup::MonthOfYear => dt.month() as i64,
                 };
 
-                groups
-                    .entry(group_key)
-                    .or_default()
-                    .push(entry.id.clone());
+                groups.entry(group_key).or_default().push(entry.id.clone());
             }
         }
 

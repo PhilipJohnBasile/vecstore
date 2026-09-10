@@ -12,8 +12,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::time::Instant;
 use vecstore::{
-    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
     Metadata, Query, VecDatabase,
+    text_splitter::{RecursiveCharacterTextSplitter, TextSplitter},
 };
 
 fn main() -> Result<()> {

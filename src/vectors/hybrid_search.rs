@@ -266,7 +266,7 @@ pub fn hybrid_search_score(
     match config.fusion_strategy {
         FusionStrategy::WeightedSum => {
             config.alpha * dense_score + (1.0 - config.alpha) * sparse_score
-        }
+        },
 
         FusionStrategy::ReciprocalRankFusion => {
             // Note: This is a simplified RRF for score-based fusion
@@ -275,19 +275,19 @@ pub fn hybrid_search_score(
             let dense_rank_score = 1.0 / (config.rrf_k + (1.0 - dense_score));
             let sparse_rank_score = 1.0 / (config.rrf_k + (1.0 - sparse_score));
             dense_rank_score + sparse_rank_score
-        }
+        },
 
         FusionStrategy::DistributionBased => {
             // DBSF: For single-score fusion, just average
             // Full DBSF normalization happens in normalize_scores_dbsf()
             config.alpha * dense_score + (1.0 - config.alpha) * sparse_score
-        }
+        },
 
         FusionStrategy::RelativeScore => {
             // RelativeScore: For single-score fusion, same as WeightedSum
             // Full min-max normalization happens in normalize_scores()
             config.alpha * dense_score + (1.0 - config.alpha) * sparse_score
-        }
+        },
 
         FusionStrategy::Max => dense_score.max(sparse_score),
 
@@ -299,7 +299,7 @@ pub fn hybrid_search_score(
             } else {
                 2.0 * dense_score * sparse_score / (dense_score + sparse_score)
             }
-        }
+        },
 
         FusionStrategy::GeometricMean => {
             if dense_score < 0.0 || sparse_score < 0.0 {
@@ -307,7 +307,7 @@ pub fn hybrid_search_score(
             } else {
                 (dense_score * sparse_score).sqrt()
             }
-        }
+        },
     }
 }
 
@@ -382,7 +382,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::ReciprocalRankFusion => {
             let dense_rank_score = 1.0 / (config.rrf_k + (1.0 - dense_score));
@@ -409,7 +409,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::DistributionBased | FusionStrategy::RelativeScore => {
             let dense_weight = config.alpha;
@@ -447,7 +447,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::Max => {
             let calc = format!(
@@ -476,7 +476,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::Min => {
             let calc = format!(
@@ -505,7 +505,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::HarmonicMean => {
             let calc = if dense_score + sparse_score == 0.0 {
@@ -527,7 +527,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
 
         FusionStrategy::GeometricMean => {
             let calc = if dense_score < 0.0 || sparse_score < 0.0 {
@@ -546,7 +546,7 @@ pub fn explain_hybrid_score(
             };
 
             (calc, contributions)
-        }
+        },
     };
 
     ScoreExplanation {
@@ -1486,10 +1486,12 @@ mod tests {
         assert!(explanation.calculation.contains("Max"));
         assert_eq!(explanation.contributions.dense_contribution, 1.0);
         assert_eq!(explanation.contributions.sparse_contribution, 0.0);
-        assert!(explanation
-            .contributions
-            .explanation
-            .contains("Dense score was higher"));
+        assert!(
+            explanation
+                .contributions
+                .explanation
+                .contains("Dense score was higher")
+        );
     }
 
     #[test]
@@ -1505,10 +1507,12 @@ mod tests {
         assert!(explanation.calculation.contains("Min"));
         assert_eq!(explanation.contributions.dense_contribution, 0.0);
         assert_eq!(explanation.contributions.sparse_contribution, 1.0);
-        assert!(explanation
-            .contributions
-            .explanation
-            .contains("Sparse score was lower"));
+        assert!(
+            explanation
+                .contributions
+                .explanation
+                .contains("Sparse score was lower")
+        );
     }
 
     #[test]
@@ -1589,10 +1593,12 @@ mod tests {
         assert_eq!(explanation.final_score, 0.0);
         assert_eq!(explanation.dense_score, 0.0);
         assert_eq!(explanation.sparse_score, 0.0);
-        assert!(explanation
-            .contributions
-            .explanation
-            .contains("Both scores are zero"));
+        assert!(
+            explanation
+                .contributions
+                .explanation
+                .contains("Both scores are zero")
+        );
     }
 
     #[test]

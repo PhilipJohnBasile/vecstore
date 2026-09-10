@@ -31,10 +31,10 @@
 //! let private_query = engine.privatize_query(&query_vector)?;
 //! ```
 
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
 use rand_distr::{Distribution, Normal};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
 
 use crate::error::VecStoreError;
 
@@ -63,8 +63,7 @@ impl Distribution<f64> for Laplace {
 }
 
 /// Differential privacy mechanism
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Default)]
 pub enum DPMechanism {
     /// Laplace mechanism (pure DP)
     Laplace,
@@ -76,7 +75,6 @@ pub enum DPMechanism {
     /// Randomized response for binary data
     RandomizedResponse,
 }
-
 
 /// Privacy configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -185,8 +183,14 @@ impl PrivacyBudget {
     }
 
     /// Spend budget for a specific entity
-    pub fn spend_entity(&mut self, entity_id: &str, epsilon: f64, delta: f64) -> Result<(), VecStoreError> {
-        let entry = self.entity_budgets
+    pub fn spend_entity(
+        &mut self,
+        entity_id: &str,
+        epsilon: f64,
+        delta: f64,
+    ) -> Result<(), VecStoreError> {
+        let entry = self
+            .entity_budgets
             .entry(entity_id.to_string())
             .or_insert_with(|| EntityBudget {
                 epsilon_spent: 0.0,
@@ -252,9 +256,10 @@ impl PrivacyEngine {
     pub fn privatize(&self, vector: &[f32]) -> Result<Vec<f32>, VecStoreError> {
         // Track budget if enabled
         if self.config.track_budget {
-            let mut budget = self.budget.write().map_err(|_| {
-                VecStoreError::Internal("Failed to acquire budget lock".into())
-            })?;
+            let mut budget = self
+                .budget
+                .write()
+                .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
             budget.spend(self.config.epsilon, self.config.delta)?;
         }
 
@@ -272,9 +277,9 @@ impl PrivacyEngine {
             DPMechanism::DiscreteLaplace => self.add_discrete_laplace_noise(&clipped)?,
             DPMechanism::RandomizedResponse => {
                 return Err(VecStoreError::InvalidInput(
-                    "RandomizedResponse not applicable to continuous vectors".into()
+                    "RandomizedResponse not applicable to continuous vectors".into(),
                 ));
-            }
+            },
         };
 
         Ok(noisy)
@@ -286,9 +291,10 @@ impl PrivacyEngine {
         let query_epsilon = self.config.epsilon * 0.1; // Use 10% of vector budget
 
         if self.config.track_budget {
-            let mut budget = self.budget.write().map_err(|_| {
-                VecStoreError::Internal("Failed to acquire budget lock".into())
-            })?;
+            let mut budget = self
+                .budget
+                .write()
+                .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
             budget.spend(query_epsilon, self.config.delta * 0.1)?;
         }
 
@@ -311,9 +317,10 @@ impl PrivacyEngine {
         let batch_epsilon = self.config.epsilon * n.sqrt(); // Sublinear in batch size
 
         if self.config.track_budget {
-            let mut budget = self.budget.write().map_err(|_| {
-                VecStoreError::Internal("Failed to acquire budget lock".into())
-            })?;
+            let mut budget = self
+                .budget
+                .write()
+                .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
             budget.spend(batch_epsilon, self.config.delta * n)?;
         }
 
@@ -374,7 +381,8 @@ impl PrivacyEngine {
 
         // Round to reduce precision (increases k-anonymity)
         let precision = 1.0 / k_anonymity as f32;
-        let anonymized: Vec<f32> = noisy.iter()
+        let anonymized: Vec<f32> = noisy
+            .iter()
             .map(|&v| (v / precision).round() * precision)
             .collect();
 
@@ -388,11 +396,11 @@ impl PrivacyEngine {
                 // Gaussian mechanism: sigma = sensitivity * sqrt(2 * ln(1.25/delta)) / epsilon
                 let c = (2.0 * (1.25 / self.config.delta).ln()).sqrt();
                 self.config.sensitivity * c / self.config.epsilon
-            }
+            },
             DPMechanism::Laplace => {
                 // Laplace mechanism: scale = sensitivity / epsilon
                 self.config.sensitivity / self.config.epsilon
-            }
+            },
             _ => self.config.sensitivity / self.config.epsilon,
         }
     }
@@ -410,7 +418,8 @@ impl PrivacyEngine {
         };
 
         // Signal magnitude
-        let signal_mag: f64 = sample_vector.iter()
+        let signal_mag: f64 = sample_vector
+            .iter()
             .map(|&v| (v as f64) * (v as f64))
             .sum::<f64>()
             .sqrt();
@@ -437,27 +446,30 @@ impl PrivacyEngine {
 
     /// Get remaining privacy budget
     pub fn remaining_budget(&self) -> Result<(f64, f64), VecStoreError> {
-        let budget = self.budget.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire budget lock".into())
-        })?;
+        let budget = self
+            .budget
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
 
         Ok(budget.remaining())
     }
 
     /// Check if privacy budget is exhausted
     pub fn is_budget_exhausted(&self) -> Result<bool, VecStoreError> {
-        let budget = self.budget.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire budget lock".into())
-        })?;
+        let budget = self
+            .budget
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
 
         Ok(budget.is_exhausted())
     }
 
     /// Reset privacy budget
     pub fn reset_budget(&self) -> Result<(), VecStoreError> {
-        let mut budget = self.budget.write().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire budget lock".into())
-        })?;
+        let mut budget = self
+            .budget
+            .write()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
 
         *budget = PrivacyBudget::new(self.config.max_budget, self.config.delta * 100.0);
         Ok(())
@@ -465,9 +477,10 @@ impl PrivacyEngine {
 
     /// Get privacy budget snapshot
     pub fn get_budget_snapshot(&self) -> Result<PrivacyBudget, VecStoreError> {
-        let budget = self.budget.read().map_err(|_| {
-            VecStoreError::Internal("Failed to acquire budget lock".into())
-        })?;
+        let budget = self
+            .budget
+            .read()
+            .map_err(|_| VecStoreError::Internal("Failed to acquire budget lock".into()))?;
 
         Ok(budget.clone())
     }
@@ -479,13 +492,17 @@ impl PrivacyEngine {
         self.add_gaussian_noise_with_scale(vector, scale)
     }
 
-    fn add_gaussian_noise_with_scale(&self, vector: &[f32], scale: f64) -> Result<Vec<f32>, VecStoreError> {
-        let normal = Normal::new(0.0, scale).map_err(|e| {
-            VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
-        })?;
+    fn add_gaussian_noise_with_scale(
+        &self,
+        vector: &[f32],
+        scale: f64,
+    ) -> Result<Vec<f32>, VecStoreError> {
+        let normal = Normal::new(0.0, scale)
+            .map_err(|e| VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e)))?;
 
         let mut rng = rand::rng();
-        let noisy: Vec<f32> = vector.iter()
+        let noisy: Vec<f32> = vector
+            .iter()
             .map(|&v| v + normal.sample(&mut rng) as f32)
             .collect();
 
@@ -494,12 +511,12 @@ impl PrivacyEngine {
 
     fn add_laplace_noise(&self, vector: &[f32]) -> Result<Vec<f32>, VecStoreError> {
         let scale = self.config.sensitivity / self.config.epsilon;
-        let laplace = Laplace::new(0.0, scale).map_err(|e| {
-            VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
-        })?;
+        let laplace = Laplace::new(0.0, scale)
+            .map_err(|e| VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e)))?;
 
         let mut rng = rand::rng();
-        let noisy: Vec<f32> = vector.iter()
+        let noisy: Vec<f32> = vector
+            .iter()
             .map(|&v| v + laplace.sample(&mut rng) as f32)
             .collect();
 
@@ -509,12 +526,12 @@ impl PrivacyEngine {
     fn add_discrete_laplace_noise(&self, vector: &[f32]) -> Result<Vec<f32>, VecStoreError> {
         // Discretized Laplace for integer-like values
         let scale = self.config.sensitivity / self.config.epsilon;
-        let laplace = Laplace::new(0.0, scale).map_err(|e| {
-            VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e))
-        })?;
+        let laplace = Laplace::new(0.0, scale)
+            .map_err(|e| VecStoreError::InvalidInput(format!("Invalid noise scale: {}", e)))?;
 
         let mut rng = rand::rng();
-        let noisy: Vec<f32> = vector.iter()
+        let noisy: Vec<f32> = vector
+            .iter()
             .map(|&v| {
                 let noise = laplace.sample(&mut rng).round() as f32;
                 v + noise
@@ -527,7 +544,8 @@ impl PrivacyEngine {
 
 /// Clip vector to have at most the given L2 norm
 fn clip_vector(vector: &[f32], max_norm: f64) -> Vec<f32> {
-    let current_norm: f64 = vector.iter()
+    let current_norm: f64 = vector
+        .iter()
         .map(|&v| (v as f64) * (v as f64))
         .sum::<f64>()
         .sqrt();
@@ -672,7 +690,8 @@ mod tests {
         assert_eq!(private.len(), original.len());
 
         // Should be different (with high probability)
-        let diff: f32 = original.iter()
+        let diff: f32 = original
+            .iter()
             .zip(private.iter())
             .map(|(a, b)| (a - b).abs())
             .sum();
@@ -685,7 +704,8 @@ mod tests {
         let clipped = clip_vector(&large_vec, 1.0);
 
         // Should have norm <= 1
-        let norm: f64 = clipped.iter()
+        let norm: f64 = clipped
+            .iter()
             .map(|&v| (v as f64) * (v as f64))
             .sum::<f64>()
             .sqrt();
@@ -828,7 +848,8 @@ mod tests {
         // Should be perturbed
         assert_eq!(private_query.len(), 3);
 
-        let diff: f32 = query.iter()
+        let diff: f32 = query
+            .iter()
             .zip(private_query.iter())
             .map(|(a, b)| (a - b).abs())
             .sum();
@@ -840,11 +861,7 @@ mod tests {
         let config = PrivacyConfig::default();
         let engine = PrivacyEngine::new(config);
 
-        let vectors = vec![
-            vec![1.0, 0.0],
-            vec![0.0, 1.0],
-            vec![0.5, 0.5],
-        ];
+        let vectors = vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![0.5, 0.5]];
 
         let private = engine.privatize_batch(&vectors).unwrap();
 

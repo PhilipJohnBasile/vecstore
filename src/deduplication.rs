@@ -234,10 +234,10 @@ impl Deduplicator {
                 DeduplicationStrategy::KeepLast => group.duplicates.last().unwrap(),
                 DeduplicationStrategy::KeepMostMetadata => {
                     self.select_most_metadata(&group.duplicates, store)?
-                }
+                },
                 DeduplicationStrategy::KeepHighestQuality => {
                     self.select_highest_quality(&group.duplicates, store)?
-                }
+                },
             };
 
             // Remove all except the one to keep

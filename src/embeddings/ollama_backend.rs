@@ -10,7 +10,7 @@
 //! - Any Ollama embedding model
 
 use super::TextEmbedder;
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 

@@ -21,14 +21,14 @@ pub fn pb_value_to_json(value: &pb::Value) -> Result<serde_json::Value> {
         Some(Kind::ArrayValue(arr)) => {
             let values: Result<Vec<_>> = arr.values.iter().map(pb_value_to_json).collect();
             Ok(serde_json::Value::Array(values?))
-        }
+        },
         Some(Kind::ObjectValue(obj)) => {
             let mut map = serde_json::Map::new();
             for (k, v) in &obj.fields {
                 map.insert(k.clone(), pb_value_to_json(v)?);
             }
             Ok(serde_json::Value::Object(map))
-        }
+        },
         Some(Kind::NullValue(_)) => Ok(serde_json::Value::Null),
         None => Ok(serde_json::Value::Null),
     }
@@ -45,14 +45,14 @@ pub fn json_to_pb_value(value: &serde_json::Value) -> pb::Value {
         serde_json::Value::Array(arr) => {
             let values = arr.iter().map(json_to_pb_value).collect();
             Some(Kind::ArrayValue(pb::ArrayValue { values }))
-        }
+        },
         serde_json::Value::Object(obj) => {
             let fields = obj
                 .iter()
                 .map(|(k, v)| (k.clone(), json_to_pb_value(v)))
                 .collect();
             Some(Kind::ObjectValue(pb::ObjectValue { fields }))
-        }
+        },
         serde_json::Value::Null => Some(Kind::NullValue(pb::NullValue::NullValue as i32)),
     };
 

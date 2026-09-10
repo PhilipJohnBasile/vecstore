@@ -101,7 +101,7 @@ impl AlertCondition {
             AlertCondition::NotEqual => (value - threshold).abs() >= 1e-6,
             AlertCondition::PercentageChange => {
                 (value / threshold - 1.0).abs() > 0.1 // 10% change
-            }
+            },
         }
     }
 }
@@ -312,9 +312,10 @@ impl Monitor {
             // Check cooldown period
             if let Some(last_time) = self.last_alert_time.get(&rule.name)
                 && let Ok(elapsed) = SystemTime::now().duration_since(*last_time)
-                    && elapsed < self.config.alert_cooldown {
-                        continue;
-                    }
+                && elapsed < self.config.alert_cooldown
+            {
+                continue;
+            }
 
             // Evaluate condition
             if rule.condition.evaluate(value, rule.threshold) {

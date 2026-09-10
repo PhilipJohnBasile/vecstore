@@ -42,7 +42,7 @@
 //! ```
 
 use anyhow::Result;
-use tracing_subscriber::{fmt, EnvFilter};
+use tracing_subscriber::{EnvFilter, fmt};
 
 /// Initialize basic tracing with console output
 ///

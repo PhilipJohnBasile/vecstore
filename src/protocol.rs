@@ -42,7 +42,7 @@
 //! # }
 //! ```
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -214,7 +214,7 @@ impl ProtocolAdapter {
             Protocol::Milvus => self.parse_milvus(json),
             Protocol::Universal => {
                 serde_json::from_str(json).map_err(|e| anyhow!("Invalid JSON: {}", e))
-            }
+            },
         }
     }
 
@@ -482,7 +482,7 @@ impl ProtocolAdapter {
                 Ok(UniversalResponse::Upsert {
                     upserted_count: count,
                 })
-            }
+            },
 
             UniversalRequest::Query {
                 vector,
@@ -521,7 +521,7 @@ impl ProtocolAdapter {
                     .collect();
 
                 Ok(UniversalResponse::Query { matches })
-            }
+            },
 
             UniversalRequest::Delete { ids } => {
                 let mut count = 0;
@@ -533,7 +533,7 @@ impl ProtocolAdapter {
                 Ok(UniversalResponse::Delete {
                     deleted_count: count,
                 })
-            }
+            },
 
             UniversalRequest::Fetch { ids } => {
                 let mut vectors = HashMap::new();
@@ -552,7 +552,7 @@ impl ProtocolAdapter {
                 }
 
                 Ok(UniversalResponse::Fetch { vectors })
-            }
+            },
         }
     }
 
@@ -564,7 +564,7 @@ impl ProtocolAdapter {
             // Universal and other protocols fall back to the native JSON format
             Protocol::Universal | Protocol::Weaviate | Protocol::ChromaDB | Protocol::Milvus => {
                 serde_json::to_string(&response).map_err(|e| anyhow!("Serialization error: {}", e))
-            }
+            },
         }
     }
 
@@ -575,18 +575,18 @@ impl ProtocolAdapter {
                 serde_json::json!({
                     "upsertedCount": upserted_count
                 })
-            }
+            },
             UniversalResponse::Query { matches } => {
                 serde_json::json!({
                     "matches": matches,
                     "namespace": ""
                 })
-            }
+            },
             UniversalResponse::Delete { deleted_count } => {
                 serde_json::json!({
                     "deletedCount": deleted_count
                 })
-            }
+            },
             _ => serde_json::json!(response),
         };
 
@@ -605,7 +605,7 @@ impl ProtocolAdapter {
                     "status": "ok",
                     "time": 0.0
                 })
-            }
+            },
             UniversalResponse::Query { matches } => {
                 let results: Vec<Value> = matches
                     .into_iter()
@@ -623,7 +623,7 @@ impl ProtocolAdapter {
                     "status": "ok",
                     "time": 0.0
                 })
-            }
+            },
             _ => serde_json::json!(response),
         };
 
@@ -688,7 +688,7 @@ impl ProtocolAdapter {
                             conditions.push(FilterExpr::And(sub_filters));
                         }
                     }
-                }
+                },
                 "$or" => {
                     if let Some(arr) = value.as_array() {
                         let sub_filters: Vec<FilterExpr> = arr
@@ -707,7 +707,7 @@ impl ProtocolAdapter {
                             conditions.push(FilterExpr::Or(sub_filters));
                         }
                     }
-                }
+                },
                 field => {
                     // Check if value is an operator object
                     if let Some(obj) = value.as_object() {
@@ -740,7 +740,7 @@ impl ProtocolAdapter {
                             value: value.clone(),
                         });
                     }
-                }
+                },
             }
         }
 

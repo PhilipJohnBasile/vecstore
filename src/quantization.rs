@@ -17,7 +17,7 @@
 //! | SQ4 | 8x | 95-97% | 3-4x |
 //! | BQ | 32x | 85-95% | 4-8x |
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -689,7 +689,8 @@ impl ScalarQuantizer2 {
         let decoded_a = self.decode(a).unwrap();
         let decoded_b = self.decode(b).unwrap();
 
-        decoded_a.iter()
+        decoded_a
+            .iter()
             .zip(&decoded_b)
             .map(|(x, y)| (x - y).powi(2))
             .sum::<f32>()
@@ -740,9 +741,7 @@ impl TernaryQuantizer {
             let threshold = abs_values[threshold_idx];
 
             // Compute scale as mean of non-zero absolute values
-            let non_zero: Vec<f32> = abs_values.into_iter()
-                .filter(|&v| v > threshold)
-                .collect();
+            let non_zero: Vec<f32> = abs_values.into_iter().filter(|&v| v > threshold).collect();
             let scale = if non_zero.is_empty() {
                 1.0
             } else {
@@ -825,8 +824,16 @@ impl TernaryQuantizer {
             let tb = (encoded_b[byte_idx] >> bit_offset) & 0b11;
 
             // Convert to signed: 00->0, 01->+1, 10->-1
-            let va = match ta { 0b01 => 1, 0b10 => -1, _ => 0 };
-            let vb = match tb { 0b01 => 1, 0b10 => -1, _ => 0 };
+            let va = match ta {
+                0b01 => 1,
+                0b10 => -1,
+                _ => 0,
+            };
+            let vb = match tb {
+                0b01 => 1,
+                0b10 => -1,
+                _ => 0,
+            };
 
             sum += (va * vb) as f32 * self.scales[i] * self.scales[i];
         }
@@ -836,8 +843,7 @@ impl TernaryQuantizer {
 
     /// Memory footprint
     pub fn memory_usage(&self, num_vectors: usize) -> usize {
-        num_vectors * self.dimension.div_ceil(4)
-            + self.dimension * 8 // threshold + scale per dimension
+        num_vectors * self.dimension.div_ceil(4) + self.dimension * 8 // threshold + scale per dimension
     }
 }
 
@@ -894,7 +900,8 @@ impl<Q: Quantizer> AsymmetricQuantizer<Q> {
             for (id, score) in &mut candidates {
                 if let Some(full_vec) = full_vecs.get(id) {
                     // Compute exact distance
-                    *score = query.iter()
+                    *score = query
+                        .iter()
                         .zip(full_vec)
                         .map(|(a, b)| (a - b).powi(2))
                         .sum::<f32>()
@@ -920,7 +927,8 @@ impl Quantizer for ScalarQuantizer8 {
     #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
-        query.iter()
+        query
+            .iter()
             .zip(&decoded)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
@@ -942,7 +950,8 @@ impl Quantizer for ScalarQuantizer4 {
     #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
-        query.iter()
+        query
+            .iter()
             .zip(&decoded)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
@@ -964,7 +973,8 @@ impl Quantizer for ScalarQuantizer2 {
     #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
-        query.iter()
+        query
+            .iter()
             .zip(&decoded)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
@@ -1022,7 +1032,8 @@ impl Quantizer for TernaryQuantizer {
     #[inline]
     fn asymmetric_distance(&self, query: &[f32], encoded: &[u8]) -> f32 {
         let decoded = self.decode(encoded).unwrap();
-        query.iter()
+        query
+            .iter()
             .zip(&decoded)
             .map(|(a, b)| (a - b).powi(2))
             .sum::<f32>()
@@ -1055,7 +1066,11 @@ pub struct QuantizationComparison {
 }
 
 /// Run comparison of all quantization methods
-pub fn compare_quantizers(vectors: &[Vec<f32>], _test_queries: &[Vec<f32>], _k: usize) -> Vec<QuantizationComparison> {
+pub fn compare_quantizers(
+    vectors: &[Vec<f32>],
+    _test_queries: &[Vec<f32>],
+    _k: usize,
+) -> Vec<QuantizationComparison> {
     let mut results = Vec::new();
 
     // SQ8
@@ -1124,10 +1139,11 @@ fn compute_reconstruction_mse(sq8: &ScalarQuantizer8, vectors: &[Vec<f32>]) -> f
     let mut total_mse = 0.0;
     for v in vectors {
         if let Ok(encoded) = sq8.encode(v)
-            && let Ok(decoded) = sq8.decode(&encoded) {
-                let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
-                total_mse += mse / v.len() as f32;
-            }
+            && let Ok(decoded) = sq8.decode(&encoded)
+        {
+            let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
+            total_mse += mse / v.len() as f32;
+        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1136,10 +1152,11 @@ fn compute_reconstruction_mse_sq4(sq4: &ScalarQuantizer4, vectors: &[Vec<f32>]) 
     let mut total_mse = 0.0;
     for v in vectors {
         if let Ok(encoded) = sq4.encode(v)
-            && let Ok(decoded) = sq4.decode(&encoded) {
-                let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
-                total_mse += mse / v.len() as f32;
-            }
+            && let Ok(decoded) = sq4.decode(&encoded)
+        {
+            let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
+            total_mse += mse / v.len() as f32;
+        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1148,10 +1165,11 @@ fn compute_reconstruction_mse_sq2(sq2: &ScalarQuantizer2, vectors: &[Vec<f32>]) 
     let mut total_mse = 0.0;
     for v in vectors {
         if let Ok(encoded) = sq2.encode(v)
-            && let Ok(decoded) = sq2.decode(&encoded) {
-                let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
-                total_mse += mse / v.len() as f32;
-            }
+            && let Ok(decoded) = sq2.decode(&encoded)
+        {
+            let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
+            total_mse += mse / v.len() as f32;
+        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1160,10 +1178,11 @@ fn compute_reconstruction_mse_ternary(ternary: &TernaryQuantizer, vectors: &[Vec
     let mut total_mse = 0.0;
     for v in vectors {
         if let Ok(encoded) = ternary.encode(v)
-            && let Ok(decoded) = ternary.decode(&encoded) {
-                let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
-                total_mse += mse / v.len() as f32;
-            }
+            && let Ok(decoded) = ternary.decode(&encoded)
+        {
+            let mse: f32 = v.iter().zip(&decoded).map(|(a, b)| (a - b).powi(2)).sum();
+            total_mse += mse / v.len() as f32;
+        }
     }
     total_mse / vectors.len() as f32
 }
@@ -1215,7 +1234,9 @@ mod ultra_low_bit_tests {
         for (i, &val) in decoded.iter().enumerate() {
             assert!(
                 val == 0.0 || val.abs() - quantizer.scales[i].abs() < 0.001,
-                "Unexpected value {} at dim {}", val, i
+                "Unexpected value {} at dim {}",
+                val,
+                i
             );
         }
     }
@@ -1263,12 +1284,9 @@ mod ultra_low_bit_tests {
             .collect();
 
         // Search
-        let results = asymmetric.search(
-            &vectors[0],
-            &encoded_db,
-            5,
-            Some(&full_vectors),
-        ).unwrap();
+        let results = asymmetric
+            .search(&vectors[0], &encoded_db, 5, Some(&full_vectors))
+            .unwrap();
 
         assert_eq!(results.len(), 5);
         // First result should be the query itself
@@ -1286,8 +1304,10 @@ mod ultra_low_bit_tests {
 
         // Verify compression ratios increase
         for result in &comparison {
-            println!("{}: {:.1}x compression, {:.3} MSE",
-                     result.method, result.compression_ratio, result.mse);
+            println!(
+                "{}: {:.1}x compression, {:.3} MSE",
+                result.method, result.compression_ratio, result.mse
+            );
         }
     }
 }

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use vecstore::{make_record, Metadata, Query, VecStore};
+use vecstore::{Metadata, Query, VecStore, make_record};
 
 #[test]
 fn test_batch_upsert_basic() {

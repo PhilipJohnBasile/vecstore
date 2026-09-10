@@ -5,7 +5,7 @@
 
 use crate::namespace::{Namespace, NamespaceId, NamespaceQuotas, NamespaceStatus};
 use crate::store::{Metadata, Neighbor, Query, VecStore};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, PoisonError, RwLock};

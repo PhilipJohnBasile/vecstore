@@ -6,12 +6,12 @@
 // This module provides Python-friendly wrappers around the Rust API.
 
 use crate::collection::{Collection, VecDatabase};
-use crate::store::{parse_filter, FilterExpr, HybridQuery, Metadata, Query, VecStore};
+use crate::store::{FilterExpr, HybridQuery, Metadata, Query, VecStore, parse_filter};
 use crate::text_splitter::{RecursiveCharacterTextSplitter, TextSplitter};
+use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use pyo3::IntoPyObjectExt;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -108,21 +108,21 @@ fn metadata_to_pydict(py: Python, metadata: &Metadata) -> PyResult<Py<PyDict>> {
         match value {
             serde_json::Value::String(s) => {
                 dict.set_item(key, s.as_str())?;
-            }
+            },
             serde_json::Value::Number(n) => {
                 if let Some(i) = n.as_i64() {
                     dict.set_item(key, i)?;
                 } else if let Some(f) = n.as_f64() {
                     dict.set_item(key, f)?;
                 }
-            }
+            },
             serde_json::Value::Bool(b) => {
                 dict.set_item(key, b)?;
-            }
+            },
             serde_json::Value::Null => {
                 dict.set_item(key, py.None())?;
-            }
-            _ => {} // Skip complex types
+            },
+            _ => {}, // Skip complex types
         }
     }
     Ok(dict.unbind())
@@ -803,7 +803,10 @@ impl PyLangChainVectorStore {
 
         for (i, (text, embedding)) in texts.into_iter().zip(embeddings).enumerate() {
             let id = if let Some(ref id_list) = ids {
-                id_list.get(i).cloned().unwrap_or_else(|| format!("doc_{}", i))
+                id_list
+                    .get(i)
+                    .cloned()
+                    .unwrap_or_else(|| format!("doc_{}", i))
             } else {
                 format!("doc_{}", i)
             };
@@ -1103,7 +1106,7 @@ fn json_to_pyobject(py: Python, value: &serde_json::Value) -> PyResult<Py<PyAny>
             } else {
                 Ok(py.None())
             }
-        }
+        },
         serde_json::Value::String(s) => s.into_py_any(py),
         serde_json::Value::Array(arr) => {
             let list = PyList::new(
@@ -1113,14 +1116,14 @@ fn json_to_pyobject(py: Python, value: &serde_json::Value) -> PyResult<Py<PyAny>
                     .collect::<PyResult<Vec<_>>>()?,
             )?;
             Ok(list.unbind().into_any())
-        }
+        },
         serde_json::Value::Object(obj) => {
             let dict = PyDict::new(py);
             for (k, v) in obj {
                 dict.set_item(k, json_to_pyobject(py, v)?)?;
             }
             Ok(dict.unbind().into_any())
-        }
+        },
     }
 }
 

@@ -30,7 +30,7 @@
 //! let anomalies = debugger.detect_anomalies(&embeddings)?;
 //! ```
 
-use anyhow::{Result};
+use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 // ============================================================================
@@ -299,7 +299,8 @@ impl EmbeddingDebugger {
                     distribution.norm
                 ),
                 affected_dimensions: None,
-                suggestion: "The embedding may be collapsed. Try different input or model.".to_string(),
+                suggestion: "The embedding may be collapsed. Try different input or model."
+                    .to_string(),
             });
             quality_score -= 0.2;
         } else if distribution.norm > self.config.high_norm_threshold {
@@ -323,7 +324,8 @@ impl EmbeddingDebugger {
                 category: IssueCategory::Collapsed,
                 message: "Embedding appears to be collapsed (near-constant values)".to_string(),
                 affected_dimensions: None,
-                suggestion: "The model may be producing degenerate embeddings. Check model output.".to_string(),
+                suggestion: "The model may be producing degenerate embeddings. Check model output."
+                    .to_string(),
             });
             quality_score -= 0.4;
         }
@@ -347,7 +349,8 @@ impl EmbeddingDebugger {
         let dimension_stats = self.analyze_dimensions(embedding);
 
         // Check for low variance dimensions
-        let low_var_ratio = dimension_stats.zero_variance_dims as f32 / dimension_stats.total as f32;
+        let low_var_ratio =
+            dimension_stats.zero_variance_dims as f32 / dimension_stats.total as f32;
         if low_var_ratio > 0.5 {
             issues.push(QualityIssue {
                 severity: IssueSeverity::Warning,
@@ -357,7 +360,9 @@ impl EmbeddingDebugger {
                     low_var_ratio * 100.0
                 ),
                 affected_dimensions: None,
-                suggestion: "Many dimensions are not being used. Consider dimensionality reduction.".to_string(),
+                suggestion:
+                    "Many dimensions are not being used. Consider dimensionality reduction."
+                        .to_string(),
             });
             quality_score -= 0.1;
         }
@@ -367,7 +372,10 @@ impl EmbeddingDebugger {
             issues.push(QualityIssue {
                 severity: IssueSeverity::Info,
                 category: IssueCategory::Skewed,
-                message: format!("Distribution is highly skewed ({:.2})", distribution.skewness),
+                message: format!(
+                    "Distribution is highly skewed ({:.2})",
+                    distribution.skewness
+                ),
                 affected_dimensions: None,
                 suggestion: "This may be normal for your data type.".to_string(),
             });
@@ -545,7 +553,8 @@ impl EmbeddingDebugger {
             .map(|(i, &v)| (i, (v - mean).abs()))
             .collect();
         variance_indexed.sort_by(|a, b| b.1.total_cmp(&a.1));
-        let high_variance_dims: Vec<(usize, f32)> = variance_indexed.iter().take(10).cloned().collect();
+        let high_variance_dims: Vec<(usize, f32)> =
+            variance_indexed.iter().take(10).cloned().collect();
 
         DimensionStats {
             total,
@@ -571,11 +580,13 @@ impl EmbeddingDebugger {
         let has_high_norm = issues.iter().any(|i| i.category == IssueCategory::HighNorm);
 
         if has_critical {
-            recommendations.push("Critical issues detected. Review your embedding pipeline.".to_string());
+            recommendations
+                .push("Critical issues detected. Review your embedding pipeline.".to_string());
         }
 
         if has_low_norm {
-            recommendations.push("Consider checking if input text is empty or very short.".to_string());
+            recommendations
+                .push("Consider checking if input text is empty or very short.".to_string());
         }
 
         if has_high_norm {
@@ -583,7 +594,8 @@ impl EmbeddingDebugger {
         }
 
         if distribution.sparsity > 0.5 {
-            recommendations.push("High sparsity detected. Consider using sparse vector storage.".to_string());
+            recommendations
+                .push("High sparsity detected. Consider using sparse vector storage.".to_string());
         }
 
         if issues.is_empty() {
@@ -699,9 +711,10 @@ impl EmbeddingDebugger {
 
     /// Check for drift compared to baseline
     pub fn check_drift(&mut self, embeddings: &[Vec<f32>]) -> Result<DriftReport> {
-        let baseline = self.baseline.as_ref().ok_or_else(|| {
-            anyhow::anyhow!("No baseline set. Call set_baseline first.")
-        })?;
+        let baseline = self
+            .baseline
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("No baseline set. Call set_baseline first."))?;
 
         if embeddings.is_empty() {
             return Ok(DriftReport {
@@ -724,8 +737,8 @@ impl EmbeddingDebugger {
         let current_mean_norm = norms.iter().sum::<f32>() / n;
 
         // Norm drift
-        let norm_drift = (current_mean_norm - baseline.mean_norm).abs()
-            / (baseline.std_norm + 1e-10);
+        let norm_drift =
+            (current_mean_norm - baseline.mean_norm).abs() / (baseline.std_norm + 1e-10);
 
         // Per-dimension drift
         let mut current_mean_per_dim = vec![0.0f32; baseline.dimension];
@@ -958,10 +971,12 @@ mod tests {
         let report = debugger.analyze(&embedding).unwrap();
 
         assert!(report.quality_score < 0.7);
-        assert!(report
-            .issues
-            .iter()
-            .any(|i| i.category == IssueCategory::LowEntropy));
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.category == IssueCategory::LowEntropy)
+        );
     }
 
     #[test]
@@ -973,10 +988,12 @@ mod tests {
 
         let report = debugger.analyze(&embedding).unwrap();
 
-        assert!(report
-            .issues
-            .iter()
-            .any(|i| i.category == IssueCategory::InvalidValues));
+        assert!(
+            report
+                .issues
+                .iter()
+                .any(|i| i.category == IssueCategory::InvalidValues)
+        );
         assert!(report.quality_score < 0.6);
     }
 
@@ -985,9 +1002,8 @@ mod tests {
         let debugger = EmbeddingDebugger::new(DebugConfig::default());
 
         // Generate normal embeddings
-        let mut embeddings: Vec<Vec<f32>> = (0..50)
-            .map(|_| generate_random_embedding(128))
-            .collect();
+        let mut embeddings: Vec<Vec<f32>> =
+            (0..50).map(|_| generate_random_embedding(128)).collect();
 
         // Add an anomaly (very low norm)
         embeddings.push(vec![0.001; 128]);
@@ -1005,15 +1021,11 @@ mod tests {
         let mut debugger = EmbeddingDebugger::new(DebugConfig::default());
 
         // Set baseline
-        let baseline: Vec<Vec<f32>> = (0..100)
-            .map(|_| generate_random_embedding(128))
-            .collect();
+        let baseline: Vec<Vec<f32>> = (0..100).map(|_| generate_random_embedding(128)).collect();
         debugger.set_baseline(&baseline).unwrap();
 
         // Check similar embeddings (no drift)
-        let similar: Vec<Vec<f32>> = (0..50)
-            .map(|_| generate_random_embedding(128))
-            .collect();
+        let similar: Vec<Vec<f32>> = (0..50).map(|_| generate_random_embedding(128)).collect();
         let report = debugger.check_drift(&similar).unwrap();
 
         println!("Drift score: {}", report.overall_drift_score);

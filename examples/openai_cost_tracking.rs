@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
             eprintln!("\nPlease set your OpenAI API key:");
             eprintln!("  export OPENAI_API_KEY='your-api-key-here'\n");
             std::process::exit(1);
-        }
+        },
     };
 
     println!("✓ API key found\n");
@@ -378,6 +378,8 @@ fn format_number(n: usize) -> String {
 #[cfg(not(all(feature = "embeddings", feature = "openai-embeddings")))]
 fn main() {
     eprintln!("This example requires the 'embeddings' and 'openai-embeddings' features.");
-    eprintln!("Run with: cargo run --example openai_cost_tracking --features \"embeddings,openai-embeddings\"");
+    eprintln!(
+        "Run with: cargo run --example openai_cost_tracking --features \"embeddings,openai-embeddings\""
+    );
     std::process::exit(1);
 }

@@ -481,10 +481,10 @@ impl BKNode {
                 if distance < *best_dist {
                     *best = Some((self.word.clone(), distance));
                 }
-            }
+            },
             None => {
                 *best = Some((self.word.clone(), distance));
-            }
+            },
         }
 
         // Search children

@@ -27,10 +27,13 @@
 //! let results = cluster.query(&query_vec, 10).await?;
 //! ```
 
-use std::collections::HashMap;
-use std::sync::{RwLock, atomic::{AtomicU64, AtomicUsize, Ordering}};
-use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::sync::{
+    RwLock,
+    atomic::{AtomicU64, AtomicUsize, Ordering},
+};
+use std::time::{Duration, Instant};
 
 use crate::error::Result;
 
@@ -161,7 +164,9 @@ impl Autoscaler {
 
     /// Record current QPS
     pub fn record_qps(&self, qps: f64) {
-        let Ok(mut history) = self.qps_history.write() else { return; };
+        let Ok(mut history) = self.qps_history.write() else {
+            return;
+        };
         let now = Instant::now();
 
         // Keep last 5 minutes of data
@@ -170,11 +175,15 @@ impl Autoscaler {
 
         // Update hourly pattern for predictive scaling
         if self.config.predictive_scaling {
-            let Ok(duration) = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH) else { return; };
+            let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+            else {
+                return;
+            };
             let hour = (duration.as_secs() / 3600 % 24) as usize;
 
-            let Ok(mut patterns) = self.hourly_patterns.write() else { return; };
+            let Ok(mut patterns) = self.hourly_patterns.write() else {
+                return;
+            };
             // Exponential moving average
             patterns[hour] = patterns[hour] * 0.9 + qps * 0.1;
         }
@@ -182,11 +191,14 @@ impl Autoscaler {
 
     /// Get average QPS over last N seconds
     fn avg_qps(&self, seconds: u64) -> f64 {
-        let Ok(history) = self.qps_history.read() else { return 0.0; };
+        let Ok(history) = self.qps_history.read() else {
+            return 0.0;
+        };
         let now = Instant::now();
         let cutoff = Duration::from_secs(seconds);
 
-        let recent: Vec<f64> = history.iter()
+        let recent: Vec<f64> = history
+            .iter()
             .filter(|(t, _)| now.duration_since(*t) < cutoff)
             .map(|(_, q)| *q)
             .collect();
@@ -204,11 +216,15 @@ impl Autoscaler {
             return self.avg_qps(60);
         }
 
-        let Ok(duration) = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH) else { return self.avg_qps(60); };
+        let Ok(duration) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        else {
+            return self.avg_qps(60);
+        };
         let next_hour = ((duration.as_secs() / 3600 + 1) % 24) as usize;
 
-        let Ok(patterns) = self.hourly_patterns.read() else { return self.avg_qps(60); };
+        let Ok(patterns) = self.hourly_patterns.read() else {
+            return self.avg_qps(60);
+        };
         patterns[next_hour]
     }
 
@@ -234,11 +250,14 @@ impl Autoscaler {
             ScalingDecision::ScaleUp(desired - current_replicas)
         } else if desired < current_replicas {
             // Check scale down delay
-            let Ok(last_scale) = self.last_scale_down.read() else { return ScalingDecision::NoChange; };
+            let Ok(last_scale) = self.last_scale_down.read() else {
+                return ScalingDecision::NoChange;
+            };
             if let Some(last) = *last_scale
-                && last.elapsed() < Duration::from_secs(self.config.scale_down_delay_secs) {
-                    return ScalingDecision::NoChange;
-                }
+                && last.elapsed() < Duration::from_secs(self.config.scale_down_delay_secs)
+            {
+                return ScalingDecision::NoChange;
+            }
             ScalingDecision::ScaleDown(current_replicas - desired)
         } else {
             ScalingDecision::NoChange
@@ -247,7 +266,9 @@ impl Autoscaler {
 
     /// Mark scale down event
     pub fn mark_scale_down(&self) {
-        let Ok(mut guard) = self.last_scale_down.write() else { return; };
+        let Ok(mut guard) = self.last_scale_down.write() else {
+            return;
+        };
         *guard = Some(Instant::now());
     }
 }
@@ -296,7 +317,8 @@ impl LoadBalancer {
             return None;
         }
 
-        let ready: Vec<_> = replicas.iter()
+        let ready: Vec<_> = replicas
+            .iter()
             .filter(|r| r.state == ReplicaState::Ready)
             .collect();
 
@@ -308,27 +330,34 @@ impl LoadBalancer {
             LoadBalanceStrategy::RoundRobin => {
                 let idx = self.rr_counter.fetch_add(1, Ordering::SeqCst) as usize % ready.len();
                 Some(ready[idx].id.clone())
-            }
+            },
             LoadBalanceStrategy::LeastConnections => {
-                let Ok(conns) = self.connections.read() else { return None; };
-                ready.iter()
+                let Ok(conns) = self.connections.read() else {
+                    return None;
+                };
+                ready
+                    .iter()
                     .min_by_key(|r| {
-                        conns.get(&r.id)
+                        conns
+                            .get(&r.id)
                             .map(|c| c.load(Ordering::SeqCst))
                             .unwrap_or(0)
                     })
                     .map(|r| r.id.clone())
-            }
+            },
             LoadBalanceStrategy::LatencyAware => {
-                let Ok(lats) = self.latencies.read() else { return None; };
-                ready.iter()
+                let Ok(lats) = self.latencies.read() else {
+                    return None;
+                };
+                ready
+                    .iter()
                     .min_by(|a, b| {
                         let la = lats.get(&a.id).unwrap_or(&f64::MAX);
                         let lb = lats.get(&b.id).unwrap_or(&f64::MAX);
                         la.total_cmp(lb)
                     })
                     .map(|r| r.id.clone())
-            }
+            },
             LoadBalanceStrategy::WeightedRandom => {
                 // Simple random for now
                 use std::collections::hash_map::DefaultHasher;
@@ -338,14 +367,17 @@ impl LoadBalancer {
                 Instant::now().hash(&mut hasher);
                 let idx = hasher.finish() as usize % ready.len();
                 Some(ready[idx].id.clone())
-            }
+            },
         }
     }
 
     /// Record connection start
     pub fn connection_start(&self, replica_id: &str) {
-        let Ok(mut conns) = self.connections.write() else { return; };
-        conns.entry(replica_id.to_string())
+        let Ok(mut conns) = self.connections.write() else {
+            return;
+        };
+        conns
+            .entry(replica_id.to_string())
             .or_insert_with(|| AtomicUsize::new(0))
             .fetch_add(1, Ordering::SeqCst);
     }
@@ -353,14 +385,18 @@ impl LoadBalancer {
     /// Record connection end with latency
     pub fn connection_end(&self, replica_id: &str, latency_ms: f64) {
         {
-            let Ok(conns) = self.connections.read() else { return; };
+            let Ok(conns) = self.connections.read() else {
+                return;
+            };
             if let Some(c) = conns.get(replica_id) {
                 c.fetch_sub(1, Ordering::SeqCst);
             }
         }
 
         // Update latency with exponential moving average
-        let Ok(mut lats) = self.latencies.write() else { return; };
+        let Ok(mut lats) = self.latencies.write() else {
+            return;
+        };
         let entry = lats.entry(replica_id.to_string()).or_insert(latency_ms);
         *entry = *entry * 0.9 + latency_ms * 0.1;
     }
@@ -405,14 +441,17 @@ impl ServerlessCluster {
 
     /// Get current replica count
     pub fn replica_count(&self) -> usize {
-        let Ok(replicas) = self.replicas.read() else { return 0; };
+        let Ok(replicas) = self.replicas.read() else {
+            return 0;
+        };
         replicas.len()
     }
 
     /// Scale to target replicas
     pub fn scale_to(&self, target: usize) -> Result<()> {
-        let mut replicas = self.replicas.write()
-            .map_err(|_| crate::error::VecStoreError::LockError("Failed to acquire replicas write lock".into()))?;
+        let mut replicas = self.replicas.write().map_err(|_| {
+            crate::error::VecStoreError::LockError("Failed to acquire replicas write lock".into())
+        })?;
         let current = replicas.len();
 
         if target > current {
@@ -440,7 +479,9 @@ impl ServerlessCluster {
 
     /// Simulate replica becoming ready
     pub fn mark_replica_ready(&self, replica_id: &str) {
-        let Ok(mut replicas) = self.replicas.write() else { return; };
+        let Ok(mut replicas) = self.replicas.write() else {
+            return;
+        };
         if let Some(r) = replicas.iter_mut().find(|r| r.id == replica_id) {
             r.state = ReplicaState::Ready;
         }
@@ -448,7 +489,9 @@ impl ServerlessCluster {
 
     /// Remove stopped replicas
     pub fn cleanup_stopped(&self) {
-        let Ok(mut replicas) = self.replicas.write() else { return; };
+        let Ok(mut replicas) = self.replicas.write() else {
+            return;
+        };
         replicas.retain(|r| r.state != ReplicaState::Stopped);
     }
 
@@ -458,7 +501,9 @@ impl ServerlessCluster {
 
         // Update cost
         {
-            let Ok(mut cost) = self.total_cost.write() else { return; };
+            let Ok(mut cost) = self.total_cost.write() else {
+                return;
+            };
             *cost += self.config.cost_per_query;
         }
 
@@ -487,13 +532,16 @@ impl ServerlessCluster {
 
     /// Select replica for query
     pub fn select_replica(&self) -> Option<String> {
-        let Ok(replicas) = self.replicas.read() else { return None; };
+        let Ok(replicas) = self.replicas.read() else {
+            return None;
+        };
         self.load_balancer.select(&replicas)
     }
 
     /// Get cluster statistics
     pub fn stats(&self) -> ServerlessStats {
-        let storage_gb = self.storage_bytes.load(Ordering::SeqCst) as f64 / (1024.0 * 1024.0 * 1024.0);
+        let storage_gb =
+            self.storage_bytes.load(Ordering::SeqCst) as f64 / (1024.0 * 1024.0 * 1024.0);
         let total_queries = self.query_count.load(Ordering::SeqCst);
 
         let Ok(replicas) = self.replicas.read() else {
@@ -517,17 +565,27 @@ impl ServerlessCluster {
                 total_queries,
                 total_cost: *total_cost,
                 storage_gb,
-                estimated_monthly_cost: *total_cost * 30.0 * 24.0 + storage_gb * self.config.cost_per_gb_month,
+                estimated_monthly_cost: *total_cost * 30.0 * 24.0
+                    + storage_gb * self.config.cost_per_gb_month,
             };
         };
 
-        let ready = replicas.iter().filter(|r| r.state == ReplicaState::Ready).count();
+        let ready = replicas
+            .iter()
+            .filter(|r| r.state == ReplicaState::Ready)
+            .count();
         let Ok(total_cost) = self.total_cost.read() else {
             return ServerlessStats {
                 total_replicas: replicas.len(),
                 ready_replicas: ready,
-                starting_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Starting).count(),
-                draining_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Draining).count(),
+                starting_replicas: replicas
+                    .iter()
+                    .filter(|r| r.state == ReplicaState::Starting)
+                    .count(),
+                draining_replicas: replicas
+                    .iter()
+                    .filter(|r| r.state == ReplicaState::Draining)
+                    .count(),
                 total_queries,
                 total_cost: 0.0,
                 storage_gb,
@@ -538,8 +596,14 @@ impl ServerlessCluster {
         ServerlessStats {
             total_replicas: replicas.len(),
             ready_replicas: ready,
-            starting_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Starting).count(),
-            draining_replicas: replicas.iter().filter(|r| r.state == ReplicaState::Draining).count(),
+            starting_replicas: replicas
+                .iter()
+                .filter(|r| r.state == ReplicaState::Starting)
+                .count(),
+            draining_replicas: replicas
+                .iter()
+                .filter(|r| r.state == ReplicaState::Draining)
+                .count(),
             total_queries,
             total_cost: *total_cost,
             storage_gb,
@@ -634,21 +698,29 @@ impl ColdStartOptimizer {
 
     /// Create snapshot for fast restore
     pub fn create_snapshot(&self, data: Vec<u8>) {
-        let Ok(mut snapshot) = self.snapshot_data.write() else { return; };
+        let Ok(mut snapshot) = self.snapshot_data.write() else {
+            return;
+        };
         *snapshot = Some(data);
-        let Ok(mut last) = self.last_snapshot.write() else { return; };
+        let Ok(mut last) = self.last_snapshot.write() else {
+            return;
+        };
         *last = Some(Instant::now());
     }
 
     /// Get snapshot for restore
     pub fn get_snapshot(&self) -> Option<Vec<u8>> {
-        let Ok(snapshot) = self.snapshot_data.read() else { return None; };
+        let Ok(snapshot) = self.snapshot_data.read() else {
+            return None;
+        };
         snapshot.clone()
     }
 
     /// Check if snapshot is fresh enough
     pub fn is_snapshot_valid(&self, max_age_secs: u64) -> bool {
-        let Ok(last_snapshot) = self.last_snapshot.read() else { return false; };
+        let Ok(last_snapshot) = self.last_snapshot.read() else {
+            return false;
+        };
         if let Some(last) = *last_snapshot {
             last.elapsed() < Duration::from_secs(max_age_secs)
         } else {
@@ -693,7 +765,10 @@ mod tests {
         let autoscaler = Autoscaler::new(config);
 
         // No load -> scale to min
-        assert!(matches!(autoscaler.decide(5), ScalingDecision::ScaleDown(_)));
+        assert!(matches!(
+            autoscaler.decide(5),
+            ScalingDecision::ScaleDown(_)
+        ));
 
         // Record high QPS
         autoscaler.record_qps(500.0);
@@ -715,8 +790,8 @@ mod tests {
         let cluster = ServerlessCluster::new(config).unwrap();
 
         let estimate = cluster.billing_estimate(1_000_000, 10.0);
-        assert_eq!(estimate.query_cost, 10.0);  // 1M * $0.00001
-        assert_eq!(estimate.storage_cost, 2.5);  // 10GB * $0.25
+        assert_eq!(estimate.query_cost, 10.0); // 1M * $0.00001
+        assert_eq!(estimate.storage_cost, 2.5); // 10GB * $0.25
         assert_eq!(estimate.total_monthly_cost, 12.5);
     }
 }

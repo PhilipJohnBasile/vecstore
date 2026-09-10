@@ -25,9 +25,8 @@
 //! let results = search.search("quik brwon fx")?;  // Still finds the document!
 //! ```
 
-use std::collections::{HashMap, HashSet, BTreeMap};
 use serde::{Deserialize, Serialize};
-
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 /// Typo tolerance configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,11 +54,21 @@ pub struct TypoConfig {
     pub prioritize_exact: bool,
 }
 
-fn default_short_typos() -> usize { 0 }
-fn default_medium_typos() -> usize { 1 }
-fn default_long_typos() -> usize { 2 }
-fn default_true() -> bool { true }
-fn default_min_prefix() -> usize { 2 }
+fn default_short_typos() -> usize {
+    0
+}
+fn default_medium_typos() -> usize {
+    1
+}
+fn default_long_typos() -> usize {
+    2
+}
+fn default_true() -> bool {
+    true
+}
+fn default_min_prefix() -> usize {
+    2
+}
 
 impl Default for TypoConfig {
     fn default() -> Self {
@@ -218,11 +227,14 @@ impl TypoTolerantSearch {
             }
         }
 
-        self.documents.insert(id.to_string(), IndexedDocument {
-            id: id.to_string(),
-            tokens,
-            original: text.to_string(),
-        });
+        self.documents.insert(
+            id.to_string(),
+            IndexedDocument {
+                id: id.to_string(),
+                tokens,
+                original: text.to_string(),
+            },
+        );
     }
 
     /// Remove a document from the index
@@ -291,7 +303,8 @@ impl TypoTolerantSearch {
 
         // Sort by score (descending), then by typos (ascending)
         results.sort_by(|a, b| {
-            b.score.total_cmp(&a.score)
+            b.score
+                .total_cmp(&a.score)
                 .then_with(|| a.typos.cmp(&b.typos))
         });
 
@@ -306,12 +319,15 @@ impl TypoTolerantSearch {
         // 1. Exact matches (highest priority)
         if let Some(doc_ids) = self.token_index.get(query_token) {
             for doc_id in doc_ids {
-                matches.push((doc_id.clone(), MatchedToken {
-                    query: query_token.to_string(),
-                    matched: query_token.to_string(),
-                    edit_distance: 0,
-                    match_type: MatchType::Exact,
-                }));
+                matches.push((
+                    doc_id.clone(),
+                    MatchedToken {
+                        query: query_token.to_string(),
+                        matched: query_token.to_string(),
+                        edit_distance: 0,
+                        match_type: MatchType::Exact,
+                    },
+                ));
             }
         }
 
@@ -322,14 +338,18 @@ impl TypoTolerantSearch {
             let range_end = format!("{}~", query_token); // '~' is after all alphanumeric
 
             for (prefix, doc_ids) in self.prefix_index.range(range_start..range_end) {
-                if prefix != query_token { // Avoid duplicating exact matches
+                if prefix != query_token {
+                    // Avoid duplicating exact matches
                     for doc_id in doc_ids {
-                        matches.push((doc_id.clone(), MatchedToken {
-                            query: query_token.to_string(),
-                            matched: prefix.clone(),
-                            edit_distance: 0,
-                            match_type: MatchType::Prefix,
-                        }));
+                        matches.push((
+                            doc_id.clone(),
+                            MatchedToken {
+                                query: query_token.to_string(),
+                                matched: prefix.clone(),
+                                edit_distance: 0,
+                                match_type: MatchType::Prefix,
+                            },
+                        ));
                     }
                 }
             }
@@ -341,12 +361,15 @@ impl TypoTolerantSearch {
                 let distance = self.levenshtein(query_token, token);
                 if distance > 0 && distance <= max_typos {
                     for doc_id in doc_ids {
-                        matches.push((doc_id.clone(), MatchedToken {
-                            query: query_token.to_string(),
-                            matched: token.clone(),
-                            edit_distance: distance,
-                            match_type: MatchType::Fuzzy,
-                        }));
+                        matches.push((
+                            doc_id.clone(),
+                            MatchedToken {
+                                query: query_token.to_string(),
+                                matched: token.clone(),
+                                edit_distance: distance,
+                                match_type: MatchType::Fuzzy,
+                            },
+                        ));
                     }
                 }
             }
@@ -358,12 +381,15 @@ impl TypoTolerantSearch {
             if let Some(doc_ids) = self.phonetic_index.get(&query_soundex) {
                 for doc_id in doc_ids {
                     if !matches.iter().any(|(id, _)| id == doc_id) {
-                        matches.push((doc_id.clone(), MatchedToken {
-                            query: query_token.to_string(),
-                            matched: query_soundex.clone(),
-                            edit_distance: 0,
-                            match_type: MatchType::Phonetic,
-                        }));
+                        matches.push((
+                            doc_id.clone(),
+                            MatchedToken {
+                                query: query_token.to_string(),
+                                matched: query_soundex.clone(),
+                                edit_distance: 0,
+                                match_type: MatchType::Phonetic,
+                            },
+                        ));
                     }
                 }
             }
@@ -388,8 +414,12 @@ impl TypoTolerantSearch {
         let a_len = a_chars.len();
         let b_len = b_chars.len();
 
-        if a_len == 0 { return b_len; }
-        if b_len == 0 { return a_len; }
+        if a_len == 0 {
+            return b_len;
+        }
+        if b_len == 0 {
+            return a_len;
+        }
 
         let mut matrix = vec![vec![0usize; b_len + 1]; a_len + 1];
 
@@ -402,7 +432,11 @@ impl TypoTolerantSearch {
 
         for i in 1..=a_len {
             for j in 1..=b_len {
-                let cost = if a_chars[i - 1] == b_chars[j - 1] { 0 } else { 1 };
+                let cost = if a_chars[i - 1] == b_chars[j - 1] {
+                    0
+                } else {
+                    1
+                };
 
                 matrix[i][j] = (matrix[i - 1][j] + 1)
                     .min(matrix[i][j - 1] + 1)
@@ -444,9 +478,10 @@ impl TypoTolerantSearch {
 
             let curr_code = get_code(c);
             if let Some(cc) = curr_code
-                && curr_code != prev_code {
-                    code.push(cc);
-                }
+                && curr_code != prev_code
+            {
+                code.push(cc);
+            }
             prev_code = curr_code;
         }
 
@@ -537,7 +572,12 @@ mod tests {
 
         let results = search.search("qui");
         assert!(!results.is_empty());
-        assert!(results[0].matched_tokens.iter().any(|t| t.match_type == MatchType::Prefix));
+        assert!(
+            results[0]
+                .matched_tokens
+                .iter()
+                .any(|t| t.match_type == MatchType::Prefix)
+        );
     }
 
     #[test]

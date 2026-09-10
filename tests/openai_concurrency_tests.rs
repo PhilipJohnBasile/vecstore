@@ -251,21 +251,21 @@ async fn test_concurrent_mixed_operations() {
                 0 => {
                     // Cost estimation
                     embedder_clone.estimate_cost(&["test"])
-                }
+                },
                 1 => {
                     // Model property access
                     let _ = embedder_clone.model().dimension();
                     0.0
-                }
+                },
                 2 => {
                     // Batch cost estimation
                     let texts = vec!["a", "b", "c"];
                     embedder_clone.estimate_cost(&texts)
-                }
+                },
                 _ => {
                     // Model cost access
                     embedder_clone.model().cost_per_million_tokens()
-                }
+                },
             }
         });
         handles.push(handle);
