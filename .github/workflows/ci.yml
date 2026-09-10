@@ -76,7 +76,10 @@ jobs:
           key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Run tests
-        run: cargo test --lib --verbose
+        run: cargo test --locked --lib --verbose
+
+      - name: Run the documented quick start
+        run: cargo run --locked --example quickstart
 
   fmt:
     name: Format Check

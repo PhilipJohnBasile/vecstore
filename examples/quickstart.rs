@@ -56,6 +56,12 @@ fn main() -> anyhow::Result<()> {
     };
 
     let results = store.query(query)?;
+    assert_eq!(results.len(), 2);
+    assert!(
+        results
+            .iter()
+            .all(|item| item.metadata.fields.get("topic") == Some(&serde_json::json!("rust")))
+    );
     println!("\nQuery results (filtered by topic='rust'):");
     for (i, neighbor) in results.iter().enumerate() {
         println!("{}. {} (score: {:.4})", i + 1, neighbor.id, neighbor.score);
@@ -81,6 +87,8 @@ fn main() -> anyhow::Result<()> {
     };
 
     let complex_results = store.query(complex_query)?;
+    assert_eq!(complex_results.len(), 1);
+    assert_eq!(complex_results[0].id, "doc1");
     println!("\nComplex query results (topic='rust' AND difficulty<=6):");
     for (i, neighbor) in complex_results.iter().enumerate() {
         println!("{}. {} (score: {:.4})", i + 1, neighbor.id, neighbor.score);
@@ -94,6 +102,7 @@ fn main() -> anyhow::Result<()> {
     drop(store);
 
     let reloaded = VecStore::open(&data_path)?;
+    assert_eq!(reloaded.count(), 3);
     println!("Store reloaded, count: {}", reloaded.count());
 
     Ok(())

@@ -1,182 +1,72 @@
 # VecStore
 
-**The SQLite of vector search.** Embed semantic search directly in your app—no server required.
+An embeddable vector database for Rust, with optional Python and WebAssembly interfaces. Store vectors alongside metadata, search for similar records, and keep the data inside your application.
 
-[![Crate](https://img.shields.io/crates/v/vecstore.svg)](https://crates.io/crates/vecstore)
-[![npm](https://img.shields.io/npm/v/vecstore-wasm.svg)](https://www.npmjs.com/package/vecstore-wasm)
-[![PyPI](https://img.shields.io/pypi/v/vecstore-rs.svg)](https://pypi.org/project/vecstore-rs/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![CI](https://github.com/PhilipJohnBasile/vecstore/actions/workflows/ci.yml/badge.svg)](https://github.com/PhilipJohnBasile/vecstore/actions/workflows/ci.yml) [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
----
+**Status: alpha, version 0.1.x.** APIs and file formats can change. Use regenerable data while evaluating the project.
 
-## Why VecStore?
+## Run the quick start
 
-| Feature | VecStore | Pinecone/Weaviate | FAISS |
-|---------|----------|-------------------|-------|
-| **Runs in browser** | Yes | No | No |
-| **No server needed** | Yes | No | Yes |
-| **Hybrid search** | Yes | Yes | No |
-| **Metadata filtering** | Yes | Yes | No |
-| **Python + Rust + JS** | Yes | Partial | Python only |
+With **Rust 1.92+**, start from a fresh checkout:
 
----
-
-## Requirements
-
-- **Rust 1.92+** (Edition 2024)
-- Platform: Windows, macOS, Linux, or WebAssembly
-
----
-
-## Quick Start
-
-### Rust
-
-```toml
-[dependencies]
-vecstore = "0.1.0"
+```bash
+git clone https://github.com/PhilipJohnBasile/vecstore.git
+cd vecstore
+cargo run --locked --example quickstart
 ```
+
+The [example](examples/quickstart.rs) creates a temporary database, inserts three records, searches with metadata filters, then saves and reopens the store. It uses fixed vectors, so no model, service, or API key is needed. It finishes with `Store reloaded, count: 3`.
+
+## The Rust interface
 
 ```rust
-use vecstore::VecStore;
+use std::collections::HashMap;
+use vecstore::{Metadata, Query, VecStore};
 
-let mut store = VecStore::open("vectors.db")?;
-
-// Insert vectors with metadata
-store.upsert("doc1", vec![0.1, 0.2, 0.3], json!({"title": "Hello"}))?;
-
-// Semantic search
-let results = store.query(&vec![0.1, 0.2, 0.3], 10)?;
-
-// Filtered search
-let results = store.query_with_filter(&query_vec, 10, "category = 'tech'")?;
+fn main() -> anyhow::Result<()> {
+    let directory = tempfile::tempdir()?;
+    let mut store = VecStore::open(directory.path().join("vectors"))?;
+    let metadata = Metadata {
+        fields: HashMap::from([("title".into(), serde_json::json!("Hello"))]),
+    };
+    store.upsert("doc1".into(), vec![0.1, 0.2, 0.3], metadata)?;
+    let neighbors = store.query(Query::new(vec![0.1, 0.2, 0.3]).with_limit(1))?;
+    assert_eq!(neighbors[0].id, "doc1");
+    Ok(())
+}
 ```
 
-### Python
+This uses the current checkout's API. A standalone application also needs `anyhow`, `serde_json`, and `tempfile` alongside its `vecstore` dependency.
+
+## What to explore
+
+| Area | Entry point |
+| --- | --- |
+| Vector indexing and persistence | [Store implementation](src/store), [architecture](docs/ARCHITECTURE.md) |
+| Metadata filters | [Quick start](examples/quickstart.rs), [filter examples](examples/filter_parser_demo.rs) |
+| Hybrid retrieval | [Hybrid search example](examples/hybrid_search_demo.rs) |
+| Python | [Python guide](python/README.md), `python` Cargo feature |
+| Browser / WebAssembly | [WASM guide](docs/WASM.md), `wasm` Cargo feature |
+| Optional backends | [Cargo features](Cargo.toml), [examples](examples) |
+
+Optional GPU, server, embedding, and distributed components have separate dependencies and validation needs. The default Rust quick start does not establish readiness for those configurations.
+
+## Benchmarks
+
+The repository includes [benchmark harnesses](benches). A useful report needs the dataset, vector dimensions, distance metric, index settings, recall, hardware, and latency distribution together. Use the harness on your intended workload; this README does not make a universal sub-millisecond latency claim.
+
+## Development and releases
 
 ```bash
-pip install vecstore-rs
+cargo test --locked --lib
+cargo fmt --all -- --check
 ```
 
-```python
-import vecstore
+[CI](https://github.com/PhilipJohnBasile/vecstore/actions/workflows/ci.yml) runs the project's build, test, and lint checks. See [verification notes](docs/VERIFICATION.md) for the fresh-checkout results and [Releases](https://github.com/PhilipJohnBasile/vecstore/releases) for published GitHub releases. A Cargo version in source is not itself a published release.
 
-store = vecstore.VecStore("vectors.db")
-store.upsert("doc1", [0.1, 0.2, 0.3], {"title": "Hello"})
-results = store.query([0.1, 0.2, 0.3], k=10)
-```
-
-### JavaScript (Browser)
-
-```bash
-npm install vecstore-wasm
-```
-
-```javascript
-import init, { WasmVecStore } from 'vecstore-wasm';
-
-await init();
-const store = new WasmVecStore(384);
-
-store.upsert("doc1", new Float32Array([...]), { title: "Hello" });
-const results = store.query(queryVector, 10);
-```
-
----
-
-## Features
-
-### Core
-
-- **HNSW Index** - Sub-millisecond search on 100K+ vectors
-- **9 Distance Metrics** - Cosine, Euclidean, Dot Product, Manhattan, Hamming, Jaccard, and more
-- **Metadata Filtering** - SQL-like expressions: `category = 'tech' AND score > 0.5`
-- **Hybrid Search** - Combine vector similarity with BM25 keyword matching
-- **Snapshots** - Point-in-time backups and restore
-
-### Browser-First
-
-- **WASM Support** - Full vector search in the browser, no backend
-- **Offline-Capable** - Works without network connection
-- **Privacy-First** - Data never leaves the user's device
-- **Sub-ms Latency** - 0.2ms search on 100K vectors
-
-### Production
-
-- **Batch Operations** - Parallel ingestion for large datasets
-- **Soft Delete + TTL** - Flexible data lifecycle management
-- **Write-Ahead Log** - Crash recovery with `wal_enabled: true`
-- **gRPC + HTTP Server** - Optional server mode for multi-client access
-
----
-
-## Use Cases
-
-1. **Local RAG** - Semantic search for LLM context retrieval
-2. **Browser Search** - Privacy-first document search (legal, medical, financial)
-3. **Offline Apps** - Mobile/desktop apps with embedded search
-4. **Prototyping** - Test semantic search ideas without infrastructure
-5. **Edge Computing** - IoT devices with local vector search
-
----
-
-## Performance
-
-| Dataset | Search Latency | Memory |
-|---------|----------------|--------|
-| 10K vectors (384d) | 0.3ms | ~20MB |
-| 100K vectors (384d) | 0.2ms | ~180MB |
-| 1M vectors (128d) | 0.2ms | ~200MB |
-
----
-
-## Documentation
-
-- [WASM Guide](docs/WASM.md) - Browser integration with React, Vue, Next.js
-- [Python API](https://pypi.org/project/vecstore-rs/) - Full Python documentation
-- [Architecture](docs/ARCHITECTURE.md) - System design overview
-- [Security Policy](SECURITY.md) - Vulnerability reporting
-
----
-
-## Roadmap
-
-### Shipping Now
-- [x] HNSW with 9 distance metrics
-- [x] Metadata filtering
-- [x] Hybrid search (vector + BM25)
-- [x] Python bindings
-- [x] WASM/browser support
-- [x] Snapshots
-
-### Also Shipped in v0.1.0
-- [x] LangChain integration
-- [x] LlamaIndex integration
-- [x] Graph-RAG integration
-- [x] Product Quantization (8-32x memory reduction)
-- [x] GPU acceleration (CUDA, Metal, WebGPU)
-- [x] Distributed system with Raft consensus
-- [x] gRPC federation for multi-cluster queries
-
----
-
-## Alpha Notice
-
-VecStore is in active development (0.1.x). APIs and file formats may change. Not recommended for production workloads with data you can't regenerate.
-
----
-
-## Contributing
-
-We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-High-impact areas:
-1. LangChain/LlamaIndex Python wrappers
-2. Browser demo applications
-3. Performance benchmarks
-
----
+[Contributing](CONTRIBUTING.md) · [Security policy](SECURITY.md) · [Issues](https://github.com/PhilipJohnBasile/vecstore/issues)
 
 ## License
 
-Apache 2.0 - see [LICENSE](LICENSE).
+[MIT](LICENSE), matching the root license and Rust package metadata.
